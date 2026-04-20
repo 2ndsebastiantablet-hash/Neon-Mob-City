@@ -174,7 +174,15 @@ const TEXTURE_DEFS = [
 
 const stageCanvas = document.querySelector("#stageCanvas");
 const stageFrame = stageCanvas.parentElement;
-const ctx = stageCanvas.getContext("2d");
+const stageCtx = stageCanvas.getContext("2d");
+const recordingCanvas = document.createElement("canvas");
+const recordingCtx = recordingCanvas.getContext("2d");
+let ctx = stageCtx;
+let patternCache = new Map();
+const patternCaches = {
+  stage: new Map(),
+  recording: new Map(),
+};
 
 const elements = {
   menuScreen: document.querySelector("#menuScreen"),
@@ -227,7 +235,6 @@ const state = {
   lastPointer: { x: 0, y: 0, inside: false },
   nextId: 1,
   keysPressed: new Set(),
-  patterns: new Map(),
   recording: null,
   recordings: [],
   selectedRecordingId: null,
@@ -414,6 +421,19 @@ function clearActiveTool() {
   updateToolLabel();
 }
 
+function getPanelToolType(panelName) {
+  switch (panelName) {
+    case "characters":
+      return "character";
+    case "textures":
+      return "texture";
+    case "objects":
+      return "object";
+    default:
+      return null;
+  }
+}
+
 function setActiveTool(type, id) {
   if (state.activeTool && state.activeTool.type === type && state.activeTool.id === id) {
     clearActiveTool();
@@ -427,7 +447,16 @@ function setActiveTool(type, id) {
 }
 
 function setActivePanel(panelName) {
+  const previousPanel = state.activePanel;
   state.activePanel = panelName;
+
+  if (previousPanel !== panelName && state.activeTool) {
+    const panelToolType = getPanelToolType(panelName);
+    if (panelToolType !== state.activeTool.type) {
+      clearActiveTool();
+    }
+  }
+
   for (const button of elements.panelButtons) {
     button.classList.toggle("active", button.dataset.panel === panelName);
   }
@@ -758,6 +787,16 @@ function pasteClipboard() {
   setSelection(newIds);
 }
 
+function deleteSelection() {
+  if (state.selection.size === 0) {
+    return;
+  }
+
+  state.items = state.items.filter((item) => !state.selection.has(item.id));
+  clearSelection();
+  elements.toolLabel.textContent = "Selection deleted.";
+}
+
 function handleKeyDown(event) {
   if (state.screen !== "studio") {
     return;
@@ -773,6 +812,12 @@ function handleKeyDown(event) {
   if ((event.ctrlKey || event.metaKey) && key === "v") {
     event.preventDefault();
     pasteClipboard();
+    return;
+  }
+
+  if (key === "backspace") {
+    event.preventDefault();
+    deleteSelection();
     return;
   }
 
@@ -833,10 +878,14 @@ function ensureCanvasSize() {
   if (stageCanvas.width !== Math.floor(width * dpr) || stageCanvas.height !== Math.floor(height * dpr)) {
     stageCanvas.width = Math.floor(width * dpr);
     stageCanvas.height = Math.floor(height * dpr);
+    recordingCanvas.width = Math.floor(width * dpr);
+    recordingCanvas.height = Math.floor(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    recordingCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     state.stageWidth = width;
     state.stageHeight = height;
-    state.patterns.clear();
+    patternCaches.stage.clear();
+    patternCaches.recording.clear();
 
     for (const item of state.items) {
       clampItemToStage(item);
@@ -845,8 +894,8 @@ function ensureCanvasSize() {
 }
 
 function buildPattern(textureId) {
-  if (state.patterns.has(textureId)) {
-    return state.patterns.get(textureId);
+  if (patternCache.has(textureId)) {
+    return patternCache.get(textureId);
   }
 
   const canvas = document.createElement("canvas");
@@ -1026,8 +1075,18 @@ function buildPattern(textureId) {
   }
 
   const pattern = ctx.createPattern(canvas, "repeat");
-  state.patterns.set(textureId, pattern);
+  patternCache.set(textureId, pattern);
   return pattern;
+}
+
+function withRenderTarget(targetCtx, targetPatternCache, callback) {
+  const previousCtx = ctx;
+  const previousPatternCache = patternCache;
+  ctx = targetCtx;
+  patternCache = targetPatternCache;
+  callback();
+  ctx = previousCtx;
+  patternCache = previousPatternCache;
 }
 
 function resolveFill(item, fallbackColor) {
@@ -1208,7 +1267,6 @@ function drawCharacter(item) {
 function drawObject(item) {
   const objectDef = objectMap.get(item.subtype);
   const fillStyle = resolveFill(item, objectDef.baseColor);
-  const bounds = getItemBounds(item);
   drawShadow(item);
 
   ctx.save();
@@ -1297,12 +1355,6 @@ function drawObject(item) {
       break;
   }
 
-  if (state.selection.has(item.id)) {
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(bounds.left - item.x, bounds.top - item.y, item.w, item.h);
-  }
-
   ctx.restore();
 }
 
@@ -1383,8 +1435,13 @@ function drawRecordingOverlay(now) {
   ctx.restore();
 }
 
-function drawStage(now) {
-  ensureCanvasSize();
+function drawStage(now, options = {}) {
+  const {
+    showSelectionOutlines = true,
+    showEditorOverlays = true,
+    showRecordingOverlay = true,
+  } = options;
+
   ctx.clearRect(0, 0, state.stageWidth, state.stageHeight);
 
   ctx.fillStyle = "#fffdfa";
@@ -1425,13 +1482,20 @@ function drawStage(now) {
     }
   }
 
-  for (const item of getSelectedItems()) {
-    drawSelectionOutline(item);
+  if (showSelectionOutlines) {
+    for (const item of getSelectedItems()) {
+      drawSelectionOutline(item);
+    }
   }
 
-  drawPlacementPreview();
-  drawMarquee();
-  drawRecordingOverlay(now);
+  if (showEditorOverlays) {
+    drawPlacementPreview();
+    drawMarquee();
+  }
+
+  if (showRecordingOverlay) {
+    drawRecordingOverlay(now);
+  }
 
   if (state.items.length === 0) {
     ctx.save();
@@ -1445,13 +1509,33 @@ function drawStage(now) {
   }
 }
 
+function renderStageViews(now) {
+  ensureCanvasSize();
+
+  withRenderTarget(stageCtx, patternCaches.stage, () => {
+    drawStage(now, {
+      showSelectionOutlines: true,
+      showEditorOverlays: true,
+      showRecordingOverlay: true,
+    });
+  });
+
+  withRenderTarget(recordingCtx, patternCaches.recording, () => {
+    drawStage(now, {
+      showSelectionOutlines: false,
+      showEditorOverlays: false,
+      showRecordingOverlay: false,
+    });
+  });
+}
+
 function animate(now) {
   const deltaSeconds = state.lastFrameTime ? Math.min(0.033, (now - state.lastFrameTime) / 1000) : 0;
   state.lastFrameTime = now;
 
   if (state.screen === "studio") {
     moveSelectionByKeys(deltaSeconds);
-    drawStage(now);
+    renderStageViews(now);
   }
 
   requestAnimationFrame(animate);
@@ -1599,7 +1683,8 @@ function startRecording() {
     return;
   }
 
-  const stream = stageCanvas.captureStream(30);
+  renderStageViews(performance.now());
+  const stream = recordingCanvas.captureStream(30);
   const mimeType = getRecordingMimeType();
   const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
   const chunks = [];
