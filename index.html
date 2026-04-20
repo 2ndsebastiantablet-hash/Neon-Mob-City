@@ -3,52 +3,128 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pandemonium</title>
+  <meta
+    name="description"
+    content="Worms is a playful 2D movie-making sandbox where you place characters, texture props, animate scenes, record takes, and replay them in a built-in library."
+  >
+  <title>Worms</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="app-shell">
-    <section id="menuScreen" class="menu-screen" aria-label="Main menu">
+    <section id="menuScreen" class="screen menu-screen" aria-label="Main menu">
       <div class="menu-card">
-        <p class="menu-kicker">A Shape-Shifting Town Horror</p>
-        <h1>Pandemonium</h1>
+        <p class="menu-kicker">2D Movie-Making Sandbox</p>
+        <h1>Worms</h1>
+        <p class="menu-copy">
+          Build tiny scenes, move your cast around with drag controls or <strong>W A S D</strong>,
+          record the action, and replay every take in your in-game library.
+        </p>
         <div class="menu-actions">
-          <button id="playButton" type="button">Play</button>
-          <button id="sandboxButton" type="button">Sandbox</button>
+          <button id="playButton" type="button" class="primary-button">Play</button>
+          <button id="libraryButton" type="button" class="secondary-button">Library</button>
         </div>
       </div>
     </section>
-    <canvas id="gameCanvas" aria-label="Symbiote particle game"></canvas>
-    <section id="sandboxPanel" class="sandbox-panel hidden" aria-label="Sandbox controls">
-      <div class="sandbox-header">
-        <h2>Sandbox</h2>
-        <button id="sandboxCloseButton" type="button">Close</button>
-      </div>
-      <p class="sandbox-copy">Press <strong>F</strong> to toggle this menu. Pick a category, choose something to place, then click in the arena.</p>
-      <div class="sandbox-groups">
-        <button id="sandboxStructuresTab" type="button" class="sandbox-tab active">Structures</button>
-        <button id="sandboxEnemiesTab" type="button" class="sandbox-tab">Enemies</button>
-      </div>
-      <div id="sandboxSpawnList" class="sandbox-list"></div>
-      <div class="sandbox-size">
-        <h3>Swarm Size</h3>
-        <div class="sandbox-size-row">
-          <button id="sandboxSizeDownSmall" type="button">-5</button>
-          <button id="sandboxSizeDownLarge" type="button">-20</button>
-          <span id="sandboxSizeValue">Consumed 0</span>
-          <button id="sandboxSizeUpSmall" type="button">+5</button>
-          <button id="sandboxSizeUpLarge" type="button">+20</button>
+
+    <section id="studioScreen" class="screen studio-screen hidden" aria-label="Movie studio">
+      <header class="topbar">
+        <div>
+          <p class="topbar-label">Director Mode</p>
+          <h2>Worms Studio</h2>
         </div>
+        <div class="topbar-actions">
+          <span id="recordingBadge" class="recording-badge">Idle</span>
+          <button id="clearStageButton" type="button" class="ghost-button">Clear Stage</button>
+          <button id="studioLibraryButton" type="button" class="ghost-button">Library</button>
+          <button id="menuButton" type="button" class="ghost-button">Menu</button>
+        </div>
+      </header>
+
+      <div class="studio-layout">
+        <section class="stage-panel" aria-label="Stage">
+          <div class="stage-frame">
+            <canvas id="stageCanvas" aria-label="Movie stage"></canvas>
+          </div>
+          <div class="stage-footer">
+            <p id="selectionLabel" class="stage-status">No selection.</p>
+            <p id="toolLabel" class="stage-status subtle">Choose a tool on the right, then click on the stage.</p>
+          </div>
+        </section>
+
+        <aside class="sidebar" aria-label="Scene tools">
+          <div class="sidebar-tabs">
+            <button type="button" class="sidebar-tab active" data-panel="characters">Characters</button>
+            <button type="button" class="sidebar-tab" data-panel="textures">Textures</button>
+            <button type="button" class="sidebar-tab" data-panel="objects">Objects</button>
+            <button type="button" class="sidebar-tab" data-panel="camera">Camera</button>
+          </div>
+
+          <div class="sidebar-card">
+            <section id="charactersPanel" class="tool-panel" aria-label="Characters">
+              <div id="characterList" class="tool-grid character-grid"></div>
+            </section>
+
+            <section id="texturesPanel" class="tool-panel hidden" aria-label="Textures">
+              <div id="textureList" class="tool-grid texture-grid"></div>
+            </section>
+
+            <section id="objectsPanel" class="tool-panel hidden" aria-label="Objects">
+              <div id="objectList" class="tool-grid object-grid"></div>
+            </section>
+
+            <section id="cameraPanel" class="tool-panel hidden" aria-label="Camera">
+              <div class="camera-panel">
+                <button id="recordButton" type="button" class="primary-button full-width">Start Recording</button>
+                <button id="stopButton" type="button" class="secondary-button full-width" disabled>Stop Recording</button>
+                <button id="openLibraryButton" type="button" class="ghost-button full-width">Open Library</button>
+                <div class="camera-notes">
+                  <p>Record the stage exactly as you see it.</p>
+                  <p>Move selected actors with drag controls or <strong>W A S D</strong>.</p>
+                  <p>Use <strong>Ctrl+C</strong> and <strong>Ctrl+V</strong> to duplicate a single item or a whole marquee selection.</p>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div class="sidebar-help">
+            <p><strong>Selection:</strong> Click an item to select it, or drag across empty space to marquee-select multiple items.</p>
+            <p><strong>Textures:</strong> Pick a texture and drag across items on the stage to apply it.</p>
+            <p><strong>Deselect:</strong> Click an active sidebar option again, or press <strong>Escape</strong>.</p>
+          </div>
+        </aside>
       </div>
-      <p id="sandboxPlacementLabel" class="sandbox-placement">No placement selected.</p>
     </section>
-    <section class="hud">
-      <h1>Pandemonium</h1>
-      <p>Guide the shape-shifting swarm through an infinite town, hide behind buildings, absorb civilians to grow, and avoid police gunfire. Click once to wake the soundscape in Chrome.</p>
-      <div class="hud-row">
-        <button id="resetButton" type="button">Reset Town</button>
-        <button id="menuButton" type="button">Back To Menu</button>
-        <span id="particleCount"></span>
+
+    <section id="libraryScreen" class="screen library-screen hidden" aria-label="Recording library">
+      <header class="topbar">
+        <div>
+          <p class="topbar-label">Playback Room</p>
+          <h2>Worms Library</h2>
+        </div>
+        <div class="topbar-actions">
+          <button id="libraryToStudioButton" type="button" class="ghost-button">Studio</button>
+          <button id="libraryMenuButton" type="button" class="ghost-button">Menu</button>
+        </div>
+      </header>
+
+      <div class="library-layout">
+        <section class="library-list-panel">
+          <div class="panel-heading">
+            <h3>Takes</h3>
+            <p>Every recording is saved in your browser so you can replay it later.</p>
+          </div>
+          <div id="libraryList" class="library-list"></div>
+        </section>
+
+        <section class="library-player-panel">
+          <div class="panel-heading">
+            <h3>Preview</h3>
+            <p id="libraryMeta">Select a take to watch it here.</p>
+          </div>
+          <video id="libraryVideo" class="library-video" controls playsinline></video>
+          <p id="emptyLibraryState" class="empty-library-state">No takes yet. Record something in the studio and it will appear here.</p>
+        </section>
       </div>
     </section>
   </main>
