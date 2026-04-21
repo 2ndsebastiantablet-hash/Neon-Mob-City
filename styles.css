@@ -547,8 +547,8 @@ button:disabled {
 .scripts-module-actions button,
 .script-category-button,
 .script-palette-button {
-  padding: 0.45rem 0.65rem;
-  font-size: 0.84rem;
+  padding: 0.28rem 0.48rem;
+  font-size: 0.72rem;
 }
 
 .script-category-tabs {
@@ -568,14 +568,14 @@ button:disabled {
 
 .script-palette {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.22rem;
   overflow: auto;
   padding-right: 0.2rem;
 }
 
 .script-palette-button {
   width: 100%;
-  border-radius: 12px;
+  border-radius: 8px;
   color: var(--ink);
   text-align: left;
   background: rgba(255, 251, 244, 0.92);
@@ -596,7 +596,7 @@ button:disabled {
 .script-workspace {
   display: grid;
   align-content: start;
-  gap: 0.45rem;
+  gap: 0.2rem;
   min-height: 0;
   overflow: auto;
   padding: 0.25rem 0.2rem 0.25rem 0;
@@ -605,14 +605,14 @@ button:disabled {
 .script-stack-group,
 .script-children {
   display: grid;
-  gap: 0.3rem;
+  gap: 0.16rem;
 }
 
 .script-block {
   display: grid;
-  gap: 0.35rem;
-  padding: 0.42rem 0.55rem;
-  border-radius: 13px;
+  gap: 0.16rem;
+  padding: 0.18rem 0.34rem;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
   box-shadow: inset 0 0 0 1px rgba(82, 47, 18, 0.08);
   cursor: grab;
@@ -630,12 +630,12 @@ button:disabled {
 
 .script-block-title {
   margin: 0;
-  font-size: 0.86rem;
+  font-size: 0.72rem;
   line-height: 1.1;
 }
 
 .script-block-category {
-  display: inline-flex;
+  display: none;
   padding: 0.12rem 0.36rem;
   border-radius: 999px;
   font-size: 0.62rem;
@@ -666,26 +666,27 @@ button:disabled {
 
 .script-param-grid {
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.16rem;
 }
 
 .script-param-label {
   display: grid;
-  gap: 0.2rem;
-  min-width: 4.6rem;
-  font-size: 0.7rem;
+  gap: 0.1rem;
+  min-width: 2.9rem;
+  font-size: 0;
 }
 
 .script-param-label input,
 .script-param-label select {
   width: 100%;
   min-width: 0;
-  padding: 0.32rem 0.45rem;
+  padding: 0.08rem 0.18rem;
   border: 1px solid rgba(82, 47, 18, 0.14);
-  border-radius: 9px;
+  border-radius: 5px;
   background: rgba(255, 255, 255, 0.88);
   color: var(--ink);
   font: inherit;
+  font-size: 0.66rem;
 }
 
 .script-children {
@@ -695,7 +696,7 @@ button:disabled {
 
 .script-drop-line {
   align-items: center;
-  min-height: 12px;
+  min-height: 8px;
   border-radius: 999px;
   transition: background 120ms ease, box-shadow 120ms ease;
 }
@@ -703,7 +704,7 @@ button:disabled {
 .script-drop-line::before {
   content: "";
   width: 100%;
-  height: 3px;
+  height: 2px;
   border-radius: 999px;
   background: rgba(82, 47, 18, 0.1);
 }
@@ -718,8 +719,8 @@ button:disabled {
 }
 
 .script-drop-line.root-empty {
-  min-height: 7rem;
-  padding: 1rem;
+  min-height: 4rem;
+  padding: 0.75rem;
   border-radius: var(--radius-lg);
   border: 2px dashed rgba(82, 47, 18, 0.12);
   color: var(--muted);

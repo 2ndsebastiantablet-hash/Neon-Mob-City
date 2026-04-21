@@ -174,6 +174,7 @@ const TEXTURE_DEFS = [
 
 const PROJECT_STORAGE_KEY = "worms-project-v2";
 const STAGE_GRID_SIZE = 48;
+const SCENE_TARGET_ID = "scene";
 const SOUND_EFFECT_OPTIONS = [
   { value: "pop", label: "Pop" },
   { value: "click", label: "Click" },
@@ -185,6 +186,7 @@ const MUSIC_OPTIONS = [
   { value: "dream", label: "Dream Pad" },
 ];
 const SCRIPT_GROUPS = [
+  { id: "scene", name: "Scene" },
   { id: "motion", name: "Motion" },
   { id: "animation", name: "Animation" },
   { id: "timing", name: "Timing" },
@@ -192,6 +194,37 @@ const SCRIPT_GROUPS = [
   { id: "control", name: "Control" },
 ];
 const SCRIPT_BLOCK_DEFS = [
+  {
+    type: "set_scene_lighting",
+    category: "scene",
+    title: "Set Lighting",
+    copy: "Set the scene lighting color and strength.",
+    params: [
+      { name: "color", label: "Color", input: "color" },
+      { name: "strength", label: "Light %", input: "number", min: 0, max: 100, step: 5 },
+    ],
+    sceneOnly: true,
+  },
+  {
+    type: "fade_scene_lighting",
+    category: "scene",
+    title: "Fade Lighting",
+    copy: "Fade the scene lighting to a color over time.",
+    params: [
+      { name: "color", label: "Color", input: "color" },
+      { name: "strength", label: "Light %", input: "number", min: 0, max: 100, step: 5 },
+      { name: "seconds", label: "Seconds", input: "number", min: 0.1, max: 20, step: 0.1 },
+    ],
+    sceneOnly: true,
+  },
+  {
+    type: "clear_scene_lighting",
+    category: "scene",
+    title: "Clear Lighting",
+    copy: "Remove the current scene lighting overlay.",
+    params: [],
+    sceneOnly: true,
+  },
   {
     type: "move_right_seconds",
     category: "motion",
@@ -490,14 +523,19 @@ const state = {
   stageHeight: 580,
   activePanel: "characters",
   activeTool: null,
-  activeScriptCategory: "motion",
+  activeScriptCategory: "scene",
   selectedScriptBlockId: null,
-  scriptTargetId: null,
+  scriptTargetId: SCENE_TARGET_ID,
   scriptsModuleOpen: false,
   lastNonScriptPanel: "characters",
   scriptDrag: null,
   scriptDropTarget: null,
   items: [],
+  sceneScripts: [],
+  scene: {
+    lightingColor: "#fff7d6",
+    lightingStrength: 0,
+  },
   selection: new Set(),
   clipboard: [],
   interaction: null,
@@ -687,6 +725,8 @@ function saveProjectState() {
   try {
     const payload = {
       items: state.items.map(serializeItem),
+      sceneScripts: state.sceneScripts.map(serializeBlock),
+      scene: { ...state.scene },
       nextId: state.nextId,
       globalVolume: state.globalVolume,
     };
@@ -708,6 +748,15 @@ function loadProjectState() {
     const payload = JSON.parse(raw);
     if (Array.isArray(payload.items)) {
       state.items = payload.items.map(normalizeItem);
+    }
+    if (Array.isArray(payload.sceneScripts)) {
+      state.sceneScripts = payload.sceneScripts.map(deserializeBlock);
+    }
+    if (payload.scene) {
+      state.scene = {
+        lightingColor: payload.scene.lightingColor || "#fff7d6",
+        lightingStrength: clamp(Number(payload.scene.lightingStrength || 0), 0, 1),
+      };
     }
     if (typeof payload.nextId === "number") {
       state.nextId = payload.nextId;
@@ -734,6 +783,10 @@ function createBlockFromType(type) {
       params[param.name] = param.options[0]?.value ?? "";
       continue;
     }
+    if (param.input === "color") {
+      params[param.name] = "#fff1a8";
+      continue;
+    }
     if (typeof param.min === "number") {
       params[param.name] = param.min;
       continue;
@@ -749,6 +802,10 @@ function createBlockFromType(type) {
   }
   if (type === "set_volume") {
     params.volume = 70;
+  }
+  if (type === "set_scene_lighting" || type === "fade_scene_lighting") {
+    params.strength = 35;
+    params.color = "#ffd36f";
   }
   if (type === "move_left_blocks" || type === "move_up_blocks" || type === "move_down_blocks" || type === "jump_blocks") {
     params.blocks = 2;
@@ -783,6 +840,10 @@ function getSingleSelectedItem() {
 }
 
 function getScriptTargetItem() {
+  if (state.scriptTargetId === SCENE_TARGET_ID) {
+    return null;
+  }
+
   if (state.scriptTargetId != null) {
     const target = getItemById(state.scriptTargetId);
     if (target) {
@@ -797,8 +858,42 @@ function getScriptTargetItem() {
   }
 
   const firstItem = state.items[0] || null;
-  state.scriptTargetId = firstItem?.id ?? null;
+  state.scriptTargetId = firstItem?.id ?? SCENE_TARGET_ID;
   return firstItem;
+}
+
+function isSceneScriptTarget() {
+  return state.scriptTargetId === SCENE_TARGET_ID;
+}
+
+function getScriptTargetScripts() {
+  if (isSceneScriptTarget()) {
+    return state.sceneScripts;
+  }
+
+  return getScriptTargetItem()?.scripts || null;
+}
+
+function getScriptTargetName() {
+  if (isSceneScriptTarget()) {
+    return "Scene";
+  }
+  const actor = getScriptTargetItem();
+  return actor ? getActorDisplayName(actor) : "No Actor";
+}
+
+function isBlockAvailableForCurrentTarget(block) {
+  if (!block) {
+    return false;
+  }
+  if (isSceneScriptTarget()) {
+    if (block.type === "when_clicked") {
+      return false;
+    }
+    return block.category === "scene" || block.category === "timing" || block.category === "sound" || block.category === "control";
+  }
+
+  return !block.sceneOnly;
 }
 
 function getItemById(itemId) {
@@ -830,19 +925,23 @@ function findScriptBlockLocation(siblings, blockId, parent = null) {
 
 function addBlockToSelectedActor(type) {
   const actor = getScriptTargetItem();
+  const scripts = getScriptTargetScripts();
   const newBlock = createBlockFromType(type);
-  if (!actor || !newBlock) {
+  if (!scripts || !newBlock) {
     return;
   }
 
   const definition = scriptBlockMap.get(type);
+  if (!isBlockAvailableForCurrentTarget(definition)) {
+    return;
+  }
   const isTrigger = Boolean(definition.trigger);
-  const selectedLocation = actor.scripts.length > 0 && state.selectedScriptBlockId
-    ? findScriptBlockLocation(actor.scripts, state.selectedScriptBlockId)
+  const selectedLocation = scripts.length > 0 && state.selectedScriptBlockId
+    ? findScriptBlockLocation(scripts, state.selectedScriptBlockId)
     : null;
 
   if (isTrigger) {
-    actor.scripts.push(newBlock);
+    scripts.push(newBlock);
   } else if (selectedLocation) {
     const selectedDefinition = scriptBlockMap.get(selectedLocation.block.type);
     if (selectedDefinition?.allowsChildren) {
@@ -850,12 +949,12 @@ function addBlockToSelectedActor(type) {
     } else {
       selectedLocation.siblings.splice(selectedLocation.index + 1, 0, newBlock);
     }
-  } else if (actor.scripts.length > 0) {
-    actor.scripts[actor.scripts.length - 1].children.push(newBlock);
+  } else if (scripts.length > 0) {
+    scripts[scripts.length - 1].children.push(newBlock);
   } else {
     const root = createBlockFromType("when_recording_start");
     root.children.push(newBlock);
-    actor.scripts.push(root);
+    scripts.push(root);
   }
 
   state.selectedScriptBlockId = newBlock.id;
@@ -864,12 +963,12 @@ function addBlockToSelectedActor(type) {
 }
 
 function moveSelectedScriptBlock(direction) {
-  const actor = getScriptTargetItem();
-  if (!actor || !state.selectedScriptBlockId) {
+  const scripts = getScriptTargetScripts();
+  if (!scripts || !state.selectedScriptBlockId) {
     return;
   }
 
-  const location = findScriptBlockLocation(actor.scripts, state.selectedScriptBlockId);
+  const location = findScriptBlockLocation(scripts, state.selectedScriptBlockId);
   if (!location) {
     return;
   }
@@ -886,12 +985,12 @@ function moveSelectedScriptBlock(direction) {
 }
 
 function deleteSelectedScriptBlock() {
-  const actor = getScriptTargetItem();
-  if (!actor || !state.selectedScriptBlockId) {
+  const scripts = getScriptTargetScripts();
+  if (!scripts || !state.selectedScriptBlockId) {
     return false;
   }
 
-  const location = findScriptBlockLocation(actor.scripts, state.selectedScriptBlockId);
+  const location = findScriptBlockLocation(scripts, state.selectedScriptBlockId);
   if (!location) {
     return false;
   }
@@ -904,12 +1003,12 @@ function deleteSelectedScriptBlock() {
 }
 
 function updateBlockParam(blockId, paramName, rawValue) {
-  const actor = getScriptTargetItem();
-  if (!actor) {
+  const scripts = getScriptTargetScripts();
+  if (!scripts) {
     return;
   }
 
-  const location = findScriptBlockLocation(actor.scripts, blockId);
+  const location = findScriptBlockLocation(scripts, blockId);
   if (!location) {
     return;
   }
@@ -979,16 +1078,16 @@ function clearScriptDragState() {
   renderScriptEditor();
 }
 
-function insertRootScriptBlock(actor, index, block) {
+function insertRootScriptBlock(scripts, index, block) {
   const definition = scriptBlockMap.get(block.type);
   if (definition?.trigger) {
-    actor.scripts.splice(index, 0, block);
+    scripts.splice(index, 0, block);
     return;
   }
 
   const wrapper = createBlockFromType("when_recording_start");
   wrapper.children.push(block);
-  actor.scripts.splice(index, 0, wrapper);
+  scripts.splice(index, 0, wrapper);
 }
 
 function isBlockDescendant(block, targetId) {
@@ -999,12 +1098,13 @@ function isBlockDescendant(block, targetId) {
 }
 
 function canDropOnTarget(actor, payload, target) {
-  if (!actor || !payload || !target) {
+  const scripts = getScriptTargetScripts();
+  if (!scripts || !payload || !target) {
     return false;
   }
 
   if (payload.source === "existing") {
-    const location = findScriptBlockLocation(actor.scripts, payload.blockId);
+    const location = findScriptBlockLocation(scripts, payload.blockId);
     if (!location) {
       return false;
     }
@@ -1014,7 +1114,7 @@ function canDropOnTarget(actor, payload, target) {
   }
 
   if (target.kind === "inside") {
-    const location = findScriptBlockLocation(actor.scripts, target.blockId);
+    const location = findScriptBlockLocation(scripts, target.blockId);
     if (!location) {
       return false;
     }
@@ -1025,7 +1125,8 @@ function canDropOnTarget(actor, payload, target) {
 }
 
 function getDraggedBlock(actor, payload) {
-  if (!payload || !actor) {
+  const scripts = getScriptTargetScripts();
+  if (!payload || !scripts) {
     return null;
   }
 
@@ -1033,7 +1134,7 @@ function getDraggedBlock(actor, payload) {
     return createBlockFromType(payload.blockType);
   }
 
-  const location = findScriptBlockLocation(actor.scripts, payload.blockId);
+  const location = findScriptBlockLocation(scripts, payload.blockId);
   if (!location) {
     return null;
   }
@@ -1044,8 +1145,9 @@ function getDraggedBlock(actor, payload) {
 
 function performScriptDrop(target) {
   const actor = getScriptTargetItem();
+  const scripts = getScriptTargetScripts();
   const payload = state.scriptDrag;
-  if (!actor || !payload || !canDropOnTarget(actor, payload, target)) {
+  if (!scripts || !payload || !canDropOnTarget(actor, payload, target)) {
     clearScriptDragState();
     return;
   }
@@ -1055,11 +1157,15 @@ function performScriptDrop(target) {
     clearScriptDragState();
     return;
   }
+  if (!isBlockAvailableForCurrentTarget(scriptBlockMap.get(block.type))) {
+    clearScriptDragState();
+    return;
+  }
 
   if (target.kind === "root") {
-    insertRootScriptBlock(actor, target.index, block);
+    insertRootScriptBlock(scripts, target.index, block);
   } else {
-    const location = findScriptBlockLocation(actor.scripts, target.blockId);
+    const location = findScriptBlockLocation(scripts, target.blockId);
     if (!location) {
       clearScriptDragState();
       return;
@@ -1067,9 +1173,9 @@ function performScriptDrop(target) {
 
     if (target.kind === "inside") {
       location.block.children.push(block);
-    } else if (location.siblings === actor.scripts) {
+    } else if (location.siblings === scripts) {
       const insertIndex = target.kind === "before" ? location.index : location.index + 1;
-      insertRootScriptBlock(actor, insertIndex, block);
+      insertRootScriptBlock(scripts, insertIndex, block);
     } else {
       const insertIndex = target.kind === "before" ? location.index : location.index + 1;
       location.siblings.splice(insertIndex, 0, block);
@@ -1121,8 +1227,7 @@ function renderScriptPalette() {
   elements.scriptPalette.innerHTML = "";
   const blocks = SCRIPT_BLOCK_DEFS.filter((block) => block.category === state.activeScriptCategory);
   for (const block of blocks) {
-    const isControlBlock = block.category === "control";
-    const canUseBlock = isControlBlock || Boolean(getScriptTargetItem());
+    const canUseBlock = isBlockAvailableForCurrentTarget(block);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "script-palette-button";
@@ -1208,13 +1313,10 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
 
   titleWrap.append(title);
 
-  const badge = document.createElement("span");
-  badge.className = `script-block-category ${definition.category}`;
-  badge.textContent = definition.category;
-  row.append(titleWrap, badge);
+  row.append(titleWrap);
   card.append(row);
 
-  if (definition.params.length > 0) {
+  if (definition.params.length > 0 && block.id === state.selectedScriptBlockId) {
     const paramGrid = document.createElement("div");
     paramGrid.className = "script-param-grid";
 
@@ -1232,6 +1334,9 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
           optionElement.textContent = option.label;
           input.append(optionElement);
         }
+      } else if (param.input === "color") {
+        input = document.createElement("input");
+        input.type = "color";
       } else {
         input = document.createElement("input");
         input.type = "number";
@@ -1247,6 +1352,8 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
       }
 
       input.value = String(block.params[param.name] ?? "");
+      input.title = param.label;
+      input.setAttribute("aria-label", param.label);
       input.addEventListener("input", () => updateBlockParam(block.id, param.name, input.value));
       label.append(input);
       paramGrid.append(label);
@@ -1282,13 +1389,22 @@ function getActorDisplayName(actor) {
 function renderScriptActorList() {
   elements.scriptActorList.innerHTML = "";
 
-  if (state.items.length === 0) {
-    elements.scriptActorList.innerHTML = '<p class="script-empty">Place a character or object on the stage, then pick it here.</p>';
-    state.scriptTargetId = null;
-    return;
-  }
+  const sceneButton = document.createElement("button");
+  sceneButton.type = "button";
+  sceneButton.className = "script-actor-card scene-card";
+  sceneButton.classList.toggle("active", isSceneScriptTarget());
+  sceneButton.innerHTML = `<strong>Scene</strong><span class="script-actor-meta">${state.sceneScripts.length} stack${state.sceneScripts.length === 1 ? "" : "s"} | lighting</span>`;
+  sceneButton.addEventListener("click", () => {
+    state.scriptTargetId = SCENE_TARGET_ID;
+    state.selectedScriptBlockId = null;
+    clearSelection();
+    renderScriptActorList();
+    renderScriptPalette();
+    renderScriptEditor();
+  });
+  elements.scriptActorList.append(sceneButton);
 
-  if (!getScriptTargetItem()) {
+  if (state.scriptTargetId !== SCENE_TARGET_ID && !getScriptTargetItem() && state.items.length > 0) {
     state.scriptTargetId = state.items[0].id;
   }
 
@@ -1321,18 +1437,20 @@ function renderScriptActorList() {
 function renderScriptEditor() {
   renderScriptActorList();
   const actor = getScriptTargetItem();
+  const scripts = getScriptTargetScripts();
+  const targetName = getScriptTargetName();
+  const targetDescription = isSceneScriptTarget()
+    ? "Scene scripts control global effects like lighting, timing, and sound."
+    : `${targetName} has ${scripts?.length || 0} script stack${scripts?.length === 1 ? "" : "s"} saved in this project.`;
+  elements.scriptActorLabel.textContent = targetDescription;
+  elements.scriptWorkspace.innerHTML = "";
 
-  if (!actor) {
-    elements.scriptActorLabel.textContent = "No actors are on the stage yet.";
-    elements.scriptWorkspace.innerHTML = '<p class="script-empty">You can browse control blocks now, but movement and animation blocks need a character or object on the stage.</p>';
+  if (!scripts) {
+    elements.scriptWorkspace.innerHTML = '<p class="script-empty">Pick Scene, or place a character/object on the stage and choose it here.</p>';
     return;
   }
 
-  const actorName = getActorDisplayName(actor);
-  elements.scriptActorLabel.textContent = `${actorName} has ${actor.scripts.length} script stack${actor.scripts.length === 1 ? "" : "s"} saved in this project.`;
-  elements.scriptWorkspace.innerHTML = "";
-
-  if (actor.scripts.length === 0) {
+  if (scripts.length === 0) {
     elements.scriptWorkspace.append(
       createDropLine(
         { kind: "root", index: 0 },
@@ -1343,12 +1461,12 @@ function renderScriptEditor() {
     return;
   }
 
-  actor.scripts.forEach((rootBlock, index) => {
+  scripts.forEach((rootBlock, index) => {
     const group = document.createElement("div");
     group.className = "script-stack-group";
     group.append(createDropLine({ kind: "root", index }, "Drop root block here"));
     renderScriptBlock(rootBlock, group, actor, true);
-    if (index === actor.scripts.length - 1) {
+    if (index === scripts.length - 1) {
       group.append(createDropLine({ kind: "root", index: index + 1 }, "Drop root block here"));
     }
     elements.scriptWorkspace.append(group);
@@ -1595,6 +1713,59 @@ function createInstantRunner(action) {
   };
 }
 
+function hexToRgb(hexColor) {
+  const normalized = String(hexColor || "#ffffff").replace("#", "");
+  const value = Number.parseInt(normalized.length === 3
+    ? normalized.split("").map((char) => char + char).join("")
+    : normalized, 16);
+  if (!Number.isFinite(value)) {
+    return { r: 255, g: 255, b: 255 };
+  }
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
+  };
+}
+
+function rgbToHex({ r, g, b }) {
+  return `#${[r, g, b].map((value) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function setSceneLighting(color, strength) {
+  state.scene.lightingColor = color || "#fff7d6";
+  state.scene.lightingStrength = clamp(Number(strength || 0) / 100, 0, 1);
+  markProjectDirty();
+}
+
+function createLightingFadeRunner(block) {
+  const startRgb = hexToRgb(state.scene.lightingColor);
+  const endRgb = hexToRgb(block.params.color || "#fff7d6");
+  const startStrength = state.scene.lightingStrength;
+  const endStrength = clamp(Number(block.params.strength || 0) / 100, 0, 1);
+  const total = Math.max(0.1, Number(block.params.seconds || 1));
+  let elapsed = 0;
+
+  return {
+    done: false,
+    update(deltaSeconds) {
+      elapsed += deltaSeconds;
+      const progress = clamp(elapsed / total, 0, 1);
+      const rgb = {
+        r: startRgb.r + (endRgb.r - startRgb.r) * progress,
+        g: startRgb.g + (endRgb.g - startRgb.g) * progress,
+        b: startRgb.b + (endRgb.b - startRgb.b) * progress,
+      };
+      state.scene.lightingColor = rgbToHex(rgb);
+      state.scene.lightingStrength = startStrength + (endStrength - startStrength) * progress;
+      markProjectDirty();
+      if (progress >= 1) {
+        this.done = true;
+      }
+    },
+  };
+}
+
 function createRepeatRunner(actor, block, run) {
   let remainingIterations = Math.max(1, Math.round(block.params.times || 1));
   let current = createSequenceRunner(actor, block.children, run);
@@ -1656,21 +1827,32 @@ function createParallelRunner(actor, block, run) {
 
 function createRunnerForBlock(actor, block, run) {
   switch (block.type) {
+    case "set_scene_lighting":
+      return createInstantRunner(() => setSceneLighting(block.params.color, block.params.strength));
+    case "fade_scene_lighting":
+      return createLightingFadeRunner(block);
+    case "clear_scene_lighting":
+      return createInstantRunner(() => setSceneLighting("#fff7d6", 0));
     case "move_right_seconds":
+      if (!actor) return createInstantRunner(() => {});
       return createTimedMoveRunner(actor, STAGE_GRID_SIZE * 2 * Number(block.params.seconds || 1), 0, Number(block.params.seconds || 1));
     case "move_left_blocks": {
+      if (!actor) return createInstantRunner(() => {});
       const blocks = Number(block.params.blocks || 1);
       return createTimedMoveRunner(actor, -STAGE_GRID_SIZE * blocks, 0, Math.max(0.2, blocks * 0.45));
     }
     case "move_up_blocks": {
+      if (!actor) return createInstantRunner(() => {});
       const blocks = Number(block.params.blocks || 1);
       return createTimedMoveRunner(actor, 0, -STAGE_GRID_SIZE * blocks, Math.max(0.2, blocks * 0.45));
     }
     case "move_down_blocks": {
+      if (!actor) return createInstantRunner(() => {});
       const blocks = Number(block.params.blocks || 1);
       return createTimedMoveRunner(actor, 0, STAGE_GRID_SIZE * blocks, Math.max(0.2, blocks * 0.45));
     }
     case "teleport_xy":
+      if (!actor) return createInstantRunner(() => {});
       return createInstantRunner(() => {
         actor.x = Number(block.params.x || actor.x);
         actor.y = Number(block.params.y || actor.y);
@@ -1678,16 +1860,19 @@ function createRunnerForBlock(actor, block, run) {
         markProjectDirty();
       });
     case "face_left":
+      if (!actor) return createInstantRunner(() => {});
       return createInstantRunner(() => {
         actor.facing = -1;
         markProjectDirty();
       });
     case "face_right":
+      if (!actor) return createInstantRunner(() => {});
       return createInstantRunner(() => {
         actor.facing = 1;
         markProjectDirty();
       });
     case "jump_blocks": {
+      if (!actor) return createInstantRunner(() => {});
       const blocks = Number(block.params.blocks || 1);
       const total = Math.max(0.3, blocks * 0.28);
       actor.runtime.jump = {
@@ -1698,40 +1883,47 @@ function createRunnerForBlock(actor, block, run) {
       return createWaitRunner(total);
     }
     case "play_wiggle":
+      if (!actor) return createInstantRunner(() => {});
       return createWaitRunner((() => {
         const seconds = Number(block.params.seconds || 1);
         setLoopAnimation(actor, "wiggle", seconds);
         return seconds;
       })());
     case "play_bounce":
+      if (!actor) return createInstantRunner(() => {});
       return createWaitRunner((() => {
         const seconds = Number(block.params.seconds || 1);
         setLoopAnimation(actor, "bounce", seconds);
         return seconds;
       })());
     case "play_stretch":
+      if (!actor) return createInstantRunner(() => {});
       return createWaitRunner((() => {
         const seconds = Number(block.params.seconds || 1);
         setLoopAnimation(actor, "stretch", seconds);
         return seconds;
       })());
     case "stop_animation":
+      if (!actor) return createInstantRunner(() => {});
       return createInstantRunner(() => {
         actor.runtime.animation = null;
       });
     case "change_size":
+      if (!actor) return createInstantRunner(() => {});
       return createInstantRunner(() => {
         actor.sizePct = clamp(Number(block.params.percent || 100), 20, 300);
         clampItemToStage(actor);
         markProjectDirty();
       });
     case "flip_360":
+      if (!actor) return createInstantRunner(() => {});
       return createWaitRunner((() => {
         const seconds = Number(block.params.seconds || 1);
         actor.runtime.flip = { total: seconds, remaining: seconds };
         return seconds;
       })());
     case "change_texture":
+      if (!actor) return createInstantRunner(() => {});
       return createInstantRunner(() => {
         actor.textureId = block.params.textureId || null;
         markProjectDirty();
@@ -1767,10 +1959,11 @@ function createRunnerForBlock(actor, block, run) {
   }
 }
 
-function startScriptRun(actor, rootBlock) {
+function startScriptRun(actor, rootBlock, scope = "actor") {
   const run = {
     id: createBlockId(),
-    actorId: actor.id,
+    actorId: actor?.id ?? null,
+    scope,
     rootBlockId: rootBlock.id,
     stopped: false,
     runner: null,
@@ -1783,6 +1976,19 @@ function triggerScripts(eventName, options = {}) {
   const actorId = options.actorId ?? null;
   const key = options.key ?? null;
 
+  if (actorId == null) {
+    for (const rootBlock of state.sceneScripts) {
+      if (eventName === "recording_start" && rootBlock.type === "when_recording_start") {
+        startScriptRun(null, rootBlock, "scene");
+      }
+      if (eventName === "key_pressed" && rootBlock.type === "when_key_pressed") {
+        if (normalizeScriptKey(rootBlock.params.key || "") === key) {
+          startScriptRun(null, rootBlock, "scene");
+        }
+      }
+    }
+  }
+
   for (const actor of state.items) {
     if (actorId != null && actor.id !== actorId) {
       continue;
@@ -1790,14 +1996,14 @@ function triggerScripts(eventName, options = {}) {
 
     for (const rootBlock of actor.scripts) {
       if (eventName === "recording_start" && rootBlock.type === "when_recording_start") {
-        startScriptRun(actor, rootBlock);
+        startScriptRun(actor, rootBlock, "actor");
       }
       if (eventName === "clicked" && rootBlock.type === "when_clicked") {
-        startScriptRun(actor, rootBlock);
+        startScriptRun(actor, rootBlock, "actor");
       }
       if (eventName === "key_pressed" && rootBlock.type === "when_key_pressed") {
         if (normalizeScriptKey(rootBlock.params.key || "") === key) {
-          startScriptRun(actor, rootBlock);
+          startScriptRun(actor, rootBlock, "actor");
         }
       }
     }
@@ -1813,8 +2019,8 @@ function updateScripts(deltaSeconds) {
     if (run.stopped) {
       continue;
     }
-    const actor = getItemById(run.actorId);
-    if (!actor) {
+    const actor = run.scope === "scene" ? null : getItemById(run.actorId);
+    if (run.scope !== "scene" && !actor) {
       run.stopped = true;
       continue;
     }
@@ -3021,6 +3227,18 @@ function drawRecordingOverlay(now) {
   ctx.restore();
 }
 
+function drawSceneLighting() {
+  if (!state.scene.lightingStrength) {
+    return;
+  }
+
+  const { r, g, b } = hexToRgb(state.scene.lightingColor);
+  ctx.save();
+  ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${state.scene.lightingStrength})`;
+  ctx.fillRect(0, 0, state.stageWidth, state.stageHeight);
+  ctx.restore();
+}
+
 function drawStage(now, options = {}) {
   const {
     showSelectionOutlines = true,
@@ -3067,6 +3285,8 @@ function drawStage(now, options = {}) {
       drawObject(item);
     }
   }
+
+  drawSceneLighting();
 
   if (showSelectionOutlines) {
     for (const item of getSelectedItems()) {
@@ -3366,6 +3586,12 @@ async function goToStudio() {
 
 function clearStage() {
   state.items = [];
+  state.sceneScripts = [];
+  state.scene = {
+    lightingColor: "#fff7d6",
+    lightingStrength: 0,
+  };
+  state.scriptTargetId = SCENE_TARGET_ID;
   clearAllScriptRunners();
   stopAllAudioNodes();
   clearSelection();
