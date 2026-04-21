@@ -459,12 +459,12 @@ const elements = {
   characterList: document.querySelector("#characterList"),
   textureList: document.querySelector("#textureList"),
   objectList: document.querySelector("#objectList"),
+  scriptsModule: document.querySelector("#scriptsModule"),
+  scriptsModuleCloseButton: document.querySelector("#scriptsModuleCloseButton"),
   scriptActorLabel: document.querySelector("#scriptActorLabel"),
   scriptCategoryTabs: document.querySelector("#scriptCategoryTabs"),
   scriptPalette: document.querySelector("#scriptPalette"),
-  scriptStack: document.querySelector("#scriptStack"),
-  scriptMoveUpButton: document.querySelector("#scriptMoveUpButton"),
-  scriptMoveDownButton: document.querySelector("#scriptMoveDownButton"),
+  scriptWorkspace: document.querySelector("#scriptWorkspace"),
   libraryList: document.querySelector("#libraryList"),
   libraryVideo: document.querySelector("#libraryVideo"),
   libraryMeta: document.querySelector("#libraryMeta"),
@@ -475,7 +475,6 @@ const elements = {
     textures: document.querySelector("#texturesPanel"),
     objects: document.querySelector("#objectsPanel"),
     camera: document.querySelector("#cameraPanel"),
-    scripts: document.querySelector("#scriptsPanel"),
   },
 };
 
@@ -491,6 +490,10 @@ const state = {
   activeTool: null,
   activeScriptCategory: "motion",
   selectedScriptBlockId: null,
+  scriptsModuleOpen: false,
+  lastNonScriptPanel: "characters",
+  scriptDrag: null,
+  scriptDropTarget: null,
   items: [],
   selection: new Set(),
   clipboard: [],
@@ -930,6 +933,168 @@ function renderScriptCategoryTabs() {
   }
 }
 
+function createScriptDragPayloadFromEvent(event) {
+  const raw = event.dataTransfer?.getData("application/json");
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function setScriptDragState(payload) {
+  state.scriptDrag = payload;
+  state.scriptDropTarget = null;
+}
+
+function clearScriptDragState() {
+  state.scriptDrag = null;
+  state.scriptDropTarget = null;
+  renderScriptEditor();
+}
+
+function insertRootScriptBlock(actor, index, block) {
+  const definition = scriptBlockMap.get(block.type);
+  if (definition?.trigger) {
+    actor.scripts.splice(index, 0, block);
+    return;
+  }
+
+  const wrapper = createBlockFromType("when_recording_start");
+  wrapper.children.push(block);
+  actor.scripts.splice(index, 0, wrapper);
+}
+
+function isBlockDescendant(block, targetId) {
+  if (block.id === targetId) {
+    return true;
+  }
+  return block.children?.some((child) => isBlockDescendant(child, targetId)) || false;
+}
+
+function canDropOnTarget(actor, payload, target) {
+  if (!actor || !payload || !target) {
+    return false;
+  }
+
+  if (payload.source === "existing") {
+    const location = findScriptBlockLocation(actor.scripts, payload.blockId);
+    if (!location) {
+      return false;
+    }
+    if (target.blockId && isBlockDescendant(location.block, target.blockId)) {
+      return false;
+    }
+  }
+
+  if (target.kind === "inside") {
+    const location = findScriptBlockLocation(actor.scripts, target.blockId);
+    if (!location) {
+      return false;
+    }
+    return Boolean(scriptBlockMap.get(location.block.type)?.allowsChildren);
+  }
+
+  return true;
+}
+
+function getDraggedBlock(actor, payload) {
+  if (!payload || !actor) {
+    return null;
+  }
+
+  if (payload.source === "palette") {
+    return createBlockFromType(payload.blockType);
+  }
+
+  const location = findScriptBlockLocation(actor.scripts, payload.blockId);
+  if (!location) {
+    return null;
+  }
+
+  location.siblings.splice(location.index, 1);
+  return location.block;
+}
+
+function performScriptDrop(target) {
+  const actor = getSingleSelectedItem();
+  const payload = state.scriptDrag;
+  if (!actor || !payload || !canDropOnTarget(actor, payload, target)) {
+    clearScriptDragState();
+    return;
+  }
+
+  const block = getDraggedBlock(actor, payload);
+  if (!block) {
+    clearScriptDragState();
+    return;
+  }
+
+  if (target.kind === "root") {
+    insertRootScriptBlock(actor, target.index, block);
+  } else {
+    const location = findScriptBlockLocation(actor.scripts, target.blockId);
+    if (!location) {
+      clearScriptDragState();
+      return;
+    }
+
+    if (target.kind === "inside") {
+      location.block.children.push(block);
+    } else if (location.siblings === actor.scripts) {
+      const insertIndex = target.kind === "before" ? location.index : location.index + 1;
+      insertRootScriptBlock(actor, insertIndex, block);
+    } else {
+      const insertIndex = target.kind === "before" ? location.index : location.index + 1;
+      location.siblings.splice(insertIndex, 0, block);
+    }
+  }
+
+  state.selectedScriptBlockId = block.id;
+  markProjectDirty();
+  clearScriptDragState();
+}
+
+function createDropLine(target, label, extraClass = "") {
+  const actor = getSingleSelectedItem();
+  const line = document.createElement("div");
+  line.className = `script-drop-line ${extraClass}`.trim();
+  line.textContent = label;
+  const isActive =
+    state.scriptDropTarget &&
+    state.scriptDropTarget.kind === target.kind &&
+    state.scriptDropTarget.blockId === target.blockId &&
+    state.scriptDropTarget.index === target.index;
+  line.classList.toggle("active", Boolean(isActive));
+
+  line.addEventListener("dragover", (event) => {
+    const payload = state.scriptDrag || createScriptDragPayloadFromEvent(event);
+    if (!canDropOnTarget(actor, payload, target)) {
+      return;
+    }
+    event.preventDefault();
+    state.scriptDropTarget = target;
+    line.classList.add("active");
+  });
+
+  line.addEventListener("dragleave", () => {
+    line.classList.remove("active");
+  });
+
+  line.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const payload = state.scriptDrag || createScriptDragPayloadFromEvent(event);
+    setScriptDragState(payload);
+    performScriptDrop(target);
+  });
+
+  return line;
+}
+
 function renderScriptPalette() {
   elements.scriptPalette.innerHTML = "";
   const blocks = SCRIPT_BLOCK_DEFS.filter((block) => block.category === state.activeScriptCategory);
@@ -937,23 +1102,49 @@ function renderScriptPalette() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "script-palette-button";
+    button.draggable = true;
     button.innerHTML = `<strong>${block.title}</strong><br>${block.copy}`;
     button.addEventListener("click", () => addBlockToSelectedActor(block.type));
+    button.addEventListener("dragstart", (event) => {
+      const payload = { source: "palette", blockType: block.type };
+      setScriptDragState(payload);
+      event.dataTransfer?.setData("application/json", JSON.stringify(payload));
+      event.dataTransfer.effectAllowed = "copy";
+      button.classList.add("dragging");
+    });
+    button.addEventListener("dragend", () => {
+      button.classList.remove("dragging");
+      clearScriptDragState();
+    });
     elements.scriptPalette.append(button);
   }
 }
 
-function renderScriptBlock(block, container) {
+function renderScriptBlock(block, container, actor, isRootLevel = false) {
   const definition = scriptBlockMap.get(block.type);
+  container.append(createDropLine({ kind: "before", blockId: block.id }, "Drop block here"));
+
   const card = document.createElement("article");
   card.className = "script-block";
   card.classList.toggle("selected", block.id === state.selectedScriptBlockId);
+  card.draggable = true;
   card.addEventListener("click", (event) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
       return;
     }
     state.selectedScriptBlockId = block.id;
     renderScriptEditor();
+  });
+  card.addEventListener("dragstart", (event) => {
+    const payload = { source: "existing", blockId: block.id };
+    setScriptDragState(payload);
+    event.dataTransfer?.setData("application/json", JSON.stringify(payload));
+    event.dataTransfer.effectAllowed = "move";
+    card.classList.add("dragging");
+  });
+  card.addEventListener("dragend", () => {
+    card.classList.remove("dragging");
+    clearScriptDragState();
   });
 
   const row = document.createElement("div");
@@ -1016,22 +1207,24 @@ function renderScriptBlock(block, container) {
   }
 
   if (definition.allowsChildren) {
+    card.append(createDropLine({ kind: "inside", blockId: block.id }, "Drop inside this block"));
     const children = document.createElement("div");
     children.className = "script-children";
     if (block.children.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "script-empty";
-      empty.textContent = "No child blocks yet. Add one from the palette.";
-      children.append(empty);
+      children.append(createDropLine({ kind: "inside", blockId: block.id }, "Drop block inside this block", "root-empty"));
     } else {
       for (const child of block.children) {
-        renderScriptBlock(child, children);
+        renderScriptBlock(child, children, actor, false);
       }
+      children.append(createDropLine({ kind: "inside", blockId: block.id }, "Drop block at end of container"));
     }
     card.append(children);
   }
 
   container.append(card);
+  if (!isRootLevel) {
+    container.append(createDropLine({ kind: "after", blockId: block.id }, "Drop block here"));
+  }
 }
 
 function renderScriptEditor() {
@@ -1039,29 +1232,35 @@ function renderScriptEditor() {
 
   if (!actor) {
     elements.scriptActorLabel.textContent = "Select one character or object on the stage to script it.";
-    elements.scriptStack.innerHTML = '<p class="script-empty">Script editing turns on when exactly one actor or object is selected.</p>';
-    elements.scriptMoveUpButton.disabled = true;
-    elements.scriptMoveDownButton.disabled = true;
+    elements.scriptWorkspace.innerHTML = '<p class="script-empty">Script editing turns on when exactly one character or object is selected.</p>';
     return;
   }
 
   const actorName = actor.kind === "character" ? characterMap.get(actor.subtype).name : objectMap.get(actor.subtype).name;
   elements.scriptActorLabel.textContent = `${actorName} has ${actor.scripts.length} script stack${actor.scripts.length === 1 ? "" : "s"} saved in this project.`;
-  elements.scriptMoveUpButton.disabled = !state.selectedScriptBlockId;
-  elements.scriptMoveDownButton.disabled = !state.selectedScriptBlockId;
-  elements.scriptStack.innerHTML = "";
+  elements.scriptWorkspace.innerHTML = "";
 
   if (actor.scripts.length === 0) {
-    elements.scriptStack.innerHTML = '<p class="script-empty">Add a control block such as "When Recording Starts" to begin a stack, or click any action block and one will be created for you.</p>';
+    elements.scriptWorkspace.append(
+      createDropLine(
+        { kind: "root", index: 0 },
+        'Drop a block here to start a stack. Action blocks auto-wrap in "When Recording Starts".',
+        "root-empty",
+      ),
+    );
     return;
   }
 
-  for (const rootBlock of actor.scripts) {
+  actor.scripts.forEach((rootBlock, index) => {
     const group = document.createElement("div");
     group.className = "script-stack-group";
-    renderScriptBlock(rootBlock, group);
-    elements.scriptStack.append(group);
-  }
+    group.append(createDropLine({ kind: "root", index }, "Drop root block here"));
+    renderScriptBlock(rootBlock, group, actor, true);
+    if (index === actor.scripts.length - 1) {
+      group.append(createDropLine({ kind: "root", index: index + 1 }, "Drop root block here"));
+    }
+    elements.scriptWorkspace.append(group);
+  });
 }
 
 function createAudioEngine() {
@@ -1646,6 +1845,31 @@ function getPanelToolType(panelName) {
   }
 }
 
+function updateSidebarTabs() {
+  for (const button of elements.panelButtons) {
+    const isScripts = button.dataset.panel === "scripts";
+    button.classList.toggle(
+      "active",
+      isScripts ? state.scriptsModuleOpen : !state.scriptsModuleOpen && button.dataset.panel === state.activePanel,
+    );
+  }
+}
+
+function openScriptsModule() {
+  state.scriptsModuleOpen = true;
+  elements.scriptsModule.classList.remove("hidden");
+  updateSidebarTabs();
+  renderScriptEditor();
+}
+
+function closeScriptsModule() {
+  state.scriptsModuleOpen = false;
+  elements.scriptsModule.classList.add("hidden");
+  state.scriptDropTarget = null;
+  state.scriptDrag = null;
+  updateSidebarTabs();
+}
+
 function setActiveTool(type, id) {
   if (state.activeTool && state.activeTool.type === type && state.activeTool.id === id) {
     clearActiveTool();
@@ -1659,12 +1883,16 @@ function setActiveTool(type, id) {
 }
 
 function setActivePanel(panelName) {
+  if (panelName === "scripts") {
+    openScriptsModule();
+    return;
+  }
+
   const previousPanel = state.activePanel;
   state.activePanel = panelName;
+  state.lastNonScriptPanel = panelName;
 
-  if (previousPanel === "scripts" && panelName !== "scripts") {
-    state.selectedScriptBlockId = null;
-  }
+  closeScriptsModule();
 
   if (previousPanel !== panelName && state.activeTool) {
     const panelToolType = getPanelToolType(panelName);
@@ -1673,16 +1901,10 @@ function setActivePanel(panelName) {
     }
   }
 
-  for (const button of elements.panelButtons) {
-    button.classList.toggle("active", button.dataset.panel === panelName);
-  }
+  updateSidebarTabs();
 
   for (const [name, panel] of Object.entries(elements.panels)) {
     panel.classList.toggle("hidden", name !== panelName);
-  }
-
-  if (panelName === "scripts") {
-    renderScriptEditor();
   }
 }
 
@@ -1754,6 +1976,7 @@ function showScreen(screenName) {
   elements.studioScreen.classList.toggle("hidden", screenName !== "studio");
   elements.libraryScreen.classList.toggle("hidden", screenName !== "library");
   if (screenName !== "studio") {
+    closeScriptsModule();
     clearAllScriptRunners();
     stopAllAudioNodes();
   }
@@ -3123,8 +3346,7 @@ function bindEvents() {
   elements.recordButton.addEventListener("click", startRecording);
   elements.stopButton.addEventListener("click", stopRecording);
   elements.openLibraryButton.addEventListener("click", openLibrary);
-  elements.scriptMoveUpButton.addEventListener("click", () => moveSelectedScriptBlock(-1));
-  elements.scriptMoveDownButton.addEventListener("click", () => moveSelectedScriptBlock(1));
+  elements.scriptsModuleCloseButton.addEventListener("click", closeScriptsModule);
 
   for (const button of elements.panelButtons) {
     button.addEventListener("click", () => setActivePanel(button.dataset.panel));

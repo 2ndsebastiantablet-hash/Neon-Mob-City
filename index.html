@@ -86,32 +86,6 @@
                 </div>
               </div>
             </section>
-
-            <section id="scriptsPanel" class="tool-panel hidden" aria-label="Scripts">
-              <div class="scripts-panel">
-                <div class="scripts-header">
-                  <div>
-                    <h3>Block Scripts</h3>
-                    <p id="scriptActorLabel" class="scripts-copy">Select one character or object on the stage to script it.</p>
-                  </div>
-                  <div class="scripts-actions">
-                    <button id="scriptMoveUpButton" type="button" class="ghost-button">Block Up</button>
-                    <button id="scriptMoveDownButton" type="button" class="ghost-button">Block Down</button>
-                  </div>
-                </div>
-
-                <div id="scriptCategoryTabs" class="script-category-tabs"></div>
-                <div id="scriptPalette" class="script-palette"></div>
-
-                <div class="script-stack-panel">
-                  <div class="script-stack-header">
-                    <h4>Script Stack</h4>
-                    <p>Click a palette block to add it. Select a block in the stack to edit or delete it.</p>
-                  </div>
-                  <div id="scriptStack" class="script-stack"></div>
-                </div>
-              </div>
-            </section>
           </div>
 
           <div class="sidebar-help">
@@ -121,6 +95,46 @@
           </div>
         </aside>
       </div>
+
+      <section id="scriptsModule" class="scripts-module hidden" aria-label="Block Scripts module">
+        <div class="scripts-module-backdrop"></div>
+        <div class="scripts-module-shell">
+          <header class="scripts-module-header">
+            <div>
+              <p class="topbar-label">Full Script Module</p>
+              <h3>Block Scripts</h3>
+              <p id="scriptActorLabel" class="scripts-copy">Select one character or object on the stage to script it.</p>
+            </div>
+            <div class="scripts-module-actions">
+              <button id="scriptsModuleCloseButton" type="button" class="ghost-button">Back To Studio</button>
+            </div>
+          </header>
+
+          <div class="scripts-module-layout">
+            <aside class="scripts-palette-panel">
+              <div class="script-category-panel">
+                <h4>Block Groups</h4>
+                <div id="scriptCategoryTabs" class="script-category-tabs"></div>
+              </div>
+              <div class="script-library-panel">
+                <h4>Blocks</h4>
+                <p>Drag a block into the workspace and it will snap into the stack.</p>
+                <div id="scriptPalette" class="script-palette"></div>
+              </div>
+            </aside>
+
+            <section class="scripts-workspace-panel">
+              <div class="script-stack-header">
+                <div>
+                  <h4>Workspace</h4>
+                  <p>Drag blocks to reorder them. Drop inside container blocks to snap them together.</p>
+                </div>
+              </div>
+              <div id="scriptWorkspace" class="script-workspace"></div>
+            </section>
+          </div>
+        </div>
+      </section>
     </section>
 
     <section id="libraryScreen" class="screen library-screen hidden" aria-label="Recording library">
