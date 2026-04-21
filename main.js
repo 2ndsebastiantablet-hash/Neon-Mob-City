@@ -185,6 +185,7 @@ const MUSIC_OPTIONS = [
   { value: "marquee", label: "Marquee Loop" },
   { value: "dream", label: "Dream Pad" },
 ];
+const SET_PEN_COLORS = ["#2f8f83", "#e76f51", "#f4a261", "#264653", "#ffd166", "#ef476f", "#ffffff", "#2c1d14"];
 const SCRIPT_GROUPS = [
   { id: "scene", name: "Scene" },
   { id: "motion", name: "Motion" },
@@ -224,6 +225,48 @@ const SCRIPT_BLOCK_DEFS = [
     copy: "Remove the current scene lighting overlay.",
     params: [],
     sceneOnly: true,
+  },
+  {
+    type: "spawn_actor",
+    category: "scene",
+    title: "Spawn Actor",
+    copy: "Create a new character on the main stage.",
+    params: [
+      { name: "actorSubtype", label: "Actor", input: "actorSubtype" },
+      { name: "x", label: "X", input: "number", min: 0, max: 2000, step: 1 },
+      { name: "y", label: "Y", input: "number", min: 0, max: 2000, step: 1 },
+    ],
+    sceneOnly: true,
+  },
+  {
+    type: "add_light_source",
+    category: "scene",
+    title: "Add Light Source",
+    copy: "Add a movable sun or moon light to the active set.",
+    params: [
+      { name: "lightType", label: "Type", input: "select", options: [
+        { value: "sun", label: "Sun" },
+        { value: "moon", label: "Moon" },
+      ] },
+      { name: "color", label: "Tint", input: "color" },
+      { name: "brightness", label: "Bright %", input: "number", min: 0, max: 100, step: 5 },
+    ],
+    sceneOnly: true,
+  },
+  {
+    type: "change_set",
+    category: "scene",
+    title: "Change Set",
+    copy: "Switch the movie to another saved set.",
+    params: [{ name: "setId", label: "Set", input: "setSelect" }],
+    sceneOnly: true,
+  },
+  {
+    type: "transfer_character_to_set",
+    category: "scene",
+    title: "Transfer To Set",
+    copy: "Move the current actor into a selected set.",
+    params: [{ name: "setId", label: "Set", input: "setSelect" }],
   },
   {
     type: "move_right_seconds",
@@ -470,6 +513,7 @@ let patternCache = new Map();
 const patternCaches = {
   stage: new Map(),
   recording: new Map(),
+  set: new Map(),
 };
 
 const elements = {
@@ -494,6 +538,29 @@ const elements = {
   objectList: document.querySelector("#objectList"),
   scriptsModule: document.querySelector("#scriptsModule"),
   scriptsModuleCloseButton: document.querySelector("#scriptsModuleCloseButton"),
+  stageModule: document.querySelector("#stageModule"),
+  stageModuleCloseButton: document.querySelector("#stageModuleCloseButton"),
+  setEditorLabel: document.querySelector("#setEditorLabel"),
+  setList: document.querySelector("#setList"),
+  addSetButton: document.querySelector("#addSetButton"),
+  setCanvas: document.querySelector("#setCanvas"),
+  setCharacterList: document.querySelector("#setCharacterList"),
+  setObjectList: document.querySelector("#setObjectList"),
+  setTextureList: document.querySelector("#setTextureList"),
+  setToolTabs: [...document.querySelectorAll(".set-tool-tab")],
+  setPenControls: document.querySelector("#setPenControls"),
+  setBaseColors: document.querySelector("#setBaseColors"),
+  setPenColor: document.querySelector("#setPenColor"),
+  setLightControls: document.querySelector("#setLightControls"),
+  setAddLightButton: document.querySelector("#setAddLightButton"),
+  setLightType: document.querySelector("#setLightType"),
+  setLightColor: document.querySelector("#setLightColor"),
+  setLightBrightness: document.querySelector("#setLightBrightness"),
+  setMiniCodePanel: document.querySelector("#setMiniCodePanel"),
+  setMiniCodeCloseButton: document.querySelector("#setMiniCodeCloseButton"),
+  setMiniCodeTitle: document.querySelector("#setMiniCodeTitle"),
+  setMiniCodePalette: document.querySelector("#setMiniCodePalette"),
+  setMiniCodeWorkspace: document.querySelector("#setMiniCodeWorkspace"),
   scriptActorLabel: document.querySelector("#scriptActorLabel"),
   scriptActorList: document.querySelector("#scriptActorList"),
   scriptCategoryTabs: document.querySelector("#scriptCategoryTabs"),
@@ -516,6 +583,9 @@ const elements = {
 const textureMap = new Map(TEXTURE_DEFS.map((texture) => [texture.id, texture]));
 const characterMap = new Map(CHARACTER_DEFS.map((character) => [character.id, character]));
 const objectMap = new Map(OBJECT_DEFS.map((objectDef) => [objectDef.id, objectDef]));
+const setCanvas = elements.setCanvas;
+const setFrame = setCanvas.parentElement;
+const setCtx = setCanvas.getContext("2d");
 
 const state = {
   screen: "menu",
@@ -524,13 +594,28 @@ const state = {
   activePanel: "characters",
   activeTool: null,
   activeScriptCategory: "scene",
+  scriptEditorMode: "main",
   selectedScriptBlockId: null,
   scriptTargetId: SCENE_TARGET_ID,
   scriptsModuleOpen: false,
+  stageModuleOpen: false,
   lastNonScriptPanel: "characters",
   scriptDrag: null,
   scriptDropTarget: null,
+  activeSetId: null,
+  setEditorTool: "select",
+  setToolSelection: {
+    character: CHARACTER_DEFS[0].id,
+    object: OBJECT_DEFS[0].id,
+    texture: TEXTURE_DEFS[0].id,
+  },
+  setSelectedItemId: null,
+  setSelectedLightId: null,
+  setInteraction: null,
+  setMiniCodeItemId: null,
+  setPenColor: "#2f8f83",
   items: [],
+  sets: [],
   sceneScripts: [],
   scene: {
     lightingColor: "#fff7d6",
@@ -717,6 +802,98 @@ function serializeItem(item) {
   };
 }
 
+function createSetName() {
+  return `Set ${state.sets.length + 1}`;
+}
+
+function createStageSet(name = createSetName()) {
+  return {
+    id: `set-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    items: [],
+    drawings: [],
+    lights: [],
+    lightingColor: "#fff7d6",
+    lightingStrength: 0,
+  };
+}
+
+function serializeStageSet(set) {
+  return {
+    id: set.id,
+    name: set.name,
+    items: set.items.map(serializeItem),
+    drawings: Array.isArray(set.drawings) ? set.drawings.map((drawing) => ({
+      id: drawing.id,
+      color: drawing.color,
+      points: drawing.points.map((point) => ({ x: point.x, y: point.y })),
+    })) : [],
+    lights: Array.isArray(set.lights) ? set.lights.map((light) => ({ ...light })) : [],
+    lightingColor: set.lightingColor || "#fff7d6",
+    lightingStrength: clamp(Number(set.lightingStrength || 0), 0, 1),
+  };
+}
+
+function normalizeStageSet(set) {
+  return {
+    id: set.id || `set-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: set.name || "Set",
+    items: Array.isArray(set.items) ? set.items.map(normalizeItem) : [],
+    drawings: Array.isArray(set.drawings) ? set.drawings.map((drawing) => ({
+      id: drawing.id || `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      color: drawing.color || "#2f8f83",
+      points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: Number(point.x || 0), y: Number(point.y || 0) })) : [],
+    })) : [],
+    lights: Array.isArray(set.lights) ? set.lights.map((light) => ({
+      id: light.id || `light-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      x: Number(light.x || state.stageWidth * 0.5),
+      y: Number(light.y || state.stageHeight * 0.35),
+      type: light.type === "moon" ? "moon" : "sun",
+      color: light.color || "#fff2a6",
+      brightness: clamp(Number(light.brightness ?? 0.55), 0, 1),
+    })) : [],
+    lightingColor: set.lightingColor || "#fff7d6",
+    lightingStrength: clamp(Number(set.lightingStrength || 0), 0, 1),
+  };
+}
+
+function ensureDefaultSet() {
+  if (state.sets.length === 0) {
+    const firstSet = createStageSet("Set 1");
+    state.sets.push(firstSet);
+    state.activeSetId = firstSet.id;
+    return;
+  }
+
+  if (!state.sets.some((set) => set.id === state.activeSetId)) {
+    state.activeSetId = state.sets[0].id;
+  }
+}
+
+function getActiveSet() {
+  ensureDefaultSet();
+  return state.sets.find((set) => set.id === state.activeSetId) || state.sets[0];
+}
+
+function getStageSetById(setId) {
+  ensureDefaultSet();
+  return state.sets.find((set) => set.id === setId) || null;
+}
+
+function getAllSetItems() {
+  return state.sets.flatMap((set) => set.items);
+}
+
+function getSetItemById(itemId) {
+  for (const set of state.sets) {
+    const item = set.items.find((candidate) => candidate.id === itemId);
+    if (item) {
+      return { set, item };
+    }
+  }
+  return null;
+}
+
 function markProjectDirty() {
   state.projectDirty = true;
 }
@@ -725,6 +902,8 @@ function saveProjectState() {
   try {
     const payload = {
       items: state.items.map(serializeItem),
+      sets: state.sets.map(serializeStageSet),
+      activeSetId: state.activeSetId,
       sceneScripts: state.sceneScripts.map(serializeBlock),
       scene: { ...state.scene },
       nextId: state.nextId,
@@ -742,12 +921,19 @@ function loadProjectState() {
   try {
     const raw = window.localStorage.getItem(PROJECT_STORAGE_KEY);
     if (!raw) {
+      ensureDefaultSet();
       return;
     }
 
     const payload = JSON.parse(raw);
     if (Array.isArray(payload.items)) {
       state.items = payload.items.map(normalizeItem);
+    }
+    if (Array.isArray(payload.sets)) {
+      state.sets = payload.sets.map(normalizeStageSet);
+    }
+    if (payload.activeSetId) {
+      state.activeSetId = payload.activeSetId;
     }
     if (Array.isArray(payload.sceneScripts)) {
       state.sceneScripts = payload.sceneScripts.map(deserializeBlock);
@@ -760,8 +946,11 @@ function loadProjectState() {
     }
     if (typeof payload.nextId === "number") {
       state.nextId = payload.nextId;
-    } else if (state.items.length > 0) {
-      state.nextId = Math.max(...state.items.map((item) => item.id)) + 1;
+    } else {
+      const allItems = [...state.items, ...getAllSetItems()];
+      if (allItems.length > 0) {
+        state.nextId = Math.max(...allItems.map((item) => item.id)) + 1;
+      }
     }
     if (typeof payload.globalVolume === "number") {
       state.globalVolume = clamp(payload.globalVolume, 0, 1);
@@ -769,6 +958,7 @@ function loadProjectState() {
   } catch {
     state.items = [];
   }
+  ensureDefaultSet();
 }
 
 function createBlockFromType(type) {
@@ -779,6 +969,14 @@ function createBlockFromType(type) {
 
   const params = {};
   for (const param of definition.params) {
+    if (param.input === "actorSubtype") {
+      params[param.name] = CHARACTER_DEFS[0]?.id ?? "";
+      continue;
+    }
+    if (param.input === "setSelect") {
+      params[param.name] = getActiveSet()?.id ?? "";
+      continue;
+    }
     if (param.input === "select") {
       params[param.name] = param.options[0]?.value ?? "";
       continue;
@@ -806,6 +1004,14 @@ function createBlockFromType(type) {
   if (type === "set_scene_lighting" || type === "fade_scene_lighting") {
     params.strength = 35;
     params.color = "#ffd36f";
+  }
+  if (type === "spawn_actor") {
+    params.x = Math.round(state.stageWidth * 0.5);
+    params.y = Math.round(state.stageHeight * 0.5);
+  }
+  if (type === "add_light_source") {
+    params.color = "#fff2a6";
+    params.brightness = 55;
   }
   if (type === "move_left_blocks" || type === "move_up_blocks" || type === "move_down_blocks" || type === "jump_blocks") {
     params.blocks = 2;
@@ -840,6 +1046,10 @@ function getSingleSelectedItem() {
 }
 
 function getScriptTargetItem() {
+  if (state.scriptEditorMode === "set") {
+    return getSetMiniScriptTarget();
+  }
+
   if (state.scriptTargetId === SCENE_TARGET_ID) {
     return null;
   }
@@ -863,10 +1073,17 @@ function getScriptTargetItem() {
 }
 
 function isSceneScriptTarget() {
+  if (state.scriptEditorMode === "set") {
+    return false;
+  }
   return state.scriptTargetId === SCENE_TARGET_ID;
 }
 
 function getScriptTargetScripts() {
+  if (state.scriptEditorMode === "set") {
+    return getSetMiniScriptTarget()?.scripts || null;
+  }
+
   if (isSceneScriptTarget()) {
     return state.sceneScripts;
   }
@@ -875,6 +1092,10 @@ function getScriptTargetScripts() {
 }
 
 function getScriptTargetName() {
+  if (state.scriptEditorMode === "set") {
+    const actor = getSetMiniScriptTarget();
+    return actor ? getActorDisplayName(actor) : "No Set Actor";
+  }
   if (isSceneScriptTarget()) {
     return "Scene";
   }
@@ -959,7 +1180,7 @@ function addBlockToSelectedActor(type) {
 
   state.selectedScriptBlockId = newBlock.id;
   markProjectDirty();
-  renderScriptEditor();
+  renderActiveScriptEditor();
 }
 
 function moveSelectedScriptBlock(direction) {
@@ -981,7 +1202,7 @@ function moveSelectedScriptBlock(direction) {
   const [block] = location.siblings.splice(location.index, 1);
   location.siblings.splice(targetIndex, 0, block);
   markProjectDirty();
-  renderScriptEditor();
+  renderActiveScriptEditor();
 }
 
 function deleteSelectedScriptBlock() {
@@ -998,7 +1219,7 @@ function deleteSelectedScriptBlock() {
   location.siblings.splice(location.index, 1);
   state.selectedScriptBlockId = null;
   markProjectDirty();
-  renderScriptEditor();
+  renderActiveScriptEditor();
   return true;
 }
 
@@ -1075,7 +1296,7 @@ function setScriptDragState(payload) {
 function clearScriptDragState() {
   state.scriptDrag = null;
   state.scriptDropTarget = null;
-  renderScriptEditor();
+  renderActiveScriptEditor();
 }
 
 function insertRootScriptBlock(scripts, index, block) {
@@ -1272,6 +1493,17 @@ function hideBlockInfo() {
   elements.scriptBlockInfo.classList.add("hidden");
 }
 
+function getBlockParamOptions(param) {
+  if (param.input === "actorSubtype") {
+    return CHARACTER_DEFS.map((character) => ({ value: character.id, label: character.name }));
+  }
+  if (param.input === "setSelect") {
+    ensureDefaultSet();
+    return state.sets.map((set) => ({ value: set.id, label: set.name }));
+  }
+  return param.options || [];
+}
+
 function renderScriptBlock(block, container, actor, isRootLevel = false) {
   const definition = scriptBlockMap.get(block.type);
   container.append(createDropLine({ kind: "before", blockId: block.id }, "Drop block here"));
@@ -1285,7 +1517,7 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
       return;
     }
     state.selectedScriptBlockId = block.id;
-    renderScriptEditor();
+    renderActiveScriptEditor();
   });
   card.addEventListener("contextmenu", (event) => {
     event.preventDefault();
@@ -1326,9 +1558,9 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
       label.textContent = param.label;
 
       let input;
-      if (param.input === "select") {
+      if (param.input === "select" || param.input === "actorSubtype" || param.input === "setSelect") {
         input = document.createElement("select");
-        for (const option of param.options) {
+        for (const option of getBlockParamOptions(param)) {
           const optionElement = document.createElement("option");
           optionElement.value = option.value;
           optionElement.textContent = option.label;
@@ -1434,7 +1666,16 @@ function renderScriptActorList() {
   }
 }
 
+function renderActiveScriptEditor() {
+  if (state.scriptEditorMode === "set") {
+    renderSetMiniCodePanel();
+    return;
+  }
+  renderScriptEditor();
+}
+
 function renderScriptEditor() {
+  state.scriptEditorMode = "main";
   renderScriptActorList();
   const actor = getScriptTargetItem();
   const scripts = getScriptTargetScripts();
@@ -1634,6 +1875,12 @@ function clearAllScriptRunners() {
     item.runtime.jump = null;
     clearItemRuntimeVisuals(item);
   }
+  for (const item of getAllSetItems()) {
+    item.runtime.animation = null;
+    item.runtime.flip = null;
+    item.runtime.jump = null;
+    clearItemRuntimeVisuals(item);
+  }
 }
 
 function createSequenceRunner(actor, blocks, run) {
@@ -1738,6 +1985,57 @@ function setSceneLighting(color, strength) {
   markProjectDirty();
 }
 
+function spawnScriptActor(block) {
+  const item = createCharacterItem(block.params.actorSubtype || CHARACTER_DEFS[0].id, Number(block.params.x || state.stageWidth * 0.5), Number(block.params.y || state.stageHeight * 0.5));
+  clampItemToStage(item);
+  state.items.push(item);
+  markProjectDirty();
+}
+
+function addScriptLight(block) {
+  const set = getActiveSet();
+  const light = {
+    id: `light-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    x: state.stageWidth * 0.5,
+    y: state.stageHeight * 0.35,
+    type: block.params.lightType === "moon" ? "moon" : "sun",
+    color: block.params.color || "#fff2a6",
+    brightness: clamp(Number(block.params.brightness || 55) / 100, 0, 1),
+  };
+  set.lights.push(light);
+  markProjectDirty();
+  renderStageModule();
+}
+
+function changeActiveSet(setId) {
+  if (!getStageSetById(setId)) {
+    return;
+  }
+  state.activeSetId = setId;
+  state.setSelectedItemId = null;
+  state.setSelectedLightId = null;
+  markProjectDirty();
+  renderStageModule();
+}
+
+function transferActorToSet(actor, setId) {
+  const targetSet = getStageSetById(setId);
+  if (!actor || !targetSet) {
+    return;
+  }
+
+  state.items = state.items.filter((item) => item.id !== actor.id);
+  for (const set of state.sets) {
+    set.items = set.items.filter((item) => item.id !== actor.id);
+  }
+  targetSet.items.push(actor);
+  clampItemToStage(actor);
+  state.selection.delete(actor.id);
+  updateSelectionLabel();
+  markProjectDirty();
+  renderStageModule();
+}
+
 function createLightingFadeRunner(block) {
   const startRgb = hexToRgb(state.scene.lightingColor);
   const endRgb = hexToRgb(block.params.color || "#fff7d6");
@@ -1833,6 +2131,14 @@ function createRunnerForBlock(actor, block, run) {
       return createLightingFadeRunner(block);
     case "clear_scene_lighting":
       return createInstantRunner(() => setSceneLighting("#fff7d6", 0));
+    case "spawn_actor":
+      return createInstantRunner(() => spawnScriptActor(block));
+    case "add_light_source":
+      return createInstantRunner(() => addScriptLight(block));
+    case "change_set":
+      return createInstantRunner(() => changeActiveSet(block.params.setId));
+    case "transfer_character_to_set":
+      return createInstantRunner(() => transferActorToSet(actor, block.params.setId));
     case "move_right_seconds":
       if (!actor) return createInstantRunner(() => {});
       return createTimedMoveRunner(actor, STAGE_GRID_SIZE * 2 * Number(block.params.seconds || 1), 0, Number(block.params.seconds || 1));
@@ -2008,10 +2314,34 @@ function triggerScripts(eventName, options = {}) {
       }
     }
   }
+
+  const activeSet = getActiveSet();
+  for (const actor of activeSet.items) {
+    if (actorId != null && actor.id !== actorId) {
+      continue;
+    }
+
+    for (const rootBlock of actor.scripts) {
+      if (eventName === "recording_start" && rootBlock.type === "when_recording_start") {
+        startScriptRun(actor, rootBlock, "setActor");
+      }
+      if (eventName === "clicked" && rootBlock.type === "when_clicked") {
+        startScriptRun(actor, rootBlock, "setActor");
+      }
+      if (eventName === "key_pressed" && rootBlock.type === "when_key_pressed") {
+        if (normalizeScriptKey(rootBlock.params.key || "") === key) {
+          startScriptRun(actor, rootBlock, "setActor");
+        }
+      }
+    }
+  }
 }
 
 function updateScripts(deltaSeconds) {
   for (const item of state.items) {
+    updateItemTransientState(item, deltaSeconds);
+  }
+  for (const item of getAllSetItems()) {
     updateItemTransientState(item, deltaSeconds);
   }
 
@@ -2019,7 +2349,7 @@ function updateScripts(deltaSeconds) {
     if (run.stopped) {
       continue;
     }
-    const actor = run.scope === "scene" ? null : getItemById(run.actorId);
+    const actor = run.scope === "scene" ? null : run.scope === "setActor" ? getSetItemById(run.actorId)?.item : getItemById(run.actorId);
     if (run.scope !== "scene" && !actor) {
       run.stopped = true;
       continue;
@@ -2151,9 +2481,14 @@ function getPanelToolType(panelName) {
 function updateSidebarTabs() {
   for (const button of elements.panelButtons) {
     const isScripts = button.dataset.panel === "scripts";
+    const isStage = button.dataset.panel === "stage";
     button.classList.toggle(
       "active",
-      isScripts ? state.scriptsModuleOpen : !state.scriptsModuleOpen && button.dataset.panel === state.activePanel,
+      isScripts
+        ? state.scriptsModuleOpen
+        : isStage
+          ? state.stageModuleOpen
+          : !state.scriptsModuleOpen && !state.stageModuleOpen && button.dataset.panel === state.activePanel,
     );
   }
 }
@@ -2173,6 +2508,25 @@ function closeScriptsModule() {
   updateSidebarTabs();
 }
 
+function openStageModule() {
+  ensureDefaultSet();
+  state.stageModuleOpen = true;
+  state.scriptEditorMode = "main";
+  elements.stageModule.classList.remove("hidden");
+  closeScriptsModule();
+  updateSidebarTabs();
+  renderStageModule();
+  ensureCanvasSize();
+}
+
+function closeStageModule() {
+  state.stageModuleOpen = false;
+  state.setInteraction = null;
+  closeSetMiniCodePanel();
+  elements.stageModule.classList.add("hidden");
+  updateSidebarTabs();
+}
+
 function setActiveTool(type, id) {
   if (state.activeTool && state.activeTool.type === type && state.activeTool.id === id) {
     clearActiveTool();
@@ -2187,7 +2541,12 @@ function setActiveTool(type, id) {
 
 function setActivePanel(panelName) {
   if (panelName === "scripts") {
+    closeStageModule();
     openScriptsModule();
+    return;
+  }
+  if (panelName === "stage") {
+    openStageModule();
     return;
   }
 
@@ -2196,6 +2555,7 @@ function setActivePanel(panelName) {
   state.lastNonScriptPanel = panelName;
 
   closeScriptsModule();
+  closeStageModule();
 
   if (previousPanel !== panelName && state.activeTool) {
     const panelToolType = getPanelToolType(panelName);
@@ -2280,6 +2640,7 @@ function showScreen(screenName) {
   elements.libraryScreen.classList.toggle("hidden", screenName !== "library");
   if (screenName !== "studio") {
     closeScriptsModule();
+    closeStageModule();
     clearAllScriptRunners();
     stopAllAudioNodes();
   }
@@ -2337,6 +2698,305 @@ function placeItemFromTool(point) {
   state.items.push(item);
   setSelection([item.id]);
   markProjectDirty();
+}
+
+function createLight(x = state.stageWidth * 0.5, y = state.stageHeight * 0.36) {
+  return {
+    id: `light-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    x,
+    y,
+    type: elements.setLightType?.value === "moon" ? "moon" : "sun",
+    color: elements.setLightColor?.value || "#fff2a6",
+    brightness: clamp(Number(elements.setLightBrightness?.value || 55) / 100, 0, 1),
+  };
+}
+
+function getSetCanvasPoint(event) {
+  const rect = setCanvas.getBoundingClientRect();
+  return {
+    x: clamp((event.clientX - rect.left) * (state.stageWidth / Math.max(1, rect.width)), 0, state.stageWidth),
+    y: clamp((event.clientY - rect.top) * (state.stageHeight / Math.max(1, rect.height)), 0, state.stageHeight),
+  };
+}
+
+function hitTestSetItem(set, x, y) {
+  for (let index = set.items.length - 1; index >= 0; index -= 1) {
+    const item = set.items[index];
+    if (rectContainsPoint(getItemBounds(item), x, y)) {
+      return item;
+    }
+  }
+  return null;
+}
+
+function hitTestSetLight(set, x, y) {
+  for (let index = set.lights.length - 1; index >= 0; index -= 1) {
+    const light = set.lights[index];
+    const dx = light.x - x;
+    const dy = light.y - y;
+    if (Math.hypot(dx, dy) <= 18) {
+      return light;
+    }
+  }
+  return null;
+}
+
+function getSetMiniScriptTarget() {
+  if (state.setMiniCodeItemId == null) {
+    return null;
+  }
+  return getSetItemById(state.setMiniCodeItemId)?.item || null;
+}
+
+function setSetEditorTool(tool) {
+  state.setEditorTool = tool;
+  state.setSelectedLightId = null;
+  state.setSelectedItemId = null;
+  renderStageModule();
+}
+
+function selectSetToolItem(type, id) {
+  state.setToolSelection[type] = id;
+  renderStageModule();
+}
+
+function addStageSet() {
+  const nextSet = createStageSet(createSetName());
+  state.sets.push(nextSet);
+  state.activeSetId = nextSet.id;
+  state.setSelectedItemId = null;
+  state.setSelectedLightId = null;
+  state.setMiniCodeItemId = null;
+  markProjectDirty();
+  renderStageModule();
+}
+
+function selectStageSet(setId) {
+  state.activeSetId = setId;
+  state.setSelectedItemId = null;
+  state.setSelectedLightId = null;
+  state.setMiniCodeItemId = null;
+  state.scriptEditorMode = "main";
+  markProjectDirty();
+  renderStageModule();
+}
+
+function placeSetItem(point) {
+  const set = getActiveSet();
+  let item = null;
+  if (state.setEditorTool === "character") {
+    item = createCharacterItem(state.setToolSelection.character, point.x, point.y);
+  } else if (state.setEditorTool === "object") {
+    item = createObjectItem(state.setToolSelection.object, point.x, point.y);
+  }
+  if (!item) {
+    return;
+  }
+  clampItemToStage(item);
+  set.items.push(item);
+  state.setSelectedItemId = item.id;
+  markProjectDirty();
+  renderStageModule();
+}
+
+function applySetTextureAtPoint(point) {
+  const set = getActiveSet();
+  const hit = hitTestSetItem(set, point.x, point.y);
+  if (hit) {
+    hit.textureId = state.setToolSelection.texture;
+    state.setSelectedItemId = hit.id;
+    markProjectDirty();
+  }
+}
+
+function openSetMiniCodePanel(itemId) {
+  state.setMiniCodeItemId = itemId;
+  state.selectedScriptBlockId = null;
+  state.scriptEditorMode = "set";
+  elements.setMiniCodePanel.classList.remove("hidden");
+  renderSetMiniCodePanel();
+}
+
+function closeSetMiniCodePanel() {
+  state.setMiniCodeItemId = null;
+  state.selectedScriptBlockId = null;
+  state.scriptEditorMode = "main";
+  elements.setMiniCodePanel.classList.add("hidden");
+}
+
+function deleteSelectedSetThing() {
+  const set = getActiveSet();
+  if (state.setSelectedItemId != null) {
+    set.items = set.items.filter((item) => item.id !== state.setSelectedItemId);
+    if (state.setMiniCodeItemId === state.setSelectedItemId) {
+      closeSetMiniCodePanel();
+    }
+    state.setSelectedItemId = null;
+    markProjectDirty();
+    renderStageModule();
+    return true;
+  }
+  if (state.setSelectedLightId != null) {
+    set.lights = set.lights.filter((light) => light.id !== state.setSelectedLightId);
+    state.setSelectedLightId = null;
+    markProjectDirty();
+    renderStageModule();
+    return true;
+  }
+  return false;
+}
+
+function updateSelectedSetLightControls() {
+  const set = getActiveSet();
+  const light = set.lights.find((candidate) => candidate.id === state.setSelectedLightId);
+  if (!light) {
+    return;
+  }
+  light.type = elements.setLightType.value === "moon" ? "moon" : "sun";
+  light.color = elements.setLightColor.value;
+  light.brightness = clamp(Number(elements.setLightBrightness.value) / 100, 0, 1);
+  markProjectDirty();
+}
+
+function syncLightControls(light) {
+  if (!light) {
+    return;
+  }
+  elements.setLightType.value = light.type;
+  elements.setLightColor.value = light.color;
+  elements.setLightBrightness.value = Math.round(light.brightness * 100);
+}
+
+function onSetPointerDown(event) {
+  if (!state.stageModuleOpen || event.button !== 0) {
+    return;
+  }
+  const point = getSetCanvasPoint(event);
+  const set = getActiveSet();
+  setCanvas.setPointerCapture?.(event.pointerId);
+
+  if (state.setEditorTool === "character" || state.setEditorTool === "object") {
+    placeSetItem(point);
+    return;
+  }
+
+  if (state.setEditorTool === "texture") {
+    applySetTextureAtPoint(point);
+    state.setInteraction = { type: "paintTexture" };
+    return;
+  }
+
+  if (state.setEditorTool === "pen") {
+    const drawing = {
+      id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      color: state.setPenColor,
+      points: [point],
+    };
+    set.drawings.push(drawing);
+    state.setInteraction = { type: "draw", drawingId: drawing.id };
+    markProjectDirty();
+    return;
+  }
+
+  if (state.setEditorTool === "light") {
+    const hitLight = hitTestSetLight(set, point.x, point.y);
+    const light = hitLight || createLight(point.x, point.y);
+    if (!hitLight) {
+      set.lights.push(light);
+    }
+    state.setSelectedLightId = light.id;
+    state.setSelectedItemId = null;
+    syncLightControls(light);
+    state.setInteraction = { type: "dragLight", lightId: light.id, start: point, x: light.x, y: light.y };
+    markProjectDirty();
+    return;
+  }
+
+  const light = hitTestSetLight(set, point.x, point.y);
+  if (light) {
+    state.setSelectedLightId = light.id;
+    state.setSelectedItemId = null;
+    syncLightControls(light);
+    state.setInteraction = { type: "dragLight", lightId: light.id, start: point, x: light.x, y: light.y };
+    renderStageModule();
+    return;
+  }
+
+  const item = hitTestSetItem(set, point.x, point.y);
+  if (item) {
+    state.setSelectedItemId = item.id;
+    state.setSelectedLightId = null;
+    state.setInteraction = { type: "dragItem", itemId: item.id, start: point, x: item.x, y: item.y };
+    renderStageModule();
+    return;
+  }
+
+  state.setSelectedItemId = null;
+  state.setSelectedLightId = null;
+  renderStageModule();
+}
+
+function onSetPointerMove(event) {
+  if (!state.setInteraction) {
+    return;
+  }
+  const point = getSetCanvasPoint(event);
+  const set = getActiveSet();
+
+  if (state.setInteraction.type === "draw") {
+    const drawing = set.drawings.find((candidate) => candidate.id === state.setInteraction.drawingId);
+    if (drawing) {
+      drawing.points.push(point);
+      markProjectDirty();
+    }
+    return;
+  }
+
+  if (state.setInteraction.type === "paintTexture") {
+    applySetTextureAtPoint(point);
+    return;
+  }
+
+  if (state.setInteraction.type === "dragItem") {
+    const item = set.items.find((candidate) => candidate.id === state.setInteraction.itemId);
+    if (item) {
+      item.x = state.setInteraction.x + point.x - state.setInteraction.start.x;
+      item.y = state.setInteraction.y + point.y - state.setInteraction.start.y;
+      clampItemToStage(item);
+      markProjectDirty();
+    }
+    return;
+  }
+
+  if (state.setInteraction.type === "dragLight") {
+    const light = set.lights.find((candidate) => candidate.id === state.setInteraction.lightId);
+    if (light) {
+      light.x = clamp(state.setInteraction.x + point.x - state.setInteraction.start.x, 0, state.stageWidth);
+      light.y = clamp(state.setInteraction.y + point.y - state.setInteraction.start.y, 0, state.stageHeight);
+      markProjectDirty();
+    }
+  }
+}
+
+function onSetPointerUp(event) {
+  state.setInteraction = null;
+  if (event?.pointerId != null) {
+    setCanvas.releasePointerCapture?.(event.pointerId);
+  }
+}
+
+function onSetContextMenu(event) {
+  if (!state.stageModuleOpen) {
+    return;
+  }
+  event.preventDefault();
+  const point = getSetCanvasPoint(event);
+  const item = hitTestSetItem(getActiveSet(), point.x, point.y);
+  if (item) {
+    state.setSelectedItemId = item.id;
+    openSetMiniCodePanel(item.id);
+    renderStageModule();
+  }
 }
 
 function hitTest(x, y) {
@@ -2584,6 +3244,10 @@ function handleKeyDown(event) {
   if (key === "backspace") {
     event.preventDefault();
     if (!deleteSelectedScriptBlock()) {
+      if (state.stageModuleOpen) {
+        deleteSelectedSetThing();
+        return;
+      }
       deleteSelection();
     }
     return;
@@ -2591,6 +3255,10 @@ function handleKeyDown(event) {
 
   if (key === "escape") {
     hideBlockInfo();
+    if (state.stageModuleOpen && state.setMiniCodeItemId != null) {
+      closeSetMiniCodePanel();
+      return;
+    }
     clearActiveTool();
     clearSelection();
     return;
@@ -2663,6 +3331,22 @@ function ensureCanvasSize() {
 
     for (const item of state.items) {
       clampItemToStage(item);
+    }
+    for (const item of getAllSetItems()) {
+      clampItemToStage(item);
+    }
+  }
+
+  if (state.stageModuleOpen) {
+    const setRect = setFrame.getBoundingClientRect();
+    const setWidth = Math.max(1, Math.floor(setRect.width));
+    const setHeight = Math.max(1, Math.floor(setRect.height));
+    const dpr = window.devicePixelRatio || 1;
+    if (setCanvas.width !== Math.floor(setWidth * dpr) || setCanvas.height !== Math.floor(setHeight * dpr)) {
+      setCanvas.width = Math.floor(setWidth * dpr);
+      setCanvas.height = Math.floor(setHeight * dpr);
+      setCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      patternCaches.set.clear();
     }
   }
 }
@@ -3239,11 +3923,90 @@ function drawSceneLighting() {
   ctx.restore();
 }
 
+function drawSetDrawings(set) {
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 5;
+  for (const drawing of set.drawings) {
+    if (!drawing.points || drawing.points.length < 2) {
+      continue;
+    }
+    ctx.strokeStyle = drawing.color || "#2f8f83";
+    ctx.beginPath();
+    drawing.points.forEach((point, index) => {
+      if (index === 0) {
+        ctx.moveTo(point.x, point.y);
+      } else {
+        ctx.lineTo(point.x, point.y);
+      }
+    });
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSetLights(set, showEditorHandles = false) {
+  for (const light of set.lights) {
+    const { r, g, b } = hexToRgb(light.color);
+    const radius = light.type === "moon" ? 180 : 240;
+    const gradient = ctx.createRadialGradient(light.x, light.y, 8, light.x, light.y, radius);
+    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${clamp(light.brightness, 0, 1) * 0.42})`);
+    gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+    ctx.save();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, state.stageWidth, state.stageHeight);
+    ctx.restore();
+
+    if (showEditorHandles) {
+      ctx.save();
+      ctx.fillStyle = light.type === "moon" ? "#d8ecff" : "#ffd166";
+      ctx.strokeStyle = state.setSelectedLightId === light.id ? "#2f8f83" : "rgba(47, 28, 15, 0.68)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(light.x, light.y, 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#2c1d14";
+      ctx.font = "800 10px Trebuchet MS";
+      ctx.textAlign = "center";
+      ctx.fillText(light.type === "moon" ? "M" : "S", light.x, light.y + 4);
+      ctx.restore();
+    }
+  }
+}
+
+function drawSetContent(set, options = {}) {
+  const { showEditorHandles = false } = options;
+  if (!set) {
+    return;
+  }
+
+  drawSetDrawings(set);
+  for (const item of set.items) {
+    if (item.kind === "character") {
+      drawCharacter(item);
+    } else {
+      drawObject(item);
+    }
+  }
+  drawSetLights(set, showEditorHandles);
+
+  if (showEditorHandles) {
+    for (const item of set.items) {
+      if (item.id === state.setSelectedItemId) {
+        drawSelectionOutline(item);
+      }
+    }
+  }
+}
+
 function drawStage(now, options = {}) {
   const {
     showSelectionOutlines = true,
     showEditorOverlays = true,
     showRecordingOverlay = true,
+    showSetContent = true,
   } = options;
 
   ctx.clearRect(0, 0, state.stageWidth, state.stageHeight);
@@ -3278,6 +4041,10 @@ function drawStage(now, options = {}) {
   ctx.font = "700 14px Trebuchet MS";
   ctx.fillText("WORMS STAGE", 18, state.stageHeight - 18);
 
+  if (showSetContent) {
+    drawSetContent(getActiveSet(), { showEditorHandles: false });
+  }
+
   for (const item of state.items) {
     if (item.kind === "character") {
       drawCharacter(item);
@@ -3303,7 +4070,7 @@ function drawStage(now, options = {}) {
     drawRecordingOverlay(now);
   }
 
-  if (state.items.length === 0) {
+  if (state.items.length === 0 && getActiveSet().items.length === 0 && getActiveSet().drawings.length === 0) {
     ctx.save();
     ctx.fillStyle = "rgba(120, 86, 58, 0.7)";
     ctx.font = "700 24px Trebuchet MS";
@@ -3333,6 +4100,24 @@ function renderStageViews(now) {
       showRecordingOverlay: false,
     });
   });
+
+  if (state.stageModuleOpen) {
+    withRenderTarget(setCtx, patternCaches.set, () => {
+      const rect = setFrame.getBoundingClientRect();
+      const scaleX = rect.width / Math.max(1, state.stageWidth);
+      const scaleY = rect.height / Math.max(1, state.stageHeight);
+      ctx.save();
+      ctx.scale(scaleX, scaleY);
+      drawStage(now, {
+        showSelectionOutlines: false,
+        showEditorOverlays: false,
+        showRecordingOverlay: false,
+        showSetContent: false,
+      });
+      drawSetContent(getActiveSet(), { showEditorHandles: true });
+      ctx.restore();
+    });
+  }
 }
 
 function animate(now) {
@@ -3557,6 +4342,11 @@ async function stopRecording() {
     item.runtime.flip = null;
     item.runtime.jump = null;
   }
+  for (const item of getAllSetItems()) {
+    item.runtime.animation = null;
+    item.runtime.flip = null;
+    item.runtime.jump = null;
+  }
   if (recorder.state !== "inactive") {
     recorder.stop();
   }
@@ -3586,6 +4376,8 @@ async function goToStudio() {
 
 function clearStage() {
   state.items = [];
+  state.sets = [];
+  ensureDefaultSet();
   state.sceneScripts = [];
   state.scene = {
     lightingColor: "#fff7d6",
@@ -3659,6 +4451,179 @@ function populateToolLists() {
   }
 }
 
+function buildSetToolCard(definition, options) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "tool-card";
+  button.dataset.toolType = options.toolType;
+  button.dataset.toolId = definition.id;
+
+  const preview = document.createElement("div");
+  preview.className = options.previewClass;
+  if (options.previewType === "text") {
+    preview.textContent = definition.preview;
+  } else {
+    preview.style.background = definition.preview;
+  }
+
+  const title = document.createElement("div");
+  title.className = "tool-card-title";
+  title.textContent = definition.name;
+
+  const copy = document.createElement("div");
+  copy.className = "tool-card-copy";
+  copy.textContent = definition.copy;
+
+  button.append(preview, title, copy);
+  button.addEventListener("click", () => {
+    selectSetToolItem(options.toolType, definition.id);
+    setSetEditorTool(options.toolType);
+  });
+  return button;
+}
+
+function populateSetToolLists() {
+  for (const color of SET_PEN_COLORS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "set-color-swatch";
+    button.style.background = color;
+    button.title = color;
+    button.addEventListener("click", () => {
+      state.setPenColor = color;
+      elements.setPenColor.value = color;
+      setSetEditorTool("pen");
+    });
+    elements.setBaseColors.append(button);
+  }
+
+  for (const character of CHARACTER_DEFS) {
+    elements.setCharacterList.append(
+      buildSetToolCard(character, {
+        toolType: "character",
+        previewType: "text",
+        previewClass: "character-preview",
+      }),
+    );
+  }
+
+  for (const objectDef of OBJECT_DEFS) {
+    elements.setObjectList.append(
+      buildSetToolCard(objectDef, {
+        toolType: "object",
+        previewType: "text",
+        previewClass: "object-preview",
+      }),
+    );
+  }
+
+  for (const texture of TEXTURE_DEFS) {
+    elements.setTextureList.append(
+      buildSetToolCard(texture, {
+        toolType: "texture",
+        previewType: "background",
+        previewClass: "texture-preview",
+      }),
+    );
+  }
+}
+
+function renderSetList() {
+  ensureDefaultSet();
+  elements.setList.innerHTML = "";
+  for (const set of state.sets) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "set-card";
+    button.classList.toggle("active", set.id === state.activeSetId);
+    button.innerHTML = `<strong>${set.name}</strong><span>${set.items.length} item${set.items.length === 1 ? "" : "s"} | ${set.lights.length} light${set.lights.length === 1 ? "" : "s"}</span>`;
+    button.addEventListener("click", () => selectStageSet(set.id));
+    elements.setList.append(button);
+  }
+}
+
+function renderSetToolPanels() {
+  for (const button of elements.setToolTabs) {
+    button.classList.toggle("active", button.dataset.setTool === state.setEditorTool);
+  }
+  elements.setCharacterList.classList.toggle("hidden", state.setEditorTool !== "character");
+  elements.setObjectList.classList.toggle("hidden", state.setEditorTool !== "object");
+  elements.setTextureList.classList.toggle("hidden", state.setEditorTool !== "texture");
+  elements.setPenControls.classList.toggle("hidden", state.setEditorTool !== "pen");
+  elements.setLightControls.classList.toggle("hidden", state.setEditorTool !== "light");
+
+  for (const card of elements.stageModule.querySelectorAll(".set-tool-grid .tool-card")) {
+    const type = card.dataset.toolType;
+    card.classList.toggle("active", state.setToolSelection[type] === card.dataset.toolId && state.setEditorTool === type);
+  }
+}
+
+function renderSetMiniCodePanel() {
+  const actor = getSetMiniScriptTarget();
+  if (!actor) {
+    elements.setMiniCodePanel.classList.add("hidden");
+    return;
+  }
+
+  state.scriptEditorMode = "set";
+  elements.setMiniCodeTitle.textContent = `${getActorDisplayName(actor)} in ${getSetItemById(actor.id)?.set.name || "Set"}`;
+  elements.setMiniCodePalette.innerHTML = "";
+  for (const block of SCRIPT_BLOCK_DEFS.filter((definition) => !definition.sceneOnly)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "script-palette-button";
+    button.draggable = true;
+    button.textContent = block.title;
+    button.addEventListener("click", () => addBlockToSelectedActor(block.type));
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      showBlockInfo(block, event.clientX, event.clientY);
+    });
+    button.addEventListener("dragstart", (event) => {
+      const payload = { source: "palette", blockType: block.type };
+      setScriptDragState(payload);
+      event.dataTransfer?.setData("application/json", JSON.stringify(payload));
+      event.dataTransfer.effectAllowed = "copy";
+    });
+    button.addEventListener("dragend", clearScriptDragState);
+    elements.setMiniCodePalette.append(button);
+  }
+
+  elements.setMiniCodeWorkspace.innerHTML = "";
+  if (actor.scripts.length === 0) {
+    elements.setMiniCodeWorkspace.append(
+      createDropLine(
+        { kind: "root", index: 0 },
+        'Drop a block here. Action blocks auto-wrap in "When Recording Starts".',
+        "root-empty",
+      ),
+    );
+    return;
+  }
+
+  actor.scripts.forEach((rootBlock, index) => {
+    const group = document.createElement("div");
+    group.className = "script-stack-group";
+    group.append(createDropLine({ kind: "root", index }, "Drop root block here"));
+    renderScriptBlock(rootBlock, group, actor, true);
+    if (index === actor.scripts.length - 1) {
+      group.append(createDropLine({ kind: "root", index: index + 1 }, "Drop root block here"));
+    }
+    elements.setMiniCodeWorkspace.append(group);
+  });
+}
+
+function renderStageModule() {
+  ensureDefaultSet();
+  renderSetList();
+  renderSetToolPanels();
+  const set = getActiveSet();
+  elements.setEditorLabel.textContent = `${set.name}: ${set.items.length} item${set.items.length === 1 ? "" : "s"}, ${set.drawings.length} drawing${set.drawings.length === 1 ? "" : "s"}, ${set.lights.length} light${set.lights.length === 1 ? "" : "s"}.`;
+  if (state.setMiniCodeItemId != null) {
+    renderSetMiniCodePanel();
+  }
+}
+
 function bindEvents() {
   elements.playButton.addEventListener("click", goToStudio);
   elements.libraryButton.addEventListener("click", openLibrary);
@@ -3671,6 +4636,30 @@ function bindEvents() {
   elements.stopButton.addEventListener("click", stopRecording);
   elements.openLibraryButton.addEventListener("click", openLibrary);
   elements.scriptsModuleCloseButton.addEventListener("click", closeScriptsModule);
+  elements.stageModuleCloseButton.addEventListener("click", closeStageModule);
+  elements.addSetButton.addEventListener("click", addStageSet);
+  elements.setMiniCodeCloseButton.addEventListener("click", closeSetMiniCodePanel);
+  elements.setPenColor.addEventListener("input", () => {
+    state.setPenColor = elements.setPenColor.value;
+    setSetEditorTool("pen");
+  });
+  elements.setAddLightButton.addEventListener("click", () => {
+    setSetEditorTool("light");
+    const set = getActiveSet();
+    const light = createLight();
+    set.lights.push(light);
+    state.setSelectedLightId = light.id;
+    syncLightControls(light);
+    markProjectDirty();
+    renderStageModule();
+  });
+  elements.setLightType.addEventListener("change", updateSelectedSetLightControls);
+  elements.setLightColor.addEventListener("input", updateSelectedSetLightControls);
+  elements.setLightBrightness.addEventListener("input", updateSelectedSetLightControls);
+
+  for (const button of elements.setToolTabs) {
+    button.addEventListener("click", () => setSetEditorTool(button.dataset.setTool));
+  }
 
   for (const button of elements.panelButtons) {
     button.addEventListener("click", () => setActivePanel(button.dataset.panel));
@@ -3684,6 +4673,10 @@ function bindEvents() {
   stageCanvas.addEventListener("pointerleave", () => {
     state.lastPointer.inside = false;
   });
+  setCanvas.addEventListener("pointerdown", onSetPointerDown);
+  setCanvas.addEventListener("pointermove", onSetPointerMove);
+  setCanvas.addEventListener("pointerup", onSetPointerUp);
+  setCanvas.addEventListener("contextmenu", onSetContextMenu);
 
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("keyup", handleKeyUp);
@@ -3704,6 +4697,7 @@ function bindEvents() {
 async function init() {
   loadProjectState();
   populateToolLists();
+  populateSetToolLists();
   renderScriptCategoryTabs();
   renderScriptPalette();
   bindEvents();

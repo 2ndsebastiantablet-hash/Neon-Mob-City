@@ -58,6 +58,7 @@
             <button type="button" class="sidebar-tab" data-panel="textures">Textures</button>
             <button type="button" class="sidebar-tab" data-panel="objects">Objects</button>
             <button type="button" class="sidebar-tab" data-panel="camera">Camera</button>
+            <button type="button" class="sidebar-tab" data-panel="stage">Stage</button>
             <button type="button" class="sidebar-tab" data-panel="scripts">Scripts</button>
           </div>
 
@@ -141,6 +142,91 @@
           </div>
         </div>
         <div id="scriptBlockInfo" class="script-block-info hidden" role="dialog" aria-live="polite"></div>
+      </section>
+
+      <section id="stageModule" class="stage-module hidden" aria-label="Stage set editor">
+        <div class="scripts-module-backdrop"></div>
+        <div class="stage-module-shell">
+          <header class="scripts-module-header">
+            <div>
+              <p class="topbar-label">Set Builder</p>
+              <h3>Stage</h3>
+              <p id="setEditorLabel" class="scripts-copy">Create sets, draw scenery, add lights, and build set-only action scripts.</p>
+            </div>
+            <div class="scripts-module-actions">
+              <button id="stageModuleCloseButton" type="button" class="ghost-button">Back To Studio</button>
+            </div>
+          </header>
+
+          <div class="stage-module-layout">
+            <aside class="set-list-panel">
+              <div class="set-list-heading">
+                <h4>Sets</h4>
+                <button id="addSetButton" type="button" class="secondary-button compact-button">+</button>
+              </div>
+              <div id="setList" class="set-list"></div>
+            </aside>
+
+            <section class="set-canvas-panel">
+              <div class="set-canvas-frame">
+                <canvas id="setCanvas" aria-label="Set editor canvas"></canvas>
+              </div>
+              <p class="stage-status subtle">Right-click a character or object to open its set-only mini code panel.</p>
+            </section>
+
+            <aside class="set-tools-panel">
+              <h4>Set Tools</h4>
+              <div class="set-tool-tabs">
+                <button type="button" class="set-tool-tab active" data-set-tool="select">Select</button>
+                <button type="button" class="set-tool-tab" data-set-tool="character">Characters</button>
+                <button type="button" class="set-tool-tab" data-set-tool="object">Objects</button>
+                <button type="button" class="set-tool-tab" data-set-tool="texture">Textures</button>
+                <button type="button" class="set-tool-tab" data-set-tool="pen">Pen</button>
+                <button type="button" class="set-tool-tab" data-set-tool="light">Lights</button>
+              </div>
+              <div id="setCharacterList" class="set-tool-grid"></div>
+              <div id="setObjectList" class="set-tool-grid hidden"></div>
+              <div id="setTextureList" class="set-tool-grid hidden"></div>
+              <div id="setPenControls" class="set-control-card hidden">
+                <p>Draw directly onto this set.</p>
+                <div id="setBaseColors" class="set-color-row"></div>
+                <label class="set-control-label">Custom color <input id="setPenColor" type="color" value="#2f8f83"></label>
+              </div>
+              <div id="setLightControls" class="set-control-card hidden">
+                <button id="setAddLightButton" type="button" class="secondary-button full-width">Add Light Source</button>
+                <label class="set-control-label">Type
+                  <select id="setLightType">
+                    <option value="sun">Sun</option>
+                    <option value="moon">Moon</option>
+                  </select>
+                </label>
+                <label class="set-control-label">Tint <input id="setLightColor" type="color" value="#fff2a6"></label>
+                <label class="set-control-label">Brightness <input id="setLightBrightness" type="range" min="0" max="100" value="55"></label>
+              </div>
+            </aside>
+          </div>
+
+          <aside id="setMiniCodePanel" class="set-mini-code-panel hidden" aria-label="Set mini code panel">
+            <div class="set-mini-code-header">
+              <div>
+                <p class="topbar-label">Set-Only Script</p>
+                <h4 id="setMiniCodeTitle">Actor Script</h4>
+              </div>
+              <button id="setMiniCodeCloseButton" type="button" class="ghost-button">Close</button>
+            </div>
+            <div class="set-mini-code-layout">
+              <div>
+                <h5>Blocks</h5>
+                <p>Drag or click blocks into this actor's set-only stack.</p>
+                <div id="setMiniCodePalette" class="script-palette"></div>
+              </div>
+              <div>
+                <h5>Workspace</h5>
+                <div id="setMiniCodeWorkspace" class="script-workspace compact-workspace"></div>
+              </div>
+            </div>
+          </aside>
+        </div>
       </section>
     </section>
 
