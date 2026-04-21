@@ -111,6 +111,12 @@
           </header>
 
           <div class="scripts-module-layout">
+            <aside class="scripts-actor-panel">
+              <h4>Actors</h4>
+              <p>Pick who this script belongs to.</p>
+              <div id="scriptActorList" class="script-actor-list"></div>
+            </aside>
+
             <aside class="scripts-palette-panel">
               <div class="script-category-panel">
                 <h4>Block Groups</h4>
@@ -118,7 +124,7 @@
               </div>
               <div class="script-library-panel">
                 <h4>Blocks</h4>
-                <p>Drag a block into the workspace and it will snap into the stack.</p>
+                <p>Drag blocks into the workspace. Right-click any block for help.</p>
                 <div id="scriptPalette" class="script-palette"></div>
               </div>
             </aside>
@@ -134,6 +140,7 @@
             </section>
           </div>
         </div>
+        <div id="scriptBlockInfo" class="script-block-info hidden" role="dialog" aria-live="polite"></div>
       </section>
     </section>
 

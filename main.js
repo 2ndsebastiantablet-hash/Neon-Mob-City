@@ -462,9 +462,11 @@ const elements = {
   scriptsModule: document.querySelector("#scriptsModule"),
   scriptsModuleCloseButton: document.querySelector("#scriptsModuleCloseButton"),
   scriptActorLabel: document.querySelector("#scriptActorLabel"),
+  scriptActorList: document.querySelector("#scriptActorList"),
   scriptCategoryTabs: document.querySelector("#scriptCategoryTabs"),
   scriptPalette: document.querySelector("#scriptPalette"),
   scriptWorkspace: document.querySelector("#scriptWorkspace"),
+  scriptBlockInfo: document.querySelector("#scriptBlockInfo"),
   libraryList: document.querySelector("#libraryList"),
   libraryVideo: document.querySelector("#libraryVideo"),
   libraryMeta: document.querySelector("#libraryMeta"),
@@ -490,6 +492,7 @@ const state = {
   activeTool: null,
   activeScriptCategory: "motion",
   selectedScriptBlockId: null,
+  scriptTargetId: null,
   scriptsModuleOpen: false,
   lastNonScriptPanel: "characters",
   scriptDrag: null,
@@ -779,6 +782,25 @@ function getSingleSelectedItem() {
   return selected.length === 1 ? selected[0] : null;
 }
 
+function getScriptTargetItem() {
+  if (state.scriptTargetId != null) {
+    const target = getItemById(state.scriptTargetId);
+    if (target) {
+      return target;
+    }
+  }
+
+  const selected = getSingleSelectedItem();
+  if (selected) {
+    state.scriptTargetId = selected.id;
+    return selected;
+  }
+
+  const firstItem = state.items[0] || null;
+  state.scriptTargetId = firstItem?.id ?? null;
+  return firstItem;
+}
+
 function getItemById(itemId) {
   return state.items.find((item) => item.id === itemId) || null;
 }
@@ -807,7 +829,7 @@ function findScriptBlockLocation(siblings, blockId, parent = null) {
 }
 
 function addBlockToSelectedActor(type) {
-  const actor = getSingleSelectedItem();
+  const actor = getScriptTargetItem();
   const newBlock = createBlockFromType(type);
   if (!actor || !newBlock) {
     return;
@@ -842,7 +864,7 @@ function addBlockToSelectedActor(type) {
 }
 
 function moveSelectedScriptBlock(direction) {
-  const actor = getSingleSelectedItem();
+  const actor = getScriptTargetItem();
   if (!actor || !state.selectedScriptBlockId) {
     return;
   }
@@ -864,7 +886,7 @@ function moveSelectedScriptBlock(direction) {
 }
 
 function deleteSelectedScriptBlock() {
-  const actor = getSingleSelectedItem();
+  const actor = getScriptTargetItem();
   if (!actor || !state.selectedScriptBlockId) {
     return false;
   }
@@ -882,7 +904,7 @@ function deleteSelectedScriptBlock() {
 }
 
 function updateBlockParam(blockId, paramName, rawValue) {
-  const actor = getSingleSelectedItem();
+  const actor = getScriptTargetItem();
   if (!actor) {
     return;
   }
@@ -1021,7 +1043,7 @@ function getDraggedBlock(actor, payload) {
 }
 
 function performScriptDrop(target) {
-  const actor = getSingleSelectedItem();
+  const actor = getScriptTargetItem();
   const payload = state.scriptDrag;
   if (!actor || !payload || !canDropOnTarget(actor, payload, target)) {
     clearScriptDragState();
@@ -1060,7 +1082,7 @@ function performScriptDrop(target) {
 }
 
 function createDropLine(target, label, extraClass = "") {
-  const actor = getSingleSelectedItem();
+  const actor = getScriptTargetItem();
   const line = document.createElement("div");
   line.className = `script-drop-line ${extraClass}`.trim();
   line.textContent = label;
@@ -1099,13 +1121,24 @@ function renderScriptPalette() {
   elements.scriptPalette.innerHTML = "";
   const blocks = SCRIPT_BLOCK_DEFS.filter((block) => block.category === state.activeScriptCategory);
   for (const block of blocks) {
+    const isControlBlock = block.category === "control";
+    const canUseBlock = isControlBlock || Boolean(getScriptTargetItem());
     const button = document.createElement("button");
     button.type = "button";
     button.className = "script-palette-button";
     button.draggable = true;
-    button.innerHTML = `<strong>${block.title}</strong><br>${block.copy}`;
+    button.disabled = !canUseBlock;
+    button.textContent = block.title;
     button.addEventListener("click", () => addBlockToSelectedActor(block.type));
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      showBlockInfo(block, event.clientX, event.clientY);
+    });
     button.addEventListener("dragstart", (event) => {
+      if (!canUseBlock) {
+        event.preventDefault();
+        return;
+      }
       const payload = { source: "palette", blockType: block.type };
       setScriptDragState(payload);
       event.dataTransfer?.setData("application/json", JSON.stringify(payload));
@@ -1118,6 +1151,20 @@ function renderScriptPalette() {
     });
     elements.scriptPalette.append(button);
   }
+}
+
+function showBlockInfo(definition, clientX, clientY) {
+  elements.scriptBlockInfo.innerHTML = `<h5>${definition.title}</h5><p>${definition.copy}</p>`;
+  elements.scriptBlockInfo.classList.remove("hidden");
+  const rect = elements.scriptBlockInfo.getBoundingClientRect();
+  const x = clamp(clientX + 12, 12, window.innerWidth - rect.width - 12);
+  const y = clamp(clientY + 12, 12, window.innerHeight - rect.height - 12);
+  elements.scriptBlockInfo.style.left = `${x}px`;
+  elements.scriptBlockInfo.style.top = `${y}px`;
+}
+
+function hideBlockInfo() {
+  elements.scriptBlockInfo.classList.add("hidden");
 }
 
 function renderScriptBlock(block, container, actor, isRootLevel = false) {
@@ -1134,6 +1181,10 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
     }
     state.selectedScriptBlockId = block.id;
     renderScriptEditor();
+  });
+  card.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    showBlockInfo(definition, event.clientX, event.clientY);
   });
   card.addEventListener("dragstart", (event) => {
     const payload = { source: "existing", blockId: block.id };
@@ -1155,10 +1206,7 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
   title.className = "script-block-title";
   title.textContent = definition.title;
 
-  const copy = document.createElement("p");
-  copy.className = "script-block-copy";
-  copy.textContent = definition.copy;
-  titleWrap.append(title, copy);
+  titleWrap.append(title);
 
   const badge = document.createElement("span");
   badge.className = `script-block-category ${definition.category}`;
@@ -1227,16 +1275,60 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
   }
 }
 
-function renderScriptEditor() {
-  const actor = getSingleSelectedItem();
+function getActorDisplayName(actor) {
+  return actor.kind === "character" ? characterMap.get(actor.subtype).name : objectMap.get(actor.subtype).name;
+}
 
-  if (!actor) {
-    elements.scriptActorLabel.textContent = "Select one character or object on the stage to script it.";
-    elements.scriptWorkspace.innerHTML = '<p class="script-empty">Script editing turns on when exactly one character or object is selected.</p>';
+function renderScriptActorList() {
+  elements.scriptActorList.innerHTML = "";
+
+  if (state.items.length === 0) {
+    elements.scriptActorList.innerHTML = '<p class="script-empty">Place a character or object on the stage, then pick it here.</p>';
+    state.scriptTargetId = null;
     return;
   }
 
-  const actorName = actor.kind === "character" ? characterMap.get(actor.subtype).name : objectMap.get(actor.subtype).name;
+  if (!getScriptTargetItem()) {
+    state.scriptTargetId = state.items[0].id;
+  }
+
+  for (const item of state.items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "script-actor-card";
+    button.classList.toggle("active", item.id === state.scriptTargetId);
+
+    const title = document.createElement("strong");
+    title.textContent = getActorDisplayName(item);
+
+    const meta = document.createElement("span");
+    meta.className = "script-actor-meta";
+    meta.textContent = `${item.kind} | ${item.scripts.length} stack${item.scripts.length === 1 ? "" : "s"}`;
+
+    button.append(title, meta);
+    button.addEventListener("click", () => {
+      state.scriptTargetId = item.id;
+      state.selectedScriptBlockId = null;
+      setSelection([item.id]);
+      renderScriptActorList();
+      renderScriptPalette();
+      renderScriptEditor();
+    });
+    elements.scriptActorList.append(button);
+  }
+}
+
+function renderScriptEditor() {
+  renderScriptActorList();
+  const actor = getScriptTargetItem();
+
+  if (!actor) {
+    elements.scriptActorLabel.textContent = "No actors are on the stage yet.";
+    elements.scriptWorkspace.innerHTML = '<p class="script-empty">You can browse control blocks now, but movement and animation blocks need a character or object on the stage.</p>';
+    return;
+  }
+
+  const actorName = getActorDisplayName(actor);
   elements.scriptActorLabel.textContent = `${actorName} has ${actor.scripts.length} script stack${actor.scripts.length === 1 ? "" : "s"} saved in this project.`;
   elements.scriptWorkspace.innerHTML = "";
 
@@ -1814,9 +1906,13 @@ function getSelectedItems() {
 
 function setSelection(ids) {
   state.selection = new Set(ids);
+  if (ids.length === 1) {
+    state.scriptTargetId = ids[0];
+  }
   state.selectedScriptBlockId = null;
   updateSelectionLabel();
   renderScriptEditor();
+  renderScriptPalette();
 }
 
 function clearSelection() {
@@ -1824,6 +1920,7 @@ function clearSelection() {
   state.selectedScriptBlockId = null;
   updateSelectionLabel();
   renderScriptEditor();
+  renderScriptPalette();
 }
 
 function clearActiveTool() {
@@ -2287,6 +2384,7 @@ function handleKeyDown(event) {
   }
 
   if (key === "escape") {
+    hideBlockInfo();
     clearActiveTool();
     clearSelection();
     return;
@@ -3363,6 +3461,16 @@ function bindEvents() {
 
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("keyup", handleKeyUp);
+  window.addEventListener("pointerdown", (event) => {
+    if (!elements.scriptBlockInfo.contains(event.target)) {
+      hideBlockInfo();
+    }
+  });
+  window.addEventListener("contextmenu", (event) => {
+    if (!event.target.closest?.(".script-block, .script-palette-button")) {
+      hideBlockInfo();
+    }
+  });
   window.addEventListener("resize", ensureCanvasSize);
   window.addEventListener("beforeunload", saveProjectState);
 }
