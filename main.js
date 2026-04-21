@@ -172,6 +172,261 @@ const TEXTURE_DEFS = [
   },
 ];
 
+const PROJECT_STORAGE_KEY = "worms-project-v2";
+const STAGE_GRID_SIZE = 48;
+const SOUND_EFFECT_OPTIONS = [
+  { value: "pop", label: "Pop" },
+  { value: "click", label: "Click" },
+  { value: "spark", label: "Spark" },
+  { value: "thump", label: "Thump" },
+];
+const MUSIC_OPTIONS = [
+  { value: "marquee", label: "Marquee Loop" },
+  { value: "dream", label: "Dream Pad" },
+];
+const SCRIPT_GROUPS = [
+  { id: "motion", name: "Motion" },
+  { id: "animation", name: "Animation" },
+  { id: "timing", name: "Timing" },
+  { id: "sound", name: "Sound" },
+  { id: "control", name: "Control" },
+];
+const SCRIPT_BLOCK_DEFS = [
+  {
+    type: "move_right_seconds",
+    category: "motion",
+    title: "Move Right",
+    copy: "Move this actor right for a number of seconds.",
+    params: [{ name: "seconds", label: "Seconds", input: "number", min: 0.1, max: 20, step: 0.1 }],
+  },
+  {
+    type: "move_left_blocks",
+    category: "motion",
+    title: "Move Left",
+    copy: "Slide this actor left by stage blocks.",
+    params: [{ name: "blocks", label: "Blocks", input: "number", min: 1, max: 20, step: 1 }],
+  },
+  {
+    type: "move_up_blocks",
+    category: "motion",
+    title: "Move Up",
+    copy: "Move this actor upward by stage blocks.",
+    params: [{ name: "blocks", label: "Blocks", input: "number", min: 1, max: 20, step: 1 }],
+  },
+  {
+    type: "move_down_blocks",
+    category: "motion",
+    title: "Move Down",
+    copy: "Move this actor downward by stage blocks.",
+    params: [{ name: "blocks", label: "Blocks", input: "number", min: 1, max: 20, step: 1 }],
+  },
+  {
+    type: "teleport_xy",
+    category: "motion",
+    title: "Teleport To X / Y",
+    copy: "Snap this actor to exact stage coordinates.",
+    params: [
+      { name: "x", label: "X", input: "number", min: 0, max: 2000, step: 1 },
+      { name: "y", label: "Y", input: "number", min: 0, max: 2000, step: 1 },
+    ],
+  },
+  {
+    type: "face_left",
+    category: "motion",
+    title: "Turn Facing Left",
+    copy: "Face the actor left.",
+    params: [],
+  },
+  {
+    type: "face_right",
+    category: "motion",
+    title: "Turn Facing Right",
+    copy: "Face the actor right.",
+    params: [],
+  },
+  {
+    type: "jump_blocks",
+    category: "motion",
+    title: "Jump",
+    copy: "Hop upward by a number of blocks.",
+    params: [{ name: "blocks", label: "Blocks", input: "number", min: 1, max: 12, step: 1 }],
+  },
+  {
+    type: "play_wiggle",
+    category: "animation",
+    title: "Play Wiggle",
+    copy: "Wiggle for a number of seconds.",
+    params: [{ name: "seconds", label: "Seconds", input: "number", min: 0.1, max: 20, step: 0.1 }],
+  },
+  {
+    type: "play_bounce",
+    category: "animation",
+    title: "Play Bounce",
+    copy: "Bounce in place for a number of seconds.",
+    params: [{ name: "seconds", label: "Seconds", input: "number", min: 0.1, max: 20, step: 0.1 }],
+  },
+  {
+    type: "play_stretch",
+    category: "animation",
+    title: "Play Stretch",
+    copy: "Stretch and squash for a number of seconds.",
+    params: [{ name: "seconds", label: "Seconds", input: "number", min: 0.1, max: 20, step: 0.1 }],
+  },
+  {
+    type: "stop_animation",
+    category: "animation",
+    title: "Stop Animation",
+    copy: "Stop the current looping animation.",
+    params: [],
+  },
+  {
+    type: "change_size",
+    category: "animation",
+    title: "Change Size",
+    copy: "Set the actor size as a percentage.",
+    params: [{ name: "percent", label: "Size %", input: "number", min: 20, max: 300, step: 5 }],
+  },
+  {
+    type: "flip_360",
+    category: "animation",
+    title: "Flip 360",
+    copy: "Spin this actor in a full circle.",
+    params: [{ name: "seconds", label: "Seconds", input: "number", min: 0.2, max: 10, step: 0.1 }],
+  },
+  {
+    type: "change_texture",
+    category: "animation",
+    title: "Change Texture",
+    copy: "Swap to a chosen texture.",
+    params: [{
+      name: "textureId",
+      label: "Texture",
+      input: "select",
+      options: TEXTURE_DEFS.map((texture) => ({ value: texture.id, label: texture.name })),
+    }],
+  },
+  {
+    type: "wait",
+    category: "timing",
+    title: "Wait",
+    copy: "Pause for a number of seconds.",
+    params: [{ name: "seconds", label: "Seconds", input: "number", min: 0.1, max: 30, step: 0.1 }],
+  },
+  {
+    type: "repeat",
+    category: "timing",
+    title: "Repeat",
+    copy: "Run the blocks inside a number of times.",
+    params: [{ name: "times", label: "Times", input: "number", min: 1, max: 20, step: 1 }],
+    allowsChildren: true,
+  },
+  {
+    type: "forever_recording",
+    category: "timing",
+    title: "Forever During Recording",
+    copy: "Loop the blocks inside while recording is active.",
+    params: [],
+    allowsChildren: true,
+  },
+  {
+    type: "parallel",
+    category: "timing",
+    title: "Run Together",
+    copy: "Run all child blocks at the same time.",
+    params: [],
+    allowsChildren: true,
+  },
+  {
+    type: "sequence",
+    category: "timing",
+    title: "Group In Order",
+    copy: "Run all child blocks in order.",
+    params: [],
+    allowsChildren: true,
+  },
+  {
+    type: "play_sound",
+    category: "sound",
+    title: "Play Sound Effect",
+    copy: "Play a placeholder sound effect.",
+    params: [{ name: "soundId", label: "Sound", input: "select", options: SOUND_EFFECT_OPTIONS }],
+  },
+  {
+    type: "play_music",
+    category: "sound",
+    title: "Play Music",
+    copy: "Play a looping placeholder music bed.",
+    params: [{ name: "musicId", label: "Music", input: "select", options: MUSIC_OPTIONS }],
+  },
+  {
+    type: "stop_sound",
+    category: "sound",
+    title: "Stop Sound",
+    copy: "Stop all currently playing placeholder sound.",
+    params: [],
+  },
+  {
+    type: "set_volume",
+    category: "sound",
+    title: "Set Volume",
+    copy: "Set global script volume.",
+    params: [{ name: "volume", label: "Volume %", input: "number", min: 0, max: 100, step: 5 }],
+  },
+  {
+    type: "when_recording_start",
+    category: "control",
+    title: "When Recording Starts",
+    copy: "Run these blocks as soon as recording begins.",
+    params: [],
+    allowsChildren: true,
+    trigger: true,
+  },
+  {
+    type: "when_clicked",
+    category: "control",
+    title: "When This Actor Is Clicked",
+    copy: "Run these blocks when this actor is clicked.",
+    params: [],
+    allowsChildren: true,
+    trigger: true,
+  },
+  {
+    type: "when_key_pressed",
+    category: "control",
+    title: "When Keyboard Key Is Pressed",
+    copy: "Run these blocks when the chosen key is pressed.",
+    params: [{ name: "key", label: "Key", input: "select", options: [
+      { value: "space", label: "Space" },
+      { value: "enter", label: "Enter" },
+      { value: "w", label: "W" },
+      { value: "a", label: "A" },
+      { value: "s", label: "S" },
+      { value: "d", label: "D" },
+      { value: "arrowup", label: "Arrow Up" },
+      { value: "arrowdown", label: "Arrow Down" },
+      { value: "arrowleft", label: "Arrow Left" },
+      { value: "arrowright", label: "Arrow Right" },
+    ] }],
+    allowsChildren: true,
+    trigger: true,
+  },
+  {
+    type: "stop_this_script",
+    category: "control",
+    title: "Stop This Script",
+    copy: "Stop the currently running script stack.",
+    params: [],
+  },
+  {
+    type: "stop_all_scripts",
+    category: "control",
+    title: "Stop All Scripts",
+    copy: "Stop every running script immediately.",
+    params: [],
+  },
+];
+const scriptBlockMap = new Map(SCRIPT_BLOCK_DEFS.map((block) => [block.type, block]));
+
 const stageCanvas = document.querySelector("#stageCanvas");
 const stageFrame = stageCanvas.parentElement;
 const stageCtx = stageCanvas.getContext("2d");
@@ -204,6 +459,12 @@ const elements = {
   characterList: document.querySelector("#characterList"),
   textureList: document.querySelector("#textureList"),
   objectList: document.querySelector("#objectList"),
+  scriptActorLabel: document.querySelector("#scriptActorLabel"),
+  scriptCategoryTabs: document.querySelector("#scriptCategoryTabs"),
+  scriptPalette: document.querySelector("#scriptPalette"),
+  scriptStack: document.querySelector("#scriptStack"),
+  scriptMoveUpButton: document.querySelector("#scriptMoveUpButton"),
+  scriptMoveDownButton: document.querySelector("#scriptMoveDownButton"),
   libraryList: document.querySelector("#libraryList"),
   libraryVideo: document.querySelector("#libraryVideo"),
   libraryMeta: document.querySelector("#libraryMeta"),
@@ -214,6 +475,7 @@ const elements = {
     textures: document.querySelector("#texturesPanel"),
     objects: document.querySelector("#objectsPanel"),
     camera: document.querySelector("#cameraPanel"),
+    scripts: document.querySelector("#scriptsPanel"),
   },
 };
 
@@ -227,6 +489,8 @@ const state = {
   stageHeight: 580,
   activePanel: "characters",
   activeTool: null,
+  activeScriptCategory: "motion",
+  selectedScriptBlockId: null,
   items: [],
   selection: new Set(),
   clipboard: [],
@@ -240,6 +504,17 @@ const state = {
   selectedRecordingId: null,
   libraryObjectUrl: null,
   lastFrameTime: 0,
+  lastProjectSaveTime: 0,
+  projectDirty: false,
+  scriptRunners: [],
+  stopAllScriptsRequested: false,
+  globalVolume: 0.65,
+  audio: {
+    ctx: null,
+    master: null,
+    activeNodes: [],
+    stopLooping: false,
+  },
 };
 
 function createRecordingStore() {
@@ -335,6 +610,937 @@ function createRecordingStore() {
 
 const recordingStore = createRecordingStore();
 
+function createBlockId() {
+  return `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createItemRuntime() {
+  return {
+    animation: null,
+    flip: null,
+    jump: null,
+    visual: {
+      offsetX: 0,
+      offsetY: 0,
+      rotation: 0,
+      scaleX: 1,
+      scaleY: 1,
+    },
+  };
+}
+
+function normalizeItem(item) {
+  return {
+    ...item,
+    facing: item.facing === -1 ? -1 : 1,
+    sizePct: typeof item.sizePct === "number" ? item.sizePct : 100,
+    scripts: Array.isArray(item.scripts) ? item.scripts.map(deserializeBlock) : [],
+    runtime: createItemRuntime(),
+  };
+}
+
+function serializeBlock(block) {
+  return {
+    id: block.id,
+    type: block.type,
+    params: { ...(block.params || {}) },
+    children: Array.isArray(block.children) ? block.children.map(serializeBlock) : [],
+  };
+}
+
+function deserializeBlock(block) {
+  return {
+    id: block.id || createBlockId(),
+    type: block.type,
+    params: { ...(block.params || {}) },
+    children: Array.isArray(block.children) ? block.children.map(deserializeBlock) : [],
+  };
+}
+
+function serializeItem(item) {
+  return {
+    id: item.id,
+    kind: item.kind,
+    subtype: item.subtype,
+    x: item.x,
+    y: item.y,
+    w: item.w,
+    h: item.h,
+    textureId: item.textureId,
+    facing: item.facing,
+    sizePct: item.sizePct,
+    scripts: item.scripts.map(serializeBlock),
+  };
+}
+
+function markProjectDirty() {
+  state.projectDirty = true;
+}
+
+function saveProjectState() {
+  try {
+    const payload = {
+      items: state.items.map(serializeItem),
+      nextId: state.nextId,
+      globalVolume: state.globalVolume,
+    };
+    window.localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(payload));
+    state.projectDirty = false;
+    state.lastProjectSaveTime = performance.now();
+  } catch {
+    state.projectDirty = false;
+  }
+}
+
+function loadProjectState() {
+  try {
+    const raw = window.localStorage.getItem(PROJECT_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+
+    const payload = JSON.parse(raw);
+    if (Array.isArray(payload.items)) {
+      state.items = payload.items.map(normalizeItem);
+    }
+    if (typeof payload.nextId === "number") {
+      state.nextId = payload.nextId;
+    } else if (state.items.length > 0) {
+      state.nextId = Math.max(...state.items.map((item) => item.id)) + 1;
+    }
+    if (typeof payload.globalVolume === "number") {
+      state.globalVolume = clamp(payload.globalVolume, 0, 1);
+    }
+  } catch {
+    state.items = [];
+  }
+}
+
+function createBlockFromType(type) {
+  const definition = scriptBlockMap.get(type);
+  if (!definition) {
+    return null;
+  }
+
+  const params = {};
+  for (const param of definition.params) {
+    if (param.input === "select") {
+      params[param.name] = param.options[0]?.value ?? "";
+      continue;
+    }
+    if (typeof param.min === "number") {
+      params[param.name] = param.min;
+      continue;
+    }
+    params[param.name] = 0;
+  }
+
+  if (["move_right_seconds", "play_wiggle", "play_bounce", "play_stretch", "wait", "flip_360"].includes(type)) {
+    params.seconds = params.seconds ?? 1;
+  }
+  if (type === "change_size") {
+    params.percent = 100;
+  }
+  if (type === "set_volume") {
+    params.volume = 70;
+  }
+  if (type === "move_left_blocks" || type === "move_up_blocks" || type === "move_down_blocks" || type === "jump_blocks") {
+    params.blocks = 2;
+  }
+  if (type === "teleport_xy") {
+    params.x = Math.round(state.stageWidth * 0.5);
+    params.y = Math.round(state.stageHeight * 0.5);
+  }
+  if (type === "repeat") {
+    params.times = 2;
+  }
+
+  return {
+    id: createBlockId(),
+    type,
+    params,
+    children: definition.allowsChildren ? [] : [],
+  };
+}
+
+function getItemSize(item) {
+  const scale = clamp((item.sizePct || 100) / 100, 0.2, 3);
+  return {
+    w: item.w * scale,
+    h: item.h * scale,
+  };
+}
+
+function getSingleSelectedItem() {
+  const selected = getSelectedItems();
+  return selected.length === 1 ? selected[0] : null;
+}
+
+function getItemById(itemId) {
+  return state.items.find((item) => item.id === itemId) || null;
+}
+
+function normalizeScriptKey(key) {
+  if (key === " ") {
+    return "space";
+  }
+  return key.toLowerCase();
+}
+
+function findScriptBlockLocation(siblings, blockId, parent = null) {
+  for (let index = 0; index < siblings.length; index += 1) {
+    const block = siblings[index];
+    if (block.id === blockId) {
+      return { block, parent, siblings, index };
+    }
+    if (block.children?.length) {
+      const nested = findScriptBlockLocation(block.children, blockId, block);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+  return null;
+}
+
+function addBlockToSelectedActor(type) {
+  const actor = getSingleSelectedItem();
+  const newBlock = createBlockFromType(type);
+  if (!actor || !newBlock) {
+    return;
+  }
+
+  const definition = scriptBlockMap.get(type);
+  const isTrigger = Boolean(definition.trigger);
+  const selectedLocation = actor.scripts.length > 0 && state.selectedScriptBlockId
+    ? findScriptBlockLocation(actor.scripts, state.selectedScriptBlockId)
+    : null;
+
+  if (isTrigger) {
+    actor.scripts.push(newBlock);
+  } else if (selectedLocation) {
+    const selectedDefinition = scriptBlockMap.get(selectedLocation.block.type);
+    if (selectedDefinition?.allowsChildren) {
+      selectedLocation.block.children.push(newBlock);
+    } else {
+      selectedLocation.siblings.splice(selectedLocation.index + 1, 0, newBlock);
+    }
+  } else if (actor.scripts.length > 0) {
+    actor.scripts[actor.scripts.length - 1].children.push(newBlock);
+  } else {
+    const root = createBlockFromType("when_recording_start");
+    root.children.push(newBlock);
+    actor.scripts.push(root);
+  }
+
+  state.selectedScriptBlockId = newBlock.id;
+  markProjectDirty();
+  renderScriptEditor();
+}
+
+function moveSelectedScriptBlock(direction) {
+  const actor = getSingleSelectedItem();
+  if (!actor || !state.selectedScriptBlockId) {
+    return;
+  }
+
+  const location = findScriptBlockLocation(actor.scripts, state.selectedScriptBlockId);
+  if (!location) {
+    return;
+  }
+
+  const targetIndex = location.index + direction;
+  if (targetIndex < 0 || targetIndex >= location.siblings.length) {
+    return;
+  }
+
+  const [block] = location.siblings.splice(location.index, 1);
+  location.siblings.splice(targetIndex, 0, block);
+  markProjectDirty();
+  renderScriptEditor();
+}
+
+function deleteSelectedScriptBlock() {
+  const actor = getSingleSelectedItem();
+  if (!actor || !state.selectedScriptBlockId) {
+    return false;
+  }
+
+  const location = findScriptBlockLocation(actor.scripts, state.selectedScriptBlockId);
+  if (!location) {
+    return false;
+  }
+
+  location.siblings.splice(location.index, 1);
+  state.selectedScriptBlockId = null;
+  markProjectDirty();
+  renderScriptEditor();
+  return true;
+}
+
+function updateBlockParam(blockId, paramName, rawValue) {
+  const actor = getSingleSelectedItem();
+  if (!actor) {
+    return;
+  }
+
+  const location = findScriptBlockLocation(actor.scripts, blockId);
+  if (!location) {
+    return;
+  }
+
+  const definition = scriptBlockMap.get(location.block.type);
+  const paramDef = definition.params.find((param) => param.name === paramName);
+  if (!paramDef) {
+    return;
+  }
+
+  let value = rawValue;
+  if (paramDef.input === "number") {
+    value = Number.parseFloat(rawValue);
+    if (!Number.isFinite(value)) {
+      value = paramDef.min ?? 0;
+    }
+    if (typeof paramDef.min === "number") {
+      value = Math.max(paramDef.min, value);
+    }
+    if (typeof paramDef.max === "number") {
+      value = Math.min(paramDef.max, value);
+    }
+  }
+
+  location.block.params[paramName] = value;
+  markProjectDirty();
+}
+
+function renderScriptCategoryTabs() {
+  elements.scriptCategoryTabs.innerHTML = "";
+  for (const category of SCRIPT_GROUPS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "script-category-button";
+    button.classList.toggle("active", category.id === state.activeScriptCategory);
+    button.textContent = category.name;
+    button.addEventListener("click", () => {
+      state.activeScriptCategory = category.id;
+      renderScriptCategoryTabs();
+      renderScriptPalette();
+    });
+    elements.scriptCategoryTabs.append(button);
+  }
+}
+
+function renderScriptPalette() {
+  elements.scriptPalette.innerHTML = "";
+  const blocks = SCRIPT_BLOCK_DEFS.filter((block) => block.category === state.activeScriptCategory);
+  for (const block of blocks) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "script-palette-button";
+    button.innerHTML = `<strong>${block.title}</strong><br>${block.copy}`;
+    button.addEventListener("click", () => addBlockToSelectedActor(block.type));
+    elements.scriptPalette.append(button);
+  }
+}
+
+function renderScriptBlock(block, container) {
+  const definition = scriptBlockMap.get(block.type);
+  const card = document.createElement("article");
+  card.className = "script-block";
+  card.classList.toggle("selected", block.id === state.selectedScriptBlockId);
+  card.addEventListener("click", (event) => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
+      return;
+    }
+    state.selectedScriptBlockId = block.id;
+    renderScriptEditor();
+  });
+
+  const row = document.createElement("div");
+  row.className = "script-block-row";
+
+  const titleWrap = document.createElement("div");
+  const title = document.createElement("h5");
+  title.className = "script-block-title";
+  title.textContent = definition.title;
+
+  const copy = document.createElement("p");
+  copy.className = "script-block-copy";
+  copy.textContent = definition.copy;
+  titleWrap.append(title, copy);
+
+  const badge = document.createElement("span");
+  badge.className = `script-block-category ${definition.category}`;
+  badge.textContent = definition.category;
+  row.append(titleWrap, badge);
+  card.append(row);
+
+  if (definition.params.length > 0) {
+    const paramGrid = document.createElement("div");
+    paramGrid.className = "script-param-grid";
+
+    for (const param of definition.params) {
+      const label = document.createElement("label");
+      label.className = "script-param-label";
+      label.textContent = param.label;
+
+      let input;
+      if (param.input === "select") {
+        input = document.createElement("select");
+        for (const option of param.options) {
+          const optionElement = document.createElement("option");
+          optionElement.value = option.value;
+          optionElement.textContent = option.label;
+          input.append(optionElement);
+        }
+      } else {
+        input = document.createElement("input");
+        input.type = "number";
+        if (typeof param.min === "number") {
+          input.min = String(param.min);
+        }
+        if (typeof param.max === "number") {
+          input.max = String(param.max);
+        }
+        if (typeof param.step === "number") {
+          input.step = String(param.step);
+        }
+      }
+
+      input.value = String(block.params[param.name] ?? "");
+      input.addEventListener("input", () => updateBlockParam(block.id, param.name, input.value));
+      label.append(input);
+      paramGrid.append(label);
+    }
+    card.append(paramGrid);
+  }
+
+  if (definition.allowsChildren) {
+    const children = document.createElement("div");
+    children.className = "script-children";
+    if (block.children.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "script-empty";
+      empty.textContent = "No child blocks yet. Add one from the palette.";
+      children.append(empty);
+    } else {
+      for (const child of block.children) {
+        renderScriptBlock(child, children);
+      }
+    }
+    card.append(children);
+  }
+
+  container.append(card);
+}
+
+function renderScriptEditor() {
+  const actor = getSingleSelectedItem();
+
+  if (!actor) {
+    elements.scriptActorLabel.textContent = "Select one character or object on the stage to script it.";
+    elements.scriptStack.innerHTML = '<p class="script-empty">Script editing turns on when exactly one actor or object is selected.</p>';
+    elements.scriptMoveUpButton.disabled = true;
+    elements.scriptMoveDownButton.disabled = true;
+    return;
+  }
+
+  const actorName = actor.kind === "character" ? characterMap.get(actor.subtype).name : objectMap.get(actor.subtype).name;
+  elements.scriptActorLabel.textContent = `${actorName} has ${actor.scripts.length} script stack${actor.scripts.length === 1 ? "" : "s"} saved in this project.`;
+  elements.scriptMoveUpButton.disabled = !state.selectedScriptBlockId;
+  elements.scriptMoveDownButton.disabled = !state.selectedScriptBlockId;
+  elements.scriptStack.innerHTML = "";
+
+  if (actor.scripts.length === 0) {
+    elements.scriptStack.innerHTML = '<p class="script-empty">Add a control block such as "When Recording Starts" to begin a stack, or click any action block and one will be created for you.</p>';
+    return;
+  }
+
+  for (const rootBlock of actor.scripts) {
+    const group = document.createElement("div");
+    group.className = "script-stack-group";
+    renderScriptBlock(rootBlock, group);
+    elements.scriptStack.append(group);
+  }
+}
+
+function createAudioEngine() {
+  if (!window.AudioContext && !window.webkitAudioContext) {
+    return null;
+  }
+
+  if (state.audio.ctx) {
+    return state.audio;
+  }
+
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  const audioContext = new AudioContextCtor();
+  const master = audioContext.createGain();
+  master.gain.value = state.globalVolume;
+  master.connect(audioContext.destination);
+  state.audio.ctx = audioContext;
+  state.audio.master = master;
+  return state.audio;
+}
+
+function stopAllAudioNodes() {
+  state.audio.stopLooping = true;
+  for (const nodeInfo of state.audio.activeNodes) {
+    try {
+      nodeInfo.source.stop();
+    } catch {
+      // noop
+    }
+  }
+  state.audio.activeNodes = [];
+}
+
+function playPlaceholderTone(kind, value) {
+  const audio = createAudioEngine();
+  if (!audio) {
+    return;
+  }
+
+  state.audio.stopLooping = false;
+  audio.ctx.resume?.();
+  const oscillator = audio.ctx.createOscillator();
+  const gain = audio.ctx.createGain();
+  oscillator.connect(gain);
+  gain.connect(audio.master);
+
+  const now = audio.ctx.currentTime;
+  let frequency = 360;
+  let duration = 0.35;
+  let loop = false;
+
+  if (kind === "sound") {
+    if (value === "click") {
+      frequency = 520;
+      duration = 0.15;
+    } else if (value === "spark") {
+      frequency = 780;
+      duration = 0.2;
+    } else if (value === "thump") {
+      frequency = 180;
+      duration = 0.3;
+    }
+  } else {
+    frequency = value === "dream" ? 246 : 196;
+    duration = 1.8;
+    loop = true;
+  }
+
+  oscillator.frequency.setValueAtTime(frequency, now);
+  oscillator.type = kind === "music" ? "sine" : "triangle";
+  gain.gain.setValueAtTime(kind === "music" ? 0.08 : 0.18, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  oscillator.start(now);
+  if (loop) {
+    oscillator.stop(now + duration);
+  } else {
+    oscillator.stop(now + duration);
+  }
+
+  state.audio.activeNodes.push({ source: oscillator, gain, loop: kind === "music" });
+  oscillator.onended = () => {
+    state.audio.activeNodes = state.audio.activeNodes.filter((node) => node.source !== oscillator);
+    if (kind === "music" && state.recording && !state.audio.stopLooping) {
+      playPlaceholderTone("music", value);
+    }
+  };
+}
+
+function setAudioVolume(volumeFraction) {
+  state.globalVolume = clamp(volumeFraction, 0, 1);
+  const audio = createAudioEngine();
+  if (audio?.master) {
+    audio.master.gain.value = state.globalVolume;
+  }
+  markProjectDirty();
+}
+
+function clearItemRuntimeVisuals(item) {
+  item.runtime.visual.offsetX = 0;
+  item.runtime.visual.offsetY = 0;
+  item.runtime.visual.rotation = 0;
+  item.runtime.visual.scaleX = 1;
+  item.runtime.visual.scaleY = 1;
+}
+
+function updateItemTransientState(item, deltaSeconds) {
+  clearItemRuntimeVisuals(item);
+
+  if (item.runtime.animation) {
+    item.runtime.animation.remaining -= deltaSeconds;
+    item.runtime.animation.elapsed += deltaSeconds;
+    const wave = Math.sin(item.runtime.animation.elapsed * Math.PI * 4);
+
+    if (item.runtime.animation.type === "wiggle") {
+      item.runtime.visual.rotation += wave * 0.14;
+    } else if (item.runtime.animation.type === "bounce") {
+      item.runtime.visual.offsetY -= Math.abs(wave) * 16;
+    } else if (item.runtime.animation.type === "stretch") {
+      item.runtime.visual.scaleX *= 1 + Math.abs(wave) * 0.16;
+      item.runtime.visual.scaleY *= 1 - Math.abs(wave) * 0.12;
+    }
+
+    if (item.runtime.animation.remaining <= 0) {
+      item.runtime.animation = null;
+    }
+  }
+
+  if (item.runtime.flip) {
+    item.runtime.flip.remaining -= deltaSeconds;
+    const progress = 1 - clamp(item.runtime.flip.remaining / item.runtime.flip.total, 0, 1);
+    item.runtime.visual.rotation += progress * Math.PI * 2;
+    if (item.runtime.flip.remaining <= 0) {
+      item.runtime.flip = null;
+    }
+  }
+
+  if (item.runtime.jump) {
+    item.runtime.jump.remaining -= deltaSeconds;
+    const progress = 1 - clamp(item.runtime.jump.remaining / item.runtime.jump.total, 0, 1);
+    item.runtime.visual.offsetY -= Math.sin(progress * Math.PI) * item.runtime.jump.height;
+    if (item.runtime.jump.remaining <= 0) {
+      item.runtime.jump = null;
+    }
+  }
+}
+
+function setLoopAnimation(item, type, seconds) {
+  item.runtime.animation = {
+    type,
+    remaining: seconds,
+    elapsed: 0,
+  };
+}
+
+function clearAllScriptRunners() {
+  state.scriptRunners = [];
+  state.stopAllScriptsRequested = false;
+  for (const item of state.items) {
+    item.runtime.animation = null;
+    item.runtime.flip = null;
+    item.runtime.jump = null;
+    clearItemRuntimeVisuals(item);
+  }
+}
+
+function createSequenceRunner(actor, blocks, run) {
+  let index = 0;
+  let current = blocks.length > 0 ? createRunnerForBlock(actor, blocks[0], run) : null;
+
+  return {
+    done: blocks.length === 0,
+    update(deltaSeconds) {
+      if (this.done || run.stopped) {
+        this.done = true;
+        return;
+      }
+
+      let safety = 0;
+      while (current && safety < 10) {
+        current.update(deltaSeconds);
+        if (!current.done) {
+          return;
+        }
+        index += 1;
+        if (index >= blocks.length) {
+          this.done = true;
+          return;
+        }
+        current = createRunnerForBlock(actor, blocks[index], run);
+        deltaSeconds = 0;
+        safety += 1;
+      }
+    },
+  };
+}
+
+function createWaitRunner(seconds) {
+  let remaining = seconds;
+  return {
+    done: false,
+    update(deltaSeconds) {
+      remaining -= deltaSeconds;
+      if (remaining <= 0) {
+        this.done = true;
+      }
+    },
+  };
+}
+
+function createTimedMoveRunner(actor, dx, dy, duration) {
+  const total = Math.max(0.05, duration);
+  let remaining = total;
+  return {
+    done: false,
+    update(deltaSeconds) {
+      const step = Math.min(deltaSeconds, remaining);
+      actor.x += (dx / total) * step;
+      actor.y += (dy / total) * step;
+      clampItemToStage(actor);
+      remaining -= step;
+      markProjectDirty();
+      if (remaining <= 0) {
+        this.done = true;
+      }
+    },
+  };
+}
+
+function createInstantRunner(action) {
+  let started = false;
+  return {
+    done: false,
+    update() {
+      if (!started) {
+        action();
+        started = true;
+      }
+      this.done = true;
+    },
+  };
+}
+
+function createRepeatRunner(actor, block, run) {
+  let remainingIterations = Math.max(1, Math.round(block.params.times || 1));
+  let current = createSequenceRunner(actor, block.children, run);
+  return {
+    done: false,
+    update(deltaSeconds) {
+      if (this.done || run.stopped) {
+        this.done = true;
+        return;
+      }
+      current.update(deltaSeconds);
+      if (current.done) {
+        remainingIterations -= 1;
+        if (remainingIterations <= 0) {
+          this.done = true;
+          return;
+        }
+        current = createSequenceRunner(actor, block.children, run);
+      }
+    },
+  };
+}
+
+function createForeverRunner(actor, block, run) {
+  let current = createSequenceRunner(actor, block.children, run);
+  return {
+    done: false,
+    update(deltaSeconds) {
+      if (!state.recording || run.stopped) {
+        this.done = true;
+        return;
+      }
+      current.update(deltaSeconds);
+      if (current.done) {
+        current = createSequenceRunner(actor, block.children, run);
+      }
+    },
+  };
+}
+
+function createParallelRunner(actor, block, run) {
+  const runners = block.children.map((child) => createRunnerForBlock(actor, child, run));
+  return {
+    done: runners.length === 0,
+    update(deltaSeconds) {
+      if (this.done || run.stopped) {
+        this.done = true;
+        return;
+      }
+      for (const runner of runners) {
+        if (!runner.done) {
+          runner.update(deltaSeconds);
+        }
+      }
+      this.done = runners.every((runner) => runner.done);
+    },
+  };
+}
+
+function createRunnerForBlock(actor, block, run) {
+  switch (block.type) {
+    case "move_right_seconds":
+      return createTimedMoveRunner(actor, STAGE_GRID_SIZE * 2 * Number(block.params.seconds || 1), 0, Number(block.params.seconds || 1));
+    case "move_left_blocks": {
+      const blocks = Number(block.params.blocks || 1);
+      return createTimedMoveRunner(actor, -STAGE_GRID_SIZE * blocks, 0, Math.max(0.2, blocks * 0.45));
+    }
+    case "move_up_blocks": {
+      const blocks = Number(block.params.blocks || 1);
+      return createTimedMoveRunner(actor, 0, -STAGE_GRID_SIZE * blocks, Math.max(0.2, blocks * 0.45));
+    }
+    case "move_down_blocks": {
+      const blocks = Number(block.params.blocks || 1);
+      return createTimedMoveRunner(actor, 0, STAGE_GRID_SIZE * blocks, Math.max(0.2, blocks * 0.45));
+    }
+    case "teleport_xy":
+      return createInstantRunner(() => {
+        actor.x = Number(block.params.x || actor.x);
+        actor.y = Number(block.params.y || actor.y);
+        clampItemToStage(actor);
+        markProjectDirty();
+      });
+    case "face_left":
+      return createInstantRunner(() => {
+        actor.facing = -1;
+        markProjectDirty();
+      });
+    case "face_right":
+      return createInstantRunner(() => {
+        actor.facing = 1;
+        markProjectDirty();
+      });
+    case "jump_blocks": {
+      const blocks = Number(block.params.blocks || 1);
+      const total = Math.max(0.3, blocks * 0.28);
+      actor.runtime.jump = {
+        total,
+        remaining: total,
+        height: blocks * (STAGE_GRID_SIZE * 0.55),
+      };
+      return createWaitRunner(total);
+    }
+    case "play_wiggle":
+      return createWaitRunner((() => {
+        const seconds = Number(block.params.seconds || 1);
+        setLoopAnimation(actor, "wiggle", seconds);
+        return seconds;
+      })());
+    case "play_bounce":
+      return createWaitRunner((() => {
+        const seconds = Number(block.params.seconds || 1);
+        setLoopAnimation(actor, "bounce", seconds);
+        return seconds;
+      })());
+    case "play_stretch":
+      return createWaitRunner((() => {
+        const seconds = Number(block.params.seconds || 1);
+        setLoopAnimation(actor, "stretch", seconds);
+        return seconds;
+      })());
+    case "stop_animation":
+      return createInstantRunner(() => {
+        actor.runtime.animation = null;
+      });
+    case "change_size":
+      return createInstantRunner(() => {
+        actor.sizePct = clamp(Number(block.params.percent || 100), 20, 300);
+        clampItemToStage(actor);
+        markProjectDirty();
+      });
+    case "flip_360":
+      return createWaitRunner((() => {
+        const seconds = Number(block.params.seconds || 1);
+        actor.runtime.flip = { total: seconds, remaining: seconds };
+        return seconds;
+      })());
+    case "change_texture":
+      return createInstantRunner(() => {
+        actor.textureId = block.params.textureId || null;
+        markProjectDirty();
+      });
+    case "wait":
+      return createWaitRunner(Number(block.params.seconds || 1));
+    case "repeat":
+      return createRepeatRunner(actor, block, run);
+    case "forever_recording":
+      return createForeverRunner(actor, block, run);
+    case "parallel":
+      return createParallelRunner(actor, block, run);
+    case "sequence":
+      return createSequenceRunner(actor, block.children, run);
+    case "play_sound":
+      return createInstantRunner(() => playPlaceholderTone("sound", block.params.soundId));
+    case "play_music":
+      return createInstantRunner(() => playPlaceholderTone("music", block.params.musicId));
+    case "stop_sound":
+      return createInstantRunner(stopAllAudioNodes);
+    case "set_volume":
+      return createInstantRunner(() => setAudioVolume(Number(block.params.volume || 0) / 100));
+    case "stop_this_script":
+      return createInstantRunner(() => {
+        run.stopped = true;
+      });
+    case "stop_all_scripts":
+      return createInstantRunner(() => {
+        state.stopAllScriptsRequested = true;
+      });
+    default:
+      return createInstantRunner(() => {});
+  }
+}
+
+function startScriptRun(actor, rootBlock) {
+  const run = {
+    id: createBlockId(),
+    actorId: actor.id,
+    rootBlockId: rootBlock.id,
+    stopped: false,
+    runner: null,
+  };
+  run.runner = createSequenceRunner(actor, rootBlock.children || [], run);
+  state.scriptRunners.push(run);
+}
+
+function triggerScripts(eventName, options = {}) {
+  const actorId = options.actorId ?? null;
+  const key = options.key ?? null;
+
+  for (const actor of state.items) {
+    if (actorId != null && actor.id !== actorId) {
+      continue;
+    }
+
+    for (const rootBlock of actor.scripts) {
+      if (eventName === "recording_start" && rootBlock.type === "when_recording_start") {
+        startScriptRun(actor, rootBlock);
+      }
+      if (eventName === "clicked" && rootBlock.type === "when_clicked") {
+        startScriptRun(actor, rootBlock);
+      }
+      if (eventName === "key_pressed" && rootBlock.type === "when_key_pressed") {
+        if (normalizeScriptKey(rootBlock.params.key || "") === key) {
+          startScriptRun(actor, rootBlock);
+        }
+      }
+    }
+  }
+}
+
+function updateScripts(deltaSeconds) {
+  for (const item of state.items) {
+    updateItemTransientState(item, deltaSeconds);
+  }
+
+  for (const run of state.scriptRunners) {
+    if (run.stopped) {
+      continue;
+    }
+    const actor = getItemById(run.actorId);
+    if (!actor) {
+      run.stopped = true;
+      continue;
+    }
+    run.runner.update(deltaSeconds);
+    if (run.runner.done) {
+      run.stopped = true;
+    }
+  }
+
+  if (state.stopAllScriptsRequested) {
+    clearAllScriptRunners();
+    stopAllAudioNodes();
+  } else {
+    state.scriptRunners = state.scriptRunners.filter((run) => !run.stopped);
+  }
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -373,11 +1579,12 @@ function getCanvasPoint(event) {
 }
 
 function getItemBounds(item) {
+  const size = getItemSize(item);
   return {
-    left: item.x - item.w * 0.5,
-    top: item.y - item.h * 0.5,
-    right: item.x + item.w * 0.5,
-    bottom: item.y + item.h * 0.5,
+    left: item.x - size.w * 0.5,
+    top: item.y - size.h * 0.5,
+    right: item.x + size.w * 0.5,
+    bottom: item.y + size.h * 0.5,
   };
 }
 
@@ -395,10 +1602,11 @@ function rectContainsRect(outer, inner) {
 }
 
 function cloneItem(item) {
-  return {
-    ...item,
+  const copy = normalizeItem({
+    ...serializeItem(item),
     id: state.nextId++,
-  };
+  });
+  return copy;
 }
 
 function getSelectedItems() {
@@ -407,12 +1615,16 @@ function getSelectedItems() {
 
 function setSelection(ids) {
   state.selection = new Set(ids);
+  state.selectedScriptBlockId = null;
   updateSelectionLabel();
+  renderScriptEditor();
 }
 
 function clearSelection() {
   state.selection.clear();
+  state.selectedScriptBlockId = null;
   updateSelectionLabel();
+  renderScriptEditor();
 }
 
 function clearActiveTool() {
@@ -450,6 +1662,10 @@ function setActivePanel(panelName) {
   const previousPanel = state.activePanel;
   state.activePanel = panelName;
 
+  if (previousPanel === "scripts" && panelName !== "scripts") {
+    state.selectedScriptBlockId = null;
+  }
+
   if (previousPanel !== panelName && state.activeTool) {
     const panelToolType = getPanelToolType(panelName);
     if (panelToolType !== state.activeTool.type) {
@@ -463,6 +1679,10 @@ function setActivePanel(panelName) {
 
   for (const [name, panel] of Object.entries(elements.panels)) {
     panel.classList.toggle("hidden", name !== panelName);
+  }
+
+  if (panelName === "scripts") {
+    renderScriptEditor();
   }
 }
 
@@ -533,10 +1753,14 @@ function showScreen(screenName) {
   elements.menuScreen.classList.toggle("hidden", screenName !== "menu");
   elements.studioScreen.classList.toggle("hidden", screenName !== "studio");
   elements.libraryScreen.classList.toggle("hidden", screenName !== "library");
+  if (screenName !== "studio") {
+    clearAllScriptRunners();
+    stopAllAudioNodes();
+  }
 }
 
 function createCharacterItem(characterId, x, y) {
-  return {
+  return normalizeItem({
     id: state.nextId++,
     kind: "character",
     subtype: characterId,
@@ -545,11 +1769,11 @@ function createCharacterItem(characterId, x, y) {
     w: 82,
     h: 136,
     textureId: null,
-  };
+  });
 }
 
 function createObjectItem(objectId, x, y) {
-  return {
+  return normalizeItem({
     id: state.nextId++,
     kind: "object",
     subtype: objectId,
@@ -558,12 +1782,13 @@ function createObjectItem(objectId, x, y) {
     w: 92,
     h: 92,
     textureId: null,
-  };
+  });
 }
 
 function clampItemToStage(item) {
-  item.x = clamp(item.x, item.w * 0.5 + 12, state.stageWidth - item.w * 0.5 - 12);
-  item.y = clamp(item.y, item.h * 0.5 + 12, state.stageHeight - item.h * 0.5 - 12);
+  const size = getItemSize(item);
+  item.x = clamp(item.x, size.w * 0.5 + 12, state.stageWidth - size.w * 0.5 - 12);
+  item.y = clamp(item.y, size.h * 0.5 + 12, state.stageHeight - size.h * 0.5 - 12);
 }
 
 function placeItemFromTool(point) {
@@ -585,6 +1810,7 @@ function placeItemFromTool(point) {
   clampItemToStage(item);
   state.items.push(item);
   setSelection([item.id]);
+  markProjectDirty();
 }
 
 function hitTest(x, y) {
@@ -628,6 +1854,7 @@ function applyTextureAtPoint(point) {
   if (hit && !state.dragPaintedIds.has(hit.id)) {
     hit.textureId = state.activeTool.id;
     state.dragPaintedIds.add(hit.id);
+    markProjectDirty();
   }
 }
 
@@ -654,6 +1881,7 @@ function onPointerDown(event) {
 
   const hit = hitTest(point.x, point.y);
   if (hit) {
+    triggerScripts("clicked", { actorId: hit.id });
     if (!state.selection.has(hit.id)) {
       setSelection([hit.id]);
     }
@@ -722,6 +1950,7 @@ function onPointerUp(event) {
   if (event?.pointerId != null) {
     stageCanvas.releasePointerCapture?.(event.pointerId);
   }
+  markProjectDirty();
 }
 
 function copySelection() {
@@ -731,13 +1960,7 @@ function copySelection() {
   }
 
   state.clipboard = selected.map((item) => ({
-    kind: item.kind,
-    subtype: item.subtype,
-    x: item.x,
-    y: item.y,
-    w: item.w,
-    h: item.h,
-    textureId: item.textureId,
+    ...serializeItem(item),
   }));
   elements.toolLabel.textContent = `Copied ${selected.length} item${selected.length === 1 ? "" : "s"}. Press Ctrl+V to paste.`;
 }
@@ -749,10 +1972,13 @@ function pasteClipboard() {
 
   const bounds = state.clipboard.reduce(
     (accumulator, item) => {
-      const left = item.x - item.w * 0.5;
-      const top = item.y - item.h * 0.5;
-      const right = item.x + item.w * 0.5;
-      const bottom = item.y + item.h * 0.5;
+      const scale = (item.sizePct || 100) / 100;
+      const width = item.w * scale;
+      const height = item.h * scale;
+      const left = item.x - width * 0.5;
+      const top = item.y - height * 0.5;
+      const right = item.x + width * 0.5;
+      const bottom = item.y + height * 0.5;
       accumulator.left = Math.min(accumulator.left, left);
       accumulator.top = Math.min(accumulator.top, top);
       accumulator.right = Math.max(accumulator.right, right);
@@ -779,12 +2005,16 @@ function pasteClipboard() {
     item.w = template.w;
     item.h = template.h;
     item.textureId = template.textureId;
+    item.facing = template.facing ?? 1;
+    item.sizePct = template.sizePct ?? 100;
+    item.scripts = Array.isArray(template.scripts) ? template.scripts.map(deserializeBlock) : [];
     clampItemToStage(item);
     state.items.push(item);
     newIds.push(item.id);
   }
 
   setSelection(newIds);
+  markProjectDirty();
 }
 
 function deleteSelection() {
@@ -795,6 +2025,7 @@ function deleteSelection() {
   state.items = state.items.filter((item) => !state.selection.has(item.id));
   clearSelection();
   elements.toolLabel.textContent = "Selection deleted.";
+  markProjectDirty();
 }
 
 function handleKeyDown(event) {
@@ -802,7 +2033,16 @@ function handleKeyDown(event) {
     return;
   }
 
+  const isFormTarget =
+    event.target instanceof HTMLInputElement ||
+    event.target instanceof HTMLSelectElement ||
+    event.target instanceof HTMLTextAreaElement;
+  if (isFormTarget) {
+    return;
+  }
+
   const key = event.key.toLowerCase();
+
   if ((event.ctrlKey || event.metaKey) && key === "c") {
     event.preventDefault();
     copySelection();
@@ -817,7 +2057,9 @@ function handleKeyDown(event) {
 
   if (key === "backspace") {
     event.preventDefault();
-    deleteSelection();
+    if (!deleteSelectedScriptBlock()) {
+      deleteSelection();
+    }
     return;
   }
 
@@ -825,6 +2067,10 @@ function handleKeyDown(event) {
     clearActiveTool();
     clearSelection();
     return;
+  }
+
+  if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+    triggerScripts("key_pressed", { key: normalizeScriptKey(event.key) });
   }
 
   if (["w", "a", "s", "d"].includes(key)) {
@@ -867,6 +2113,7 @@ function moveSelectionByKeys(deltaSeconds) {
     item.y += dy;
     clampItemToStage(item);
   }
+  markProjectDirty();
 }
 
 function ensureCanvasSize() {
@@ -1097,11 +2344,21 @@ function resolveFill(item, fallbackColor) {
 }
 
 function drawShadow(item) {
+  const size = getItemSize(item);
+  const visual = item.runtime?.visual ?? createItemRuntime().visual;
   ctx.save();
   ctx.globalAlpha = 0.14;
   ctx.fillStyle = "#53341e";
   ctx.beginPath();
-  ctx.ellipse(item.x, item.y + item.h * 0.42, item.w * 0.34, item.h * 0.09, 0, 0, Math.PI * 2);
+  ctx.ellipse(
+    item.x + visual.offsetX,
+    item.y + visual.offsetY + size.h * 0.42,
+    size.w * 0.34 * Math.abs(visual.scaleX),
+    size.h * 0.09 * Math.abs(visual.scaleY),
+    0,
+    0,
+    Math.PI * 2,
+  );
   ctx.fill();
   ctx.restore();
 }
@@ -1109,10 +2366,14 @@ function drawShadow(item) {
 function drawCharacter(item) {
   const character = characterMap.get(item.subtype);
   const bodyFill = resolveFill(item, character.bodyColor);
+  const scale = (item.sizePct || 100) / 100;
+  const visual = item.runtime?.visual ?? createItemRuntime().visual;
   drawShadow(item);
 
   ctx.save();
-  ctx.translate(item.x, item.y);
+  ctx.translate(item.x + visual.offsetX, item.y + visual.offsetY);
+  ctx.rotate(visual.rotation);
+  ctx.scale(scale * item.facing * visual.scaleX, scale * visual.scaleY);
 
   if (character.variant === "ghost") {
     ctx.fillStyle = bodyFill;
@@ -1267,10 +2528,14 @@ function drawCharacter(item) {
 function drawObject(item) {
   const objectDef = objectMap.get(item.subtype);
   const fillStyle = resolveFill(item, objectDef.baseColor);
+  const scale = (item.sizePct || 100) / 100;
+  const visual = item.runtime?.visual ?? createItemRuntime().visual;
   drawShadow(item);
 
   ctx.save();
-  ctx.translate(item.x, item.y);
+  ctx.translate(item.x + visual.offsetX, item.y + visual.offsetY);
+  ctx.rotate(visual.rotation);
+  ctx.scale(scale * item.facing * visual.scaleX, scale * visual.scaleY);
   ctx.fillStyle = fillStyle;
   ctx.strokeStyle = "rgba(47, 28, 15, 0.78)";
   ctx.lineWidth = 2.5;
@@ -1535,7 +2800,12 @@ function animate(now) {
 
   if (state.screen === "studio") {
     moveSelectionByKeys(deltaSeconds);
+    updateScripts(deltaSeconds);
     renderStageViews(now);
+  }
+
+  if (state.projectDirty && now - state.lastProjectSaveTime > 250) {
+    saveProjectState();
   }
 
   requestAnimationFrame(animate);
@@ -1683,6 +2953,8 @@ function startRecording() {
     return;
   }
 
+  clearAllScriptRunners();
+  stopAllAudioNodes();
   renderStageViews(performance.now());
   const stream = recordingCanvas.captureStream(30);
   const mimeType = getRecordingMimeType();
@@ -1727,6 +2999,7 @@ function startRecording() {
 
   recorder.start(150);
   state.recording = recordingState;
+  triggerScripts("recording_start");
   updateRecordingUi();
 }
 
@@ -1736,20 +3009,30 @@ async function stopRecording() {
   }
 
   const { recorder, stopPromise } = state.recording;
+  clearAllScriptRunners();
+  stopAllAudioNodes();
+  for (const item of state.items) {
+    item.runtime.animation = null;
+    item.runtime.flip = null;
+    item.runtime.jump = null;
+  }
   if (recorder.state !== "inactive") {
     recorder.stop();
   }
+  saveProjectState();
   await stopPromise;
 }
 
 async function openLibrary() {
   await stopRecording();
+  saveProjectState();
   await loadRecordings();
   showScreen("library");
 }
 
 async function goToMenu() {
   await stopRecording();
+  saveProjectState();
   showScreen("menu");
 }
 
@@ -1757,11 +3040,16 @@ async function goToStudio() {
   showScreen("studio");
   updateSelectionLabel();
   updateToolLabel();
+  renderScriptEditor();
 }
 
 function clearStage() {
   state.items = [];
+  clearAllScriptRunners();
+  stopAllAudioNodes();
   clearSelection();
+  markProjectDirty();
+  saveProjectState();
 }
 
 function buildToolCard(definition, options) {
@@ -1835,6 +3123,8 @@ function bindEvents() {
   elements.recordButton.addEventListener("click", startRecording);
   elements.stopButton.addEventListener("click", stopRecording);
   elements.openLibraryButton.addEventListener("click", openLibrary);
+  elements.scriptMoveUpButton.addEventListener("click", () => moveSelectedScriptBlock(-1));
+  elements.scriptMoveDownButton.addEventListener("click", () => moveSelectedScriptBlock(1));
 
   for (const button of elements.panelButtons) {
     button.addEventListener("click", () => setActivePanel(button.dataset.panel));
@@ -1852,14 +3142,19 @@ function bindEvents() {
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("keyup", handleKeyUp);
   window.addEventListener("resize", ensureCanvasSize);
+  window.addEventListener("beforeunload", saveProjectState);
 }
 
 async function init() {
+  loadProjectState();
   populateToolLists();
+  renderScriptCategoryTabs();
+  renderScriptPalette();
   bindEvents();
   setActivePanel("characters");
   updateSelectionLabel();
   updateToolLabel();
+  renderScriptEditor();
   updateRecordingUi();
   await loadRecordings();
   requestAnimationFrame(animate);

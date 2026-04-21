@@ -58,6 +58,7 @@
             <button type="button" class="sidebar-tab" data-panel="textures">Textures</button>
             <button type="button" class="sidebar-tab" data-panel="objects">Objects</button>
             <button type="button" class="sidebar-tab" data-panel="camera">Camera</button>
+            <button type="button" class="sidebar-tab" data-panel="scripts">Scripts</button>
           </div>
 
           <div class="sidebar-card">
@@ -82,6 +83,32 @@
                   <p>Record the stage exactly as you see it.</p>
                   <p>Move selected actors with drag controls or <strong>W A S D</strong>.</p>
                   <p>Use <strong>Ctrl+C</strong> and <strong>Ctrl+V</strong> to duplicate a single item or a whole marquee selection.</p>
+                </div>
+              </div>
+            </section>
+
+            <section id="scriptsPanel" class="tool-panel hidden" aria-label="Scripts">
+              <div class="scripts-panel">
+                <div class="scripts-header">
+                  <div>
+                    <h3>Block Scripts</h3>
+                    <p id="scriptActorLabel" class="scripts-copy">Select one character or object on the stage to script it.</p>
+                  </div>
+                  <div class="scripts-actions">
+                    <button id="scriptMoveUpButton" type="button" class="ghost-button">Block Up</button>
+                    <button id="scriptMoveDownButton" type="button" class="ghost-button">Block Down</button>
+                  </div>
+                </div>
+
+                <div id="scriptCategoryTabs" class="script-category-tabs"></div>
+                <div id="scriptPalette" class="script-palette"></div>
+
+                <div class="script-stack-panel">
+                  <div class="script-stack-header">
+                    <h4>Script Stack</h4>
+                    <p>Click a palette block to add it. Select a block in the stack to edit or delete it.</p>
+                  </div>
+                  <div id="scriptStack" class="script-stack"></div>
                 </div>
               </div>
             </section>
