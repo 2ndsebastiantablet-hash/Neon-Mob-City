@@ -53,6 +53,9 @@
           <div id="actorContextMenu" class="actor-context-menu hidden">
             <button id="actorContextCodeButton" type="button">Code</button>
             <button id="actorContextPenButton" type="button">Pen Animation</button>
+            <button id="actorContextGroupButton" type="button">Group</button>
+            <button id="actorContextUngroupButton" type="button">Ungroup</button>
+            <label class="set-control-label">Object color <input id="actorContextColor" type="color" value="#f4a261"></label>
           </div>
           <div id="penAnimationPanel" class="pen-animation-panel hidden">
             <div class="texture-editor-header">
@@ -75,6 +78,7 @@
             <button type="button" class="sidebar-tab active" data-panel="characters">Characters</button>
             <button type="button" class="sidebar-tab" data-panel="textures">Textures</button>
             <button type="button" class="sidebar-tab" data-panel="objects">Objects</button>
+            <button type="button" class="sidebar-tab" data-panel="draw">Draw</button>
             <button type="button" class="sidebar-tab" data-panel="camera">Camera</button>
             <button type="button" class="sidebar-tab" data-panel="stage">Stage</button>
             <button type="button" class="sidebar-tab" data-panel="scripts">Scripts</button>
@@ -104,6 +108,14 @@
             <section id="objectsPanel" class="tool-panel hidden" aria-label="Objects">
               <button id="importObjectButton" type="button" class="secondary-button full-width import-button">Import Object Image</button>
               <div id="objectList" class="tool-grid object-grid"></div>
+            </section>
+
+            <section id="drawPanel" class="tool-panel hidden" aria-label="Draw">
+              <div class="set-control-card">
+                <p>Draw directly on the regular stage. Drawings are visible in recordings.</p>
+                <label class="set-control-label">Pen color <input id="stagePenColor" type="color" value="#2f8f83"></label>
+                <button id="stageDrawButton" type="button" class="secondary-button full-width">Use Drawing Pen</button>
+              </div>
             </section>
 
             <section id="cameraPanel" class="tool-panel hidden" aria-label="Camera">

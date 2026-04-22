@@ -328,6 +328,20 @@ const SCRIPT_BLOCK_DEFS = [
     params: [{ name: "blocks", label: "Blocks", input: "number", min: 1, max: 12, step: 1 }],
   },
   {
+    type: "return_to_spawn",
+    category: "motion",
+    title: "Return To Spawning Point",
+    copy: "Move this actor back to where it was first placed.",
+    params: [],
+  },
+  {
+    type: "play_animation_chunk",
+    category: "animation",
+    title: "Play Animation Chunk",
+    copy: "Run a named reusable animation chunk.",
+    params: [{ name: "chunkId", label: "Chunk", input: "animationChunkSelect" }],
+  },
+  {
     type: "play_wiggle",
     category: "animation",
     title: "Play Wiggle",
@@ -555,6 +569,9 @@ const elements = {
   actorContextMenu: document.querySelector("#actorContextMenu"),
   actorContextCodeButton: document.querySelector("#actorContextCodeButton"),
   actorContextPenButton: document.querySelector("#actorContextPenButton"),
+  actorContextGroupButton: document.querySelector("#actorContextGroupButton"),
+  actorContextUngroupButton: document.querySelector("#actorContextUngroupButton"),
+  actorContextColor: document.querySelector("#actorContextColor"),
   penAnimationPanel: document.querySelector("#penAnimationPanel"),
   penAnimationTitle: document.querySelector("#penAnimationTitle"),
   penAnimationDuration: document.querySelector("#penAnimationDuration"),
@@ -564,6 +581,8 @@ const elements = {
   previewPenAnimationButton: document.querySelector("#previewPenAnimationButton"),
   deletePenAnimationButton: document.querySelector("#deletePenAnimationButton"),
   closePenAnimationButton: document.querySelector("#closePenAnimationButton"),
+  stagePenColor: document.querySelector("#stagePenColor"),
+  stageDrawButton: document.querySelector("#stageDrawButton"),
   scriptsModule: document.querySelector("#scriptsModule"),
   scriptsModuleCloseButton: document.querySelector("#scriptsModuleCloseButton"),
   stageModule: document.querySelector("#stageModule"),
@@ -604,6 +623,7 @@ const elements = {
     characters: document.querySelector("#charactersPanel"),
     textures: document.querySelector("#texturesPanel"),
     objects: document.querySelector("#objectsPanel"),
+    draw: document.querySelector("#drawPanel"),
     camera: document.querySelector("#cameraPanel"),
   },
 };
@@ -657,13 +677,16 @@ const state = {
   customObjects: [],
   customTextures: [],
   customMusic: [],
+  animationChunks: [],
   sceneScripts: [],
   scene: {
     lightingColor: "#fff7d6",
     lightingStrength: 0,
   },
   selection: new Set(),
+  stageDrawings: [],
   clipboard: [],
+  selectedScriptBlockIds: new Set(),
   interaction: null,
   contextActorId: null,
   penAnimation: {
@@ -885,6 +908,10 @@ function normalizeItem(item) {
     sizePct: typeof item.sizePct === "number" ? item.sizePct : 100,
     scaleX: typeof item.scaleX === "number" ? item.scaleX : 1,
     scaleY: typeof item.scaleY === "number" ? item.scaleY : 1,
+    spawnX: typeof item.spawnX === "number" ? item.spawnX : item.x,
+    spawnY: typeof item.spawnY === "number" ? item.spawnY : item.y,
+    color: item.color || null,
+    groupId: item.groupId || null,
     imageData: item.imageData || null,
     penAnimation: item.penAnimation ? normalizePenAnimation(item.penAnimation) : null,
     scripts: Array.isArray(item.scripts) ? item.scripts.map(deserializeBlock) : [],
@@ -910,6 +937,26 @@ function deserializeBlock(block) {
   };
 }
 
+function serializeAnimationChunk(chunk) {
+  return {
+    id: chunk.id,
+    name: chunk.name,
+    kind: chunk.kind,
+    blocks: Array.isArray(chunk.blocks) ? chunk.blocks.map(serializeBlock) : [],
+    penAnimation: chunk.penAnimation ? serializePenAnimation(chunk.penAnimation) : null,
+  };
+}
+
+function normalizeAnimationChunk(chunk) {
+  return {
+    id: chunk.id || `chunk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: chunk.name || "Animation Chunk",
+    kind: chunk.kind === "pen" ? "pen" : "blocks",
+    blocks: Array.isArray(chunk.blocks) ? chunk.blocks.map(deserializeBlock) : [],
+    penAnimation: chunk.penAnimation ? normalizePenAnimation(chunk.penAnimation) : null,
+  };
+}
+
 function serializeItem(item) {
   return {
     id: item.id,
@@ -925,6 +972,10 @@ function serializeItem(item) {
     sizePct: item.sizePct,
     scaleX: item.scaleX,
     scaleY: item.scaleY,
+    spawnX: item.spawnX,
+    spawnY: item.spawnY,
+    color: item.color || null,
+    groupId: item.groupId || null,
     penAnimation: item.penAnimation ? serializePenAnimation(item.penAnimation) : null,
     scripts: item.scripts.map(serializeBlock),
   };
@@ -946,22 +997,40 @@ function createStageSet(name = createSetName()) {
   };
 }
 
+function serializeDrawing(drawing) {
+  return {
+    id: drawing.id,
+    type: drawing.type || "path",
+    color: drawing.color,
+    imageData: drawing.imageData || null,
+    x: drawing.x,
+    y: drawing.y,
+    w: drawing.w,
+    h: drawing.h,
+    points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: point.x, y: point.y })) : [],
+  };
+}
+
+function normalizeDrawing(drawing) {
+  return {
+    id: drawing.id || `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type: drawing.type === "image" ? "image" : "path",
+    color: drawing.color || "#2f8f83",
+    imageData: drawing.imageData || null,
+    x: Number(drawing.x || state.stageWidth * 0.5),
+    y: Number(drawing.y || state.stageHeight * 0.5),
+    w: Number(drawing.w || state.stageWidth * 0.55),
+    h: Number(drawing.h || state.stageHeight * 0.45),
+    points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: Number(point.x || 0), y: Number(point.y || 0) })) : [],
+  };
+}
+
 function serializeStageSet(set) {
   return {
     id: set.id,
     name: set.name,
     items: set.items.map(serializeItem),
-    drawings: Array.isArray(set.drawings) ? set.drawings.map((drawing) => ({
-      id: drawing.id,
-      type: drawing.type || "path",
-      color: drawing.color,
-      imageData: drawing.imageData || null,
-      x: drawing.x,
-      y: drawing.y,
-      w: drawing.w,
-      h: drawing.h,
-      points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: point.x, y: point.y })) : [],
-    })) : [],
+    drawings: Array.isArray(set.drawings) ? set.drawings.map(serializeDrawing) : [],
     lights: Array.isArray(set.lights) ? set.lights.map((light) => ({ ...light })) : [],
     lightingColor: set.lightingColor || "#fff7d6",
     lightingStrength: clamp(Number(set.lightingStrength || 0), 0, 1),
@@ -973,17 +1042,7 @@ function normalizeStageSet(set) {
     id: set.id || `set-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name: set.name || "Set",
     items: Array.isArray(set.items) ? set.items.map(normalizeItem) : [],
-    drawings: Array.isArray(set.drawings) ? set.drawings.map((drawing) => ({
-      id: drawing.id || `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      type: drawing.type === "image" ? "image" : "path",
-      color: drawing.color || "#2f8f83",
-      imageData: drawing.imageData || null,
-      x: Number(drawing.x || state.stageWidth * 0.5),
-      y: Number(drawing.y || state.stageHeight * 0.5),
-      w: Number(drawing.w || state.stageWidth * 0.55),
-      h: Number(drawing.h || state.stageHeight * 0.45),
-      points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: Number(point.x || 0), y: Number(point.y || 0) })) : [],
-    })) : [],
+    drawings: Array.isArray(set.drawings) ? set.drawings.map(normalizeDrawing) : [],
     lights: Array.isArray(set.lights) ? set.lights.map((light) => ({
       id: light.id || `light-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       x: Number(light.x || state.stageWidth * 0.5),
@@ -1048,6 +1107,8 @@ function saveProjectState() {
       customObjects: state.customObjects,
       customTextures: state.customTextures,
       customMusic: state.customMusic,
+      animationChunks: state.animationChunks.map(serializeAnimationChunk),
+      stageDrawings: state.stageDrawings.map(serializeDrawing),
       sceneScripts: state.sceneScripts.map(serializeBlock),
       scene: { ...state.scene },
       nextId: state.nextId,
@@ -1091,6 +1152,12 @@ function loadProjectState() {
     if (Array.isArray(payload.customMusic)) {
       state.customMusic = payload.customMusic;
     }
+    if (Array.isArray(payload.animationChunks)) {
+      state.animationChunks = payload.animationChunks.map(normalizeAnimationChunk);
+    }
+    if (Array.isArray(payload.stageDrawings)) {
+      state.stageDrawings = payload.stageDrawings.map(normalizeDrawing);
+    }
     if (Array.isArray(payload.sceneScripts)) {
       state.sceneScripts = payload.sceneScripts.map(deserializeBlock);
     }
@@ -1131,6 +1198,10 @@ function createBlockFromType(type) {
     }
     if (param.input === "setSelect") {
       params[param.name] = getActiveSet()?.id ?? "";
+      continue;
+    }
+    if (param.input === "animationChunkSelect") {
+      params[param.name] = state.animationChunks[0]?.id ?? "";
       continue;
     }
     if (param.input === "select") {
@@ -1335,6 +1406,7 @@ function addBlockToSelectedActor(type) {
   }
 
   state.selectedScriptBlockId = newBlock.id;
+  state.selectedScriptBlockIds = new Set([newBlock.id]);
   markProjectDirty();
   renderActiveScriptEditor();
 }
@@ -1374,6 +1446,7 @@ function deleteSelectedScriptBlock() {
 
   location.siblings.splice(location.index, 1);
   state.selectedScriptBlockId = null;
+  state.selectedScriptBlockIds.clear();
   markProjectDirty();
   renderActiveScriptEditor();
   return true;
@@ -1508,7 +1581,11 @@ function getDraggedBlock(actor, payload) {
   }
 
   if (payload.source === "palette") {
-    return createBlockFromType(payload.blockType);
+    const block = createBlockFromType(payload.blockType);
+    if (block && payload.chunkId) {
+      block.params.chunkId = payload.chunkId;
+    }
+    return block;
   }
 
   const location = findScriptBlockLocation(scripts, payload.blockId);
@@ -1518,6 +1595,86 @@ function getDraggedBlock(actor, payload) {
 
   location.siblings.splice(location.index, 1);
   return location.block;
+}
+
+function addAnimationChunkBlock(chunkId) {
+  const block = createBlockFromType("play_animation_chunk");
+  if (!block) {
+    return;
+  }
+  block.params.chunkId = chunkId;
+  const scripts = getScriptTargetScripts();
+  if (!scripts) {
+    return;
+  }
+  if (scripts.length === 0) {
+    const root = createBlockFromType("when_recording_start");
+    root.children.push(block);
+    scripts.push(root);
+  } else {
+    scripts[scripts.length - 1].children.push(block);
+  }
+  state.selectedScriptBlockId = block.id;
+  state.selectedScriptBlockIds = new Set([block.id]);
+  markProjectDirty();
+  renderActiveScriptEditor();
+}
+
+function createAnimationChunkFromSelection() {
+  const scripts = getScriptTargetScripts();
+  if (!scripts) {
+    return;
+  }
+  const selectedIds = state.selectedScriptBlockIds.size > 0
+    ? [...state.selectedScriptBlockIds]
+    : state.selectedScriptBlockId
+      ? [state.selectedScriptBlockId]
+      : [];
+  if (selectedIds.length === 0) {
+    return;
+  }
+
+  const locations = selectedIds
+    .map((id) => findScriptBlockLocation(scripts, id))
+    .filter(Boolean);
+  if (locations.length === 0) {
+    return;
+  }
+
+  const firstSiblings = locations[0].siblings;
+  const sameStack = locations.every((location) => location.siblings === firstSiblings);
+  const usableLocations = sameStack ? locations : [locations[0]];
+  usableLocations.sort((a, b) => a.index - b.index);
+  const name = window.prompt("Name this animation block:", "Animation Chunk");
+  if (!name) {
+    return;
+  }
+
+  const blocks = usableLocations.map((location) => serializeBlock(location.block)).map(deserializeBlock);
+  const chunk = {
+    id: `chunk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    kind: "blocks",
+    blocks,
+    penAnimation: null,
+  };
+  state.animationChunks.push(chunk);
+
+  const replacement = createBlockFromType("play_animation_chunk");
+  replacement.params.chunkId = chunk.id;
+  for (let index = usableLocations.length - 1; index >= 0; index -= 1) {
+    firstSiblings.splice(usableLocations[index].index, 1);
+  }
+  if (firstSiblings === scripts) {
+    insertRootScriptBlock(firstSiblings, usableLocations[0].index, replacement);
+  } else {
+    firstSiblings.splice(usableLocations[0].index, 0, replacement);
+  }
+  state.selectedScriptBlockId = replacement.id;
+  state.selectedScriptBlockIds = new Set([replacement.id]);
+  markProjectDirty();
+  renderScriptPalette();
+  renderActiveScriptEditor();
 }
 
 function performScriptDrop(target) {
@@ -1633,6 +1790,25 @@ function renderScriptPalette() {
     });
     elements.scriptPalette.append(button);
   }
+
+  if (state.activeScriptCategory === "animation") {
+    for (const chunk of state.animationChunks) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "script-palette-button";
+      button.draggable = true;
+      button.textContent = chunk.name;
+      button.addEventListener("click", () => addAnimationChunkBlock(chunk.id));
+      button.addEventListener("dragstart", (event) => {
+        const payload = { source: "palette", blockType: "play_animation_chunk", chunkId: chunk.id };
+        setScriptDragState(payload);
+        event.dataTransfer?.setData("application/json", JSON.stringify(payload));
+        event.dataTransfer.effectAllowed = "copy";
+      });
+      button.addEventListener("dragend", clearScriptDragState);
+      elements.scriptPalette.append(button);
+    }
+  }
 }
 
 function showBlockInfo(definition, clientX, clientY) {
@@ -1657,6 +1833,9 @@ function getBlockParamOptions(param) {
     ensureDefaultSet();
     return state.sets.map((set) => ({ value: set.id, label: set.name }));
   }
+  if (param.input === "animationChunkSelect") {
+    return state.animationChunks.map((chunk) => ({ value: chunk.id, label: chunk.name }));
+  }
   if (param.name === "textureId") {
     return getTextureDefs().map((texture) => ({ value: texture.id, label: texture.name }));
   }
@@ -1672,19 +1851,33 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
 
   const card = document.createElement("article");
   card.className = "script-block";
-  card.classList.toggle("selected", block.id === state.selectedScriptBlockId);
+  card.classList.toggle("selected", block.id === state.selectedScriptBlockId || state.selectedScriptBlockIds.has(block.id));
   card.draggable = true;
   card.addEventListener("click", (event) => {
     event.stopPropagation();
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
       return;
     }
-    state.selectedScriptBlockId = block.id;
+    if (event.ctrlKey || event.metaKey || event.shiftKey) {
+      if (state.selectedScriptBlockIds.has(block.id)) {
+        state.selectedScriptBlockIds.delete(block.id);
+      } else {
+        state.selectedScriptBlockIds.add(block.id);
+      }
+      state.selectedScriptBlockId = block.id;
+    } else {
+      state.selectedScriptBlockId = block.id;
+      state.selectedScriptBlockIds = new Set([block.id]);
+    }
     renderActiveScriptEditor();
   });
   card.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (state.selectedScriptBlockIds.size > 0 && (state.selectedScriptBlockIds.has(block.id) || block.id === state.selectedScriptBlockId)) {
+      createAnimationChunkFromSelection();
+      return;
+    }
     showBlockInfo(definition, event.clientX, event.clientY);
   });
   card.addEventListener("dragstart", (event) => {
@@ -1723,7 +1916,7 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
       label.textContent = param.label;
 
       let input;
-      if (param.input === "select" || param.input === "actorSubtype" || param.input === "setSelect") {
+      if (param.input === "select" || param.input === "actorSubtype" || param.input === "setSelect" || param.input === "animationChunkSelect") {
         input = document.createElement("select");
         for (const option of getBlockParamOptions(param)) {
           const optionElement = document.createElement("option");
@@ -2450,6 +2643,23 @@ function createRunnerForBlock(actor, block, run) {
       };
       return createWaitRunner(total);
     }
+    case "return_to_spawn":
+      if (!actor) return createInstantRunner(() => {});
+      return createInstantRunner(() => {
+        actor.x = Number(actor.spawnX ?? actor.x);
+        actor.y = Number(actor.spawnY ?? actor.y);
+        clampItemToStage(actor);
+        markProjectDirty();
+      });
+    case "play_animation_chunk": {
+      const chunk = state.animationChunks.find((candidate) => candidate.id === block.params.chunkId);
+      if (!chunk) return createInstantRunner(() => {});
+      if (chunk.kind === "pen") {
+        if (!actor || !chunk.penAnimation) return createInstantRunner(() => {});
+        return createPenAnimationRunner(actor, chunk.penAnimation);
+      }
+      return createSequenceRunner(actor, chunk.blocks || [], run);
+    }
     case "play_wiggle":
       if (!actor) return createInstantRunner(() => {});
       return createWaitRunner((() => {
@@ -2710,6 +2920,7 @@ function setSelection(ids) {
     state.scriptTargetId = ids[0];
   }
   state.selectedScriptBlockId = null;
+  state.selectedScriptBlockIds.clear();
   updateSelectionLabel();
   renderScriptEditor();
   renderScriptPalette();
@@ -2718,6 +2929,7 @@ function setSelection(ids) {
 function clearSelection() {
   state.selection.clear();
   state.selectedScriptBlockId = null;
+  state.selectedScriptBlockIds.clear();
   updateSelectionLabel();
   renderScriptEditor();
   renderScriptPalette();
@@ -2737,6 +2949,8 @@ function getPanelToolType(panelName) {
       return "texture";
     case "objects":
       return "object";
+    case "draw":
+      return "draw";
     default:
       return null;
   }
@@ -2870,6 +3084,11 @@ function updateToolLabel() {
 
   if (state.activeTool.type === "texture") {
     elements.toolLabel.textContent = `Texture brush: ${getTextureDef(state.activeTool.id).name}. Drag over an item to apply it.`;
+    return;
+  }
+
+  if (state.activeTool.type === "draw") {
+    elements.toolLabel.textContent = "Drawing pen: drag on the stage to draw.";
   }
 }
 
@@ -2917,6 +3136,8 @@ function createCharacterItem(characterId, x, y) {
     subtype: characterId,
     x,
     y,
+    spawnX: x,
+    spawnY: y,
     w: 82,
     h: 136,
     textureId: null,
@@ -2930,6 +3151,8 @@ function createObjectItem(objectId, x, y) {
     subtype: objectId,
     x,
     y,
+    spawnX: x,
+    spawnY: y,
     w: 92,
     h: 92,
     textureId: null,
@@ -3732,6 +3955,19 @@ function onPointerDown(event) {
     return;
   }
 
+  if (state.activeTool && state.activeTool.type === "draw") {
+    const drawing = {
+      id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: "path",
+      color: state.activeTool.id || elements.stagePenColor.value,
+      points: [point],
+    };
+    state.stageDrawings.push(drawing);
+    state.interaction = { type: "stageDraw", drawingId: drawing.id };
+    markProjectDirty();
+    return;
+  }
+
   const selectedItem = getSingleSelectedItem();
   const resizeHandle = hitTestResizeHandle(selectedItem, point);
   if (resizeHandle) {
@@ -3748,7 +3984,11 @@ function onPointerDown(event) {
   if (hit) {
     triggerScripts("clicked", { actorId: hit.id });
     if (!state.selection.has(hit.id)) {
-      setSelection([hit.id]);
+      if (hit.groupId) {
+        setSelection(state.items.filter((item) => item.groupId === hit.groupId).map((item) => item.id));
+      } else {
+        setSelection([hit.id]);
+      }
     }
     startDragSelection(point);
   } else {
@@ -3800,6 +4040,15 @@ function onPointerMove(event) {
     return;
   }
 
+  if (state.interaction.type === "stageDraw") {
+    const drawing = state.stageDrawings.find((candidate) => candidate.id === state.interaction.drawingId);
+    if (drawing) {
+      drawing.points.push(point);
+      markProjectDirty();
+    }
+    return;
+  }
+
   if (state.interaction.type === "penLine") {
     const actor = getItemById(state.interaction.actorId);
     if (actor) {
@@ -3845,6 +4094,16 @@ function onPointerUp(event) {
 
 function showActorContextMenu(actor, event) {
   state.contextActorId = actor.id;
+  const selectedItems = getSelectedItems();
+  const selectedObject = selectedItems.find((item) => item.kind === "object");
+  elements.actorContextCodeButton.classList.toggle("hidden", selectedItems.length !== 1);
+  elements.actorContextPenButton.classList.toggle("hidden", selectedItems.length !== 1 || actor.kind !== "character");
+  elements.actorContextGroupButton.classList.toggle("hidden", selectedItems.length < 2);
+  elements.actorContextUngroupButton.classList.toggle("hidden", !selectedItems.some((item) => item.groupId));
+  elements.actorContextColor.parentElement.classList.toggle("hidden", !selectedObject);
+  if (selectedObject) {
+    elements.actorContextColor.value = selectedObject.color || getObjectDef(selectedObject.subtype).baseColor || "#f4a261";
+  }
   const panelRect = elements.actorContextMenu.parentElement.getBoundingClientRect();
   elements.actorContextMenu.style.left = `${clamp(event.clientX - panelRect.left, 12, panelRect.width - 150)}px`;
   elements.actorContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - 92)}px`;
@@ -3866,7 +4125,13 @@ function onStageContextMenu(event) {
     hideActorContextMenu();
     return;
   }
-  setSelection([actor.id]);
+  if (!state.selection.has(actor.id)) {
+    if (actor.groupId) {
+      setSelection(state.items.filter((item) => item.groupId === actor.groupId).map((item) => item.id));
+    } else {
+      setSelection([actor.id]);
+    }
+  }
   showActorContextMenu(actor, event);
 }
 
@@ -3938,12 +4203,26 @@ function saveDraftPenAnimation() {
   if (!actor || !state.penAnimation.draft || state.penAnimation.draft.length < 2) {
     return;
   }
-  actor.penAnimation = normalizePenAnimation({
+  const penAnimation = normalizePenAnimation({
     type: state.penAnimation.tool === "line" ? "line" : "freehand",
     duration: Number(elements.penAnimationDuration.value || 2),
     points: state.penAnimation.draft,
   });
+  const name = window.prompt("Name this pen animation:", `${getActorDisplayName(actor)} Path`);
+  if (!name) {
+    state.penAnimation.draft = null;
+    return;
+  }
+  actor.penAnimation = penAnimation;
+  state.animationChunks.push({
+    id: `chunk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    kind: "pen",
+    blocks: [],
+    penAnimation,
+  });
   state.penAnimation.draft = null;
+  renderScriptPalette();
   markProjectDirty();
 }
 
@@ -3964,6 +4243,40 @@ function previewPenAnimation() {
   }
   state.penAnimationRunners = state.penAnimationRunners.filter((runner) => runner.actorId !== actor.id || !runner.preview);
   state.penAnimationRunners.push(createPenAnimationRunner(actor, actor.penAnimation, { preview: true, restorePosition: { x: actor.x, y: actor.y } }));
+}
+
+function groupSelection() {
+  const selected = getSelectedItems();
+  if (selected.length < 2) {
+    return;
+  }
+  const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  for (const item of selected) {
+    item.groupId = groupId;
+  }
+  markProjectDirty();
+  hideActorContextMenu();
+}
+
+function ungroupSelection() {
+  const selected = getSelectedItems();
+  const groupIds = new Set(selected.map((item) => item.groupId).filter(Boolean));
+  for (const item of state.items) {
+    if (groupIds.has(item.groupId)) {
+      item.groupId = null;
+    }
+  }
+  markProjectDirty();
+  hideActorContextMenu();
+}
+
+function changeSelectedObjectColor(color) {
+  for (const item of getSelectedItems()) {
+    if (item.kind === "object") {
+      item.color = color;
+    }
+  }
+  markProjectDirty();
 }
 
 function copySelection() {
@@ -4009,6 +4322,7 @@ function pasteClipboard() {
   const dy = targetY - centerY;
 
   const newIds = [];
+  const pastedGroupIds = new Map();
   for (const template of state.clipboard) {
     const item =
       template.kind === "character"
@@ -4024,6 +4338,13 @@ function pasteClipboard() {
     item.scaleX = template.scaleX ?? 1;
     item.scaleY = template.scaleY ?? 1;
     item.penAnimation = template.penAnimation ? normalizePenAnimation(template.penAnimation) : null;
+    item.color = template.color || null;
+    if (template.groupId) {
+      if (!pastedGroupIds.has(template.groupId)) {
+        pastedGroupIds.set(template.groupId, `group-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+      }
+      item.groupId = pastedGroupIds.get(template.groupId);
+    }
     item.scripts = Array.isArray(template.scripts) ? template.scripts.map(deserializeBlock) : [];
     clampItemToStage(item);
     state.items.push(item);
@@ -4428,10 +4749,10 @@ function drawImportedImageItem(item, imageData, fallbackColor) {
   } else {
     drawFilledRoundedRect(ctx, -size.w * 0.5, -size.h * 0.5, size.w, size.h, 16, fallbackColor, "rgba(47, 28, 15, 0.7)");
   }
-  if (item.textureId) {
+  if (item.textureId || item.color) {
     ctx.globalAlpha = 0.68;
     ctx.globalCompositeOperation = "source-atop";
-    ctx.fillStyle = resolveFill(item, fallbackColor);
+    ctx.fillStyle = item.textureId ? resolveFill(item, fallbackColor) : item.color;
     ctx.fillRect(-size.w * 0.5, -size.h * 0.5, size.w, size.h);
   }
   ctx.restore();
@@ -4629,7 +4950,7 @@ function drawObject(item) {
     drawImportedImageItem(item, objectDef.imageData, "#f4a261");
     return;
   }
-  const fillStyle = resolveFill(item, objectDef.baseColor);
+  const fillStyle = resolveFill(item, item.color || objectDef.baseColor);
   const scale = (item.sizePct || 100) / 100;
   const visual = item.runtime?.visual ?? createItemRuntime().visual;
   drawShadow(item);
@@ -5066,6 +5387,8 @@ function drawStage(now, options = {}) {
   ctx.font = "700 14px Trebuchet MS";
   ctx.fillText("WORMS STAGE", 18, state.stageHeight - 18);
 
+  drawSetDrawings({ drawings: state.stageDrawings });
+
   if (showSetContent) {
     drawSetContent(getActiveSet(), { showEditorHandles: false });
   }
@@ -5358,7 +5681,6 @@ function startRecording() {
   recorder.start(150);
   state.recording = recordingState;
   triggerScripts("recording_start");
-  startPenAnimationRunners();
   updateRecordingUi();
 }
 
@@ -5409,6 +5731,7 @@ async function goToStudio() {
 
 function clearStage() {
   state.items = [];
+  state.stageDrawings = [];
   state.sets = [];
   ensureDefaultSet();
   state.sceneScripts = [];
@@ -5636,6 +5959,14 @@ function renderSetMiniCodePanel() {
       event.dataTransfer.effectAllowed = "copy";
     });
     button.addEventListener("dragend", clearScriptDragState);
+    elements.setMiniCodePalette.append(button);
+  }
+  for (const chunk of state.animationChunks) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "script-palette-button";
+    button.textContent = chunk.name;
+    button.addEventListener("click", () => addAnimationChunkBlock(chunk.id));
     elements.setMiniCodePalette.append(button);
   }
 
@@ -5899,6 +6230,9 @@ function bindEvents() {
   elements.scriptsModuleCloseButton.addEventListener("click", closeScriptsModule);
   elements.actorContextCodeButton.addEventListener("click", openContextActorCode);
   elements.actorContextPenButton.addEventListener("click", openPenAnimationEditor);
+  elements.actorContextGroupButton.addEventListener("click", groupSelection);
+  elements.actorContextUngroupButton.addEventListener("click", ungroupSelection);
+  elements.actorContextColor.addEventListener("input", () => changeSelectedObjectColor(elements.actorContextColor.value));
   elements.penLineToolButton.addEventListener("click", () => setPenAnimationTool("line"));
   elements.penFreehandToolButton.addEventListener("click", () => setPenAnimationTool("freehand"));
   elements.previewPenAnimationButton.addEventListener("click", previewPenAnimation);
@@ -5909,6 +6243,12 @@ function bindEvents() {
     if (actor?.penAnimation) {
       actor.penAnimation.duration = clamp(Number(elements.penAnimationDuration.value || 2), 0.1, 60);
       markProjectDirty();
+    }
+  });
+  elements.stageDrawButton.addEventListener("click", () => setActiveTool("draw", elements.stagePenColor.value));
+  elements.stagePenColor.addEventListener("input", () => {
+    if (state.activeTool?.type === "draw") {
+      setActiveTool("draw", elements.stagePenColor.value);
     }
   });
   elements.importCharacterButton.addEventListener("click", () => elements.importCharacterInput.click());
