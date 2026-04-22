@@ -612,6 +612,7 @@ const state = {
   setSelectedItemId: null,
   setSelectedLightId: null,
   setInteraction: null,
+  setPointerMoved: false,
   setMiniCodeItemId: null,
   setPenColor: "#2f8f83",
   items: [],
@@ -1513,6 +1514,7 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
   card.classList.toggle("selected", block.id === state.selectedScriptBlockId);
   card.draggable = true;
   card.addEventListener("click", (event) => {
+    event.stopPropagation();
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
       return;
     }
@@ -1521,9 +1523,11 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
   });
   card.addEventListener("contextmenu", (event) => {
     event.preventDefault();
+    event.stopPropagation();
     showBlockInfo(definition, event.clientX, event.clientY);
   });
   card.addEventListener("dragstart", (event) => {
+    event.stopPropagation();
     const payload = { source: "existing", blockId: block.id };
     setScriptDragState(payload);
     event.dataTransfer?.setData("application/json", JSON.stringify(payload));
@@ -2741,6 +2745,46 @@ function hitTestSetLight(set, x, y) {
   return null;
 }
 
+function getSetSelectedItem() {
+  const set = getActiveSet();
+  return set.items.find((item) => item.id === state.setSelectedItemId) || null;
+}
+
+function clearSetSelection() {
+  state.setSelectedItemId = null;
+  state.setSelectedLightId = null;
+  renderStageModule();
+}
+
+function getResizeHandles(item) {
+  const bounds = getItemBounds(item);
+  const centerX = (bounds.left + bounds.right) * 0.5;
+  const centerY = (bounds.top + bounds.bottom) * 0.5;
+  return [
+    { id: "nw", x: bounds.left, y: bounds.top },
+    { id: "n", x: centerX, y: bounds.top },
+    { id: "ne", x: bounds.right, y: bounds.top },
+    { id: "e", x: bounds.right, y: centerY },
+    { id: "se", x: bounds.right, y: bounds.bottom },
+    { id: "s", x: centerX, y: bounds.bottom },
+    { id: "sw", x: bounds.left, y: bounds.bottom },
+    { id: "w", x: bounds.left, y: centerY },
+  ];
+}
+
+function hitTestResizeHandle(item, point) {
+  if (!item) {
+    return null;
+  }
+
+  for (const handle of getResizeHandles(item)) {
+    if (Math.hypot(handle.x - point.x, handle.y - point.y) <= 13) {
+      return handle;
+    }
+  }
+  return null;
+}
+
 function getSetMiniScriptTarget() {
   if (state.setMiniCodeItemId == null) {
     return null;
@@ -2752,6 +2796,7 @@ function setSetEditorTool(tool) {
   state.setEditorTool = tool;
   state.setSelectedLightId = null;
   state.setSelectedItemId = null;
+  state.setPointerMoved = false;
   renderStageModule();
 }
 
@@ -2813,6 +2858,8 @@ function openSetMiniCodePanel(itemId) {
   state.setMiniCodeItemId = itemId;
   state.selectedScriptBlockId = null;
   state.scriptEditorMode = "set";
+  state.setSelectedItemId = itemId;
+  state.setSelectedLightId = null;
   elements.setMiniCodePanel.classList.remove("hidden");
   renderSetMiniCodePanel();
 }
@@ -2873,6 +2920,7 @@ function onSetPointerDown(event) {
   }
   const point = getSetCanvasPoint(event);
   const set = getActiveSet();
+  state.setPointerMoved = false;
   setCanvas.setPointerCapture?.(event.pointerId);
 
   if (state.setEditorTool === "character" || state.setEditorTool === "object") {
@@ -2912,6 +2960,20 @@ function onSetPointerDown(event) {
     return;
   }
 
+  const resizeHandle = hitTestResizeHandle(getSetSelectedItem(), point);
+  if (resizeHandle) {
+    const item = getSetSelectedItem();
+    const startDistance = Math.max(1, Math.hypot(point.x - item.x, point.y - item.y));
+    state.setInteraction = {
+      type: "resizeItem",
+      itemId: item.id,
+      start: point,
+      startDistance,
+      startSizePct: item.sizePct || 100,
+    };
+    return;
+  }
+
   const light = hitTestSetLight(set, point.x, point.y);
   if (light) {
     state.setSelectedLightId = light.id;
@@ -2924,16 +2986,15 @@ function onSetPointerDown(event) {
 
   const item = hitTestSetItem(set, point.x, point.y);
   if (item) {
+    const wasAlreadySelected = state.setSelectedItemId === item.id;
     state.setSelectedItemId = item.id;
     state.setSelectedLightId = null;
-    state.setInteraction = { type: "dragItem", itemId: item.id, start: point, x: item.x, y: item.y };
+    state.setInteraction = { type: "dragItem", itemId: item.id, start: point, x: item.x, y: item.y, wasAlreadySelected };
     renderStageModule();
     return;
   }
 
-  state.setSelectedItemId = null;
-  state.setSelectedLightId = null;
-  renderStageModule();
+  clearSetSelection();
 }
 
 function onSetPointerMove(event) {
@@ -2942,6 +3003,7 @@ function onSetPointerMove(event) {
   }
   const point = getSetCanvasPoint(event);
   const set = getActiveSet();
+  state.setPointerMoved = true;
 
   if (state.setInteraction.type === "draw") {
     const drawing = set.drawings.find((candidate) => candidate.id === state.setInteraction.drawingId);
@@ -2968,6 +3030,18 @@ function onSetPointerMove(event) {
     return;
   }
 
+  if (state.setInteraction.type === "resizeItem") {
+    const item = set.items.find((candidate) => candidate.id === state.setInteraction.itemId);
+    if (item) {
+      const distance = Math.max(1, Math.hypot(point.x - item.x, point.y - item.y));
+      const scale = distance / state.setInteraction.startDistance;
+      item.sizePct = clamp(state.setInteraction.startSizePct * scale, 20, 300);
+      clampItemToStage(item);
+      markProjectDirty();
+    }
+    return;
+  }
+
   if (state.setInteraction.type === "dragLight") {
     const light = set.lights.find((candidate) => candidate.id === state.setInteraction.lightId);
     if (light) {
@@ -2979,7 +3053,15 @@ function onSetPointerMove(event) {
 }
 
 function onSetPointerUp(event) {
+  if (
+    state.setInteraction?.type === "dragItem" &&
+    state.setInteraction.wasAlreadySelected &&
+    !state.setPointerMoved
+  ) {
+    clearSetSelection();
+  }
   state.setInteraction = null;
+  state.setPointerMoved = false;
   if (event?.pointerId != null) {
     setCanvas.releasePointerCapture?.(event.pointerId);
   }
@@ -3257,6 +3339,10 @@ function handleKeyDown(event) {
     hideBlockInfo();
     if (state.stageModuleOpen && state.setMiniCodeItemId != null) {
       closeSetMiniCodePanel();
+      return;
+    }
+    if (state.stageModuleOpen) {
+      clearSetSelection();
       return;
     }
     clearActiveTool();
@@ -3840,8 +3926,23 @@ function drawSelectionOutline(item) {
   ctx.strokeStyle = "#2f8f83";
   ctx.lineWidth = 2.5;
   ctx.setLineDash([10, 7]);
-  roundRectPath(ctx, bounds.left - 8, bounds.top - 8, item.w + 16, item.h + 16, 18);
+  roundRectPath(ctx, bounds.left - 8, bounds.top - 8, bounds.right - bounds.left + 16, bounds.bottom - bounds.top + 16, 18);
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawResizeHandles(item) {
+  ctx.save();
+  ctx.setLineDash([]);
+  for (const handle of getResizeHandles(item)) {
+    ctx.fillStyle = "#fffdfa";
+    ctx.strokeStyle = "#2f8f83";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(handle.x, handle.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -3996,6 +4097,7 @@ function drawSetContent(set, options = {}) {
     for (const item of set.items) {
       if (item.id === state.setSelectedItemId) {
         drawSelectionOutline(item);
+        drawResizeHandles(item);
       }
     }
   }
