@@ -536,6 +536,15 @@ const elements = {
   characterList: document.querySelector("#characterList"),
   textureList: document.querySelector("#textureList"),
   objectList: document.querySelector("#objectList"),
+  importCharacterButton: document.querySelector("#importCharacterButton"),
+  importTextureButton: document.querySelector("#importTextureButton"),
+  importObjectButton: document.querySelector("#importObjectButton"),
+  importStageButton: document.querySelector("#importStageButton"),
+  importCharacterInput: document.querySelector("#importCharacterInput"),
+  importTextureInput: document.querySelector("#importTextureInput"),
+  importObjectInput: document.querySelector("#importObjectInput"),
+  importStageInput: document.querySelector("#importStageInput"),
+  importMusicInput: document.querySelector("#importMusicInput"),
   scriptsModule: document.querySelector("#scriptsModule"),
   scriptsModuleCloseButton: document.querySelector("#scriptsModuleCloseButton"),
   stageModule: document.querySelector("#stageModule"),
@@ -583,6 +592,7 @@ const elements = {
 const textureMap = new Map(TEXTURE_DEFS.map((texture) => [texture.id, texture]));
 const characterMap = new Map(CHARACTER_DEFS.map((character) => [character.id, character]));
 const objectMap = new Map(OBJECT_DEFS.map((objectDef) => [objectDef.id, objectDef]));
+const importedImageCache = new Map();
 const setCanvas = elements.setCanvas;
 const setFrame = setCanvas.parentElement;
 const setCtx = setCanvas.getContext("2d");
@@ -605,18 +615,28 @@ const state = {
   activeSetId: null,
   setEditorTool: "select",
   setToolSelection: {
-    character: CHARACTER_DEFS[0].id,
-    object: OBJECT_DEFS[0].id,
-    texture: TEXTURE_DEFS[0].id,
+    character: "director",
+    object: "cube",
+    texture: "sunset-stripe",
   },
+  setSelection: new Set(),
   setSelectedItemId: null,
+  setSelectedDrawingId: null,
   setSelectedLightId: null,
   setInteraction: null,
   setPointerMoved: false,
+  setClipboard: {
+    items: [],
+    drawings: [],
+  },
   setMiniCodeItemId: null,
   setPenColor: "#2f8f83",
   items: [],
   sets: [],
+  customCharacters: [],
+  customObjects: [],
+  customTextures: [],
+  customMusic: [],
   sceneScripts: [],
   scene: {
     lightingColor: "#fff7d6",
@@ -759,11 +779,53 @@ function createItemRuntime() {
   };
 }
 
+function getCharacterDefs() {
+  return [...CHARACTER_DEFS, ...state.customCharacters];
+}
+
+function getObjectDefs() {
+  return [...OBJECT_DEFS, ...state.customObjects];
+}
+
+function getTextureDefs() {
+  return [...TEXTURE_DEFS, ...state.customTextures];
+}
+
+function getMusicOptions() {
+  return [...MUSIC_OPTIONS, ...state.customMusic.map((music) => ({ value: music.value, label: music.label }))];
+}
+
+function getCharacterDef(characterId) {
+  return characterMap.get(characterId) || state.customCharacters.find((character) => character.id === characterId) || CHARACTER_DEFS[0];
+}
+
+function getObjectDef(objectId) {
+  return objectMap.get(objectId) || state.customObjects.find((objectDef) => objectDef.id === objectId) || OBJECT_DEFS[0];
+}
+
+function getTextureDef(textureId) {
+  return textureMap.get(textureId) || state.customTextures.find((texture) => texture.id === textureId) || null;
+}
+
+function getImportedImage(imageData) {
+  if (!imageData) {
+    return null;
+  }
+  if (importedImageCache.has(imageData)) {
+    return importedImageCache.get(imageData);
+  }
+  const image = new Image();
+  image.src = imageData;
+  importedImageCache.set(imageData, image);
+  return image;
+}
+
 function normalizeItem(item) {
   return {
     ...item,
     facing: item.facing === -1 ? -1 : 1,
     sizePct: typeof item.sizePct === "number" ? item.sizePct : 100,
+    imageData: item.imageData || null,
     scripts: Array.isArray(item.scripts) ? item.scripts.map(deserializeBlock) : [],
     runtime: createItemRuntime(),
   };
@@ -797,6 +859,7 @@ function serializeItem(item) {
     w: item.w,
     h: item.h,
     textureId: item.textureId,
+    imageData: item.imageData || null,
     facing: item.facing,
     sizePct: item.sizePct,
     scripts: item.scripts.map(serializeBlock),
@@ -826,8 +889,14 @@ function serializeStageSet(set) {
     items: set.items.map(serializeItem),
     drawings: Array.isArray(set.drawings) ? set.drawings.map((drawing) => ({
       id: drawing.id,
+      type: drawing.type || "path",
       color: drawing.color,
-      points: drawing.points.map((point) => ({ x: point.x, y: point.y })),
+      imageData: drawing.imageData || null,
+      x: drawing.x,
+      y: drawing.y,
+      w: drawing.w,
+      h: drawing.h,
+      points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: point.x, y: point.y })) : [],
     })) : [],
     lights: Array.isArray(set.lights) ? set.lights.map((light) => ({ ...light })) : [],
     lightingColor: set.lightingColor || "#fff7d6",
@@ -842,7 +911,13 @@ function normalizeStageSet(set) {
     items: Array.isArray(set.items) ? set.items.map(normalizeItem) : [],
     drawings: Array.isArray(set.drawings) ? set.drawings.map((drawing) => ({
       id: drawing.id || `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: drawing.type === "image" ? "image" : "path",
       color: drawing.color || "#2f8f83",
+      imageData: drawing.imageData || null,
+      x: Number(drawing.x || state.stageWidth * 0.5),
+      y: Number(drawing.y || state.stageHeight * 0.5),
+      w: Number(drawing.w || state.stageWidth * 0.55),
+      h: Number(drawing.h || state.stageHeight * 0.45),
       points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: Number(point.x || 0), y: Number(point.y || 0) })) : [],
     })) : [],
     lights: Array.isArray(set.lights) ? set.lights.map((light) => ({
@@ -905,6 +980,10 @@ function saveProjectState() {
       items: state.items.map(serializeItem),
       sets: state.sets.map(serializeStageSet),
       activeSetId: state.activeSetId,
+      customCharacters: state.customCharacters,
+      customObjects: state.customObjects,
+      customTextures: state.customTextures,
+      customMusic: state.customMusic,
       sceneScripts: state.sceneScripts.map(serializeBlock),
       scene: { ...state.scene },
       nextId: state.nextId,
@@ -935,6 +1014,18 @@ function loadProjectState() {
     }
     if (payload.activeSetId) {
       state.activeSetId = payload.activeSetId;
+    }
+    if (Array.isArray(payload.customCharacters)) {
+      state.customCharacters = payload.customCharacters;
+    }
+    if (Array.isArray(payload.customObjects)) {
+      state.customObjects = payload.customObjects;
+    }
+    if (Array.isArray(payload.customTextures)) {
+      state.customTextures = payload.customTextures;
+    }
+    if (Array.isArray(payload.customMusic)) {
+      state.customMusic = payload.customMusic;
     }
     if (Array.isArray(payload.sceneScripts)) {
       state.sceneScripts = payload.sceneScripts.map(deserializeBlock);
@@ -971,7 +1062,7 @@ function createBlockFromType(type) {
   const params = {};
   for (const param of definition.params) {
     if (param.input === "actorSubtype") {
-      params[param.name] = CHARACTER_DEFS[0]?.id ?? "";
+      params[param.name] = getCharacterDefs()[0]?.id ?? "";
       continue;
     }
     if (param.input === "setSelect") {
@@ -979,7 +1070,7 @@ function createBlockFromType(type) {
       continue;
     }
     if (param.input === "select") {
-      params[param.name] = param.options[0]?.value ?? "";
+      params[param.name] = getBlockParamOptions(param)[0]?.value ?? "";
       continue;
     }
     if (param.input === "color") {
@@ -1496,11 +1587,17 @@ function hideBlockInfo() {
 
 function getBlockParamOptions(param) {
   if (param.input === "actorSubtype") {
-    return CHARACTER_DEFS.map((character) => ({ value: character.id, label: character.name }));
+    return getCharacterDefs().map((character) => ({ value: character.id, label: character.name }));
   }
   if (param.input === "setSelect") {
     ensureDefaultSet();
     return state.sets.map((set) => ({ value: set.id, label: set.name }));
+  }
+  if (param.name === "textureId") {
+    return getTextureDefs().map((texture) => ({ value: texture.id, label: texture.name }));
+  }
+  if (param.name === "musicId") {
+    return getMusicOptions();
   }
   return param.options || [];
 }
@@ -1593,6 +1690,18 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
       input.addEventListener("input", () => updateBlockParam(block.id, param.name, input.value));
       label.append(input);
       paramGrid.append(label);
+
+      if (block.type === "play_music" && param.name === "musicId") {
+        const importButton = document.createElement("button");
+        importButton.type = "button";
+        importButton.className = "ghost-button full-width";
+        importButton.textContent = "Import Music";
+        importButton.addEventListener("click", () => {
+          elements.importMusicInput.dataset.blockId = block.id;
+          elements.importMusicInput.click();
+        });
+        paramGrid.append(importButton);
+      }
     }
     card.append(paramGrid);
   }
@@ -1619,7 +1728,7 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
 }
 
 function getActorDisplayName(actor) {
-  return actor.kind === "character" ? characterMap.get(actor.subtype).name : objectMap.get(actor.subtype).name;
+  return actor.kind === "character" ? getCharacterDef(actor.subtype).name : getObjectDef(actor.subtype).name;
 }
 
 function renderScriptActorList() {
@@ -1750,6 +1859,22 @@ function stopAllAudioNodes() {
 }
 
 function playPlaceholderTone(kind, value) {
+  if (kind === "music") {
+    const customMusic = state.customMusic.find((music) => music.value === value);
+    if (customMusic) {
+      const audioElement = new Audio(customMusic.dataUrl);
+      audioElement.volume = state.globalVolume;
+      audioElement.loop = Boolean(state.recording);
+      audioElement.play().catch(() => {});
+      state.audio.activeNodes.push({
+        source: { stop: () => audioElement.pause() },
+        gain: null,
+        loop: audioElement.loop,
+      });
+      return;
+    }
+  }
+
   const audio = createAudioEngine();
   if (!audio) {
     return;
@@ -1990,7 +2115,7 @@ function setSceneLighting(color, strength) {
 }
 
 function spawnScriptActor(block) {
-  const item = createCharacterItem(block.params.actorSubtype || CHARACTER_DEFS[0].id, Number(block.params.x || state.stageWidth * 0.5), Number(block.params.y || state.stageHeight * 0.5));
+  const item = createCharacterItem(block.params.actorSubtype || getCharacterDefs()[0].id, Number(block.params.x || state.stageWidth * 0.5), Number(block.params.y || state.stageHeight * 0.5));
   clampItemToStage(item);
   state.items.push(item);
   markProjectDirty();
@@ -2584,7 +2709,7 @@ function updateSelectionLabel() {
 
   if (selectedItems.length === 1) {
     const item = selectedItems[0];
-    const source = item.kind === "character" ? characterMap.get(item.subtype) : objectMap.get(item.subtype);
+    const source = item.kind === "character" ? getCharacterDef(item.subtype) : getObjectDef(item.subtype);
     elements.selectionLabel.textContent = `Selected: ${source.name}`;
     return;
   }
@@ -2599,17 +2724,17 @@ function updateToolLabel() {
   }
 
   if (state.activeTool.type === "character") {
-    elements.toolLabel.textContent = `Placement tool: ${characterMap.get(state.activeTool.id).name}. Click the stage to place it.`;
+    elements.toolLabel.textContent = `Placement tool: ${getCharacterDef(state.activeTool.id).name}. Click the stage to place it.`;
     return;
   }
 
   if (state.activeTool.type === "object") {
-    elements.toolLabel.textContent = `Placement tool: ${objectMap.get(state.activeTool.id).name}. Click the stage to place it.`;
+    elements.toolLabel.textContent = `Placement tool: ${getObjectDef(state.activeTool.id).name}. Click the stage to place it.`;
     return;
   }
 
   if (state.activeTool.type === "texture") {
-    elements.toolLabel.textContent = `Texture brush: ${textureMap.get(state.activeTool.id).name}. Drag over an item to apply it.`;
+    elements.toolLabel.textContent = `Texture brush: ${getTextureDef(state.activeTool.id).name}. Drag over an item to apply it.`;
   }
 }
 
@@ -2750,8 +2875,23 @@ function getSetSelectedItem() {
   return set.items.find((item) => item.id === state.setSelectedItemId) || null;
 }
 
+function getSetSelectedItems() {
+  const set = getActiveSet();
+  return set.items.filter((item) => state.setSelection.has(item.id));
+}
+
+function setSetSelection(ids) {
+  state.setSelection = new Set(ids);
+  state.setSelectedItemId = ids.length === 1 ? ids[0] : null;
+  state.setSelectedDrawingId = null;
+  state.setSelectedLightId = null;
+  renderStageModule();
+}
+
 function clearSetSelection() {
+  state.setSelection.clear();
   state.setSelectedItemId = null;
+  state.setSelectedDrawingId = null;
   state.setSelectedLightId = null;
   renderStageModule();
 }
@@ -2785,6 +2925,58 @@ function hitTestResizeHandle(item, point) {
   return null;
 }
 
+function getDrawingBounds(drawing) {
+  if (drawing.type === "image") {
+    return {
+      left: drawing.x - drawing.w * 0.5,
+      top: drawing.y - drawing.h * 0.5,
+      right: drawing.x + drawing.w * 0.5,
+      bottom: drawing.y + drawing.h * 0.5,
+    };
+  }
+  if (!drawing.points?.length) {
+    return null;
+  }
+  return drawing.points.reduce(
+    (bounds, point) => ({
+      left: Math.min(bounds.left, point.x),
+      top: Math.min(bounds.top, point.y),
+      right: Math.max(bounds.right, point.x),
+      bottom: Math.max(bounds.bottom, point.y),
+    }),
+    { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
+  );
+}
+
+function distanceToSegment(point, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(point.x - a.x, point.y - a.y);
+  }
+  const t = clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy), 0, 1);
+  const closest = { x: a.x + dx * t, y: a.y + dy * t };
+  return Math.hypot(point.x - closest.x, point.y - closest.y);
+}
+
+function hitTestSetDrawing(set, point) {
+  for (let index = set.drawings.length - 1; index >= 0; index -= 1) {
+    const drawing = set.drawings[index];
+    if (drawing.type === "image") {
+      if (rectContainsPoint(getDrawingBounds(drawing), point.x, point.y)) {
+        return drawing;
+      }
+      continue;
+    }
+    for (let pointIndex = 1; pointIndex < drawing.points.length; pointIndex += 1) {
+      if (distanceToSegment(point, drawing.points[pointIndex - 1], drawing.points[pointIndex]) <= 8) {
+        return drawing;
+      }
+    }
+  }
+  return null;
+}
+
 function getSetMiniScriptTarget() {
   if (state.setMiniCodeItemId == null) {
     return null;
@@ -2794,8 +2986,10 @@ function getSetMiniScriptTarget() {
 
 function setSetEditorTool(tool) {
   state.setEditorTool = tool;
+  state.setSelection.clear();
   state.setSelectedLightId = null;
   state.setSelectedItemId = null;
+  state.setSelectedDrawingId = null;
   state.setPointerMoved = false;
   renderStageModule();
 }
@@ -2809,7 +3003,9 @@ function addStageSet() {
   const nextSet = createStageSet(createSetName());
   state.sets.push(nextSet);
   state.activeSetId = nextSet.id;
+  state.setSelection.clear();
   state.setSelectedItemId = null;
+  state.setSelectedDrawingId = null;
   state.setSelectedLightId = null;
   state.setMiniCodeItemId = null;
   markProjectDirty();
@@ -2818,7 +3014,9 @@ function addStageSet() {
 
 function selectStageSet(setId) {
   state.activeSetId = setId;
+  state.setSelection.clear();
   state.setSelectedItemId = null;
+  state.setSelectedDrawingId = null;
   state.setSelectedLightId = null;
   state.setMiniCodeItemId = null;
   state.scriptEditorMode = "main";
@@ -2839,9 +3037,8 @@ function placeSetItem(point) {
   }
   clampItemToStage(item);
   set.items.push(item);
-  state.setSelectedItemId = item.id;
+  setSetSelection([item.id]);
   markProjectDirty();
-  renderStageModule();
 }
 
 function applySetTextureAtPoint(point) {
@@ -2849,7 +3046,9 @@ function applySetTextureAtPoint(point) {
   const hit = hitTestSetItem(set, point.x, point.y);
   if (hit) {
     hit.textureId = state.setToolSelection.texture;
+    state.setSelection = new Set([hit.id]);
     state.setSelectedItemId = hit.id;
+    state.setSelectedDrawingId = null;
     markProjectDirty();
   }
 }
@@ -2858,7 +3057,9 @@ function openSetMiniCodePanel(itemId) {
   state.setMiniCodeItemId = itemId;
   state.selectedScriptBlockId = null;
   state.scriptEditorMode = "set";
+  state.setSelection = new Set([itemId]);
   state.setSelectedItemId = itemId;
+  state.setSelectedDrawingId = null;
   state.setSelectedLightId = null;
   elements.setMiniCodePanel.classList.remove("hidden");
   renderSetMiniCodePanel();
@@ -2873,12 +3074,21 @@ function closeSetMiniCodePanel() {
 
 function deleteSelectedSetThing() {
   const set = getActiveSet();
-  if (state.setSelectedItemId != null) {
-    set.items = set.items.filter((item) => item.id !== state.setSelectedItemId);
-    if (state.setMiniCodeItemId === state.setSelectedItemId) {
+  if (state.setSelection.size > 0) {
+    const deletedIds = new Set(state.setSelection);
+    set.items = set.items.filter((item) => !deletedIds.has(item.id));
+    if (deletedIds.has(state.setMiniCodeItemId)) {
       closeSetMiniCodePanel();
     }
+    state.setSelection.clear();
     state.setSelectedItemId = null;
+    markProjectDirty();
+    renderStageModule();
+    return true;
+  }
+  if (state.setSelectedDrawingId != null) {
+    set.drawings = set.drawings.filter((drawing) => drawing.id !== state.setSelectedDrawingId);
+    state.setSelectedDrawingId = null;
     markProjectDirty();
     renderStageModule();
     return true;
@@ -2891,6 +3101,59 @@ function deleteSelectedSetThing() {
     return true;
   }
   return false;
+}
+
+function copySetSelection() {
+  const set = getActiveSet();
+  state.setClipboard = {
+    items: getSetSelectedItems().map(serializeItem),
+    drawings: state.setSelectedDrawingId
+      ? set.drawings
+        .filter((drawing) => drawing.id === state.setSelectedDrawingId)
+        .map((drawing) => JSON.parse(JSON.stringify(drawing)))
+      : [],
+  };
+  elements.setEditorLabel.textContent = `Copied ${state.setClipboard.items.length + state.setClipboard.drawings.length} set item${state.setClipboard.items.length + state.setClipboard.drawings.length === 1 ? "" : "s"}.`;
+}
+
+function pasteSetClipboard() {
+  const set = getActiveSet();
+  const newIds = [];
+  for (const template of state.setClipboard.items) {
+    const item = normalizeItem({
+      ...template,
+      id: state.nextId++,
+      x: template.x + 28,
+      y: template.y + 28,
+      scripts: Array.isArray(template.scripts) ? template.scripts.map(deserializeBlock) : [],
+    });
+    clampItemToStage(item);
+    set.items.push(item);
+    newIds.push(item.id);
+  }
+
+  for (const template of state.setClipboard.drawings) {
+    const drawing = JSON.parse(JSON.stringify(template));
+    drawing.id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    if (drawing.type === "image") {
+      drawing.x += 28;
+      drawing.y += 28;
+    } else {
+      drawing.points = drawing.points.map((point) => ({ x: point.x + 28, y: point.y + 28 }));
+    }
+    set.drawings.push(drawing);
+    state.setSelectedDrawingId = drawing.id;
+  }
+
+  if (newIds.length > 0) {
+    setSetSelection(newIds);
+  } else {
+    state.setSelection.clear();
+    state.setSelectedItemId = null;
+    state.setSelectedLightId = null;
+    renderStageModule();
+  }
+  markProjectDirty();
 }
 
 function updateSelectedSetLightControls() {
@@ -2954,6 +3217,8 @@ function onSetPointerDown(event) {
     }
     state.setSelectedLightId = light.id;
     state.setSelectedItemId = null;
+    state.setSelectedDrawingId = null;
+    state.setSelection.clear();
     syncLightControls(light);
     state.setInteraction = { type: "dragLight", lightId: light.id, start: point, x: light.x, y: light.y };
     markProjectDirty();
@@ -2978,6 +3243,8 @@ function onSetPointerDown(event) {
   if (light) {
     state.setSelectedLightId = light.id;
     state.setSelectedItemId = null;
+    state.setSelectedDrawingId = null;
+    state.setSelection.clear();
     syncLightControls(light);
     state.setInteraction = { type: "dragLight", lightId: light.id, start: point, x: light.x, y: light.y };
     renderStageModule();
@@ -2986,15 +3253,50 @@ function onSetPointerDown(event) {
 
   const item = hitTestSetItem(set, point.x, point.y);
   if (item) {
-    const wasAlreadySelected = state.setSelectedItemId === item.id;
-    state.setSelectedItemId = item.id;
+    const wasAlreadySelected = state.setSelection.has(item.id);
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      if (state.setSelection.has(item.id)) {
+        state.setSelection.delete(item.id);
+      } else {
+        state.setSelection.add(item.id);
+      }
+    } else if (!state.setSelection.has(item.id)) {
+      state.setSelection = new Set([item.id]);
+    }
+    state.setSelectedItemId = state.setSelection.size === 1 ? [...state.setSelection][0] : null;
     state.setSelectedLightId = null;
-    state.setInteraction = { type: "dragItem", itemId: item.id, start: point, x: item.x, y: item.y, wasAlreadySelected };
+    state.setSelectedDrawingId = null;
+    const snapshot = new Map();
+    for (const selectedItem of getSetSelectedItems()) {
+      snapshot.set(selectedItem.id, { x: selectedItem.x, y: selectedItem.y });
+    }
+    state.setInteraction = { type: "dragItem", itemId: item.id, start: point, snapshot, wasAlreadySelected };
+    renderStageModule();
+    return;
+  }
+
+  const drawing = hitTestSetDrawing(set, point);
+  if (drawing) {
+    state.setSelection.clear();
+    state.setSelectedItemId = null;
+    state.setSelectedLightId = null;
+    state.setSelectedDrawingId = drawing.id;
+    const bounds = getDrawingBounds(drawing);
+    state.setInteraction = {
+      type: "dragDrawing",
+      drawingId: drawing.id,
+      start: point,
+      x: drawing.x,
+      y: drawing.y,
+      points: drawing.points?.map((drawingPoint) => ({ ...drawingPoint })) || [],
+      bounds,
+    };
     renderStageModule();
     return;
   }
 
   clearSetSelection();
+  state.setInteraction = { type: "setMarquee", start: point, current: point };
 }
 
 function onSetPointerMove(event) {
@@ -3020,13 +3322,40 @@ function onSetPointerMove(event) {
   }
 
   if (state.setInteraction.type === "dragItem") {
-    const item = set.items.find((candidate) => candidate.id === state.setInteraction.itemId);
-    if (item) {
-      item.x = state.setInteraction.x + point.x - state.setInteraction.start.x;
-      item.y = state.setInteraction.y + point.y - state.setInteraction.start.y;
+    const dx = point.x - state.setInteraction.start.x;
+    const dy = point.y - state.setInteraction.start.y;
+    for (const item of getSetSelectedItems()) {
+      const snapshot = state.setInteraction.snapshot.get(item.id);
+      if (!snapshot) {
+        continue;
+      }
+      item.x = snapshot.x + dx;
+      item.y = snapshot.y + dy;
       clampItemToStage(item);
       markProjectDirty();
     }
+    return;
+  }
+
+  if (state.setInteraction.type === "dragDrawing") {
+    const drawing = set.drawings.find((candidate) => candidate.id === state.setInteraction.drawingId);
+    const dx = point.x - state.setInteraction.start.x;
+    const dy = point.y - state.setInteraction.start.y;
+    if (drawing?.type === "image") {
+      drawing.x = state.setInteraction.x + dx;
+      drawing.y = state.setInteraction.y + dy;
+    } else if (drawing) {
+      drawing.points = state.setInteraction.points.map((drawingPoint) => ({
+        x: drawingPoint.x + dx,
+        y: drawingPoint.y + dy,
+      }));
+    }
+    markProjectDirty();
+    return;
+  }
+
+  if (state.setInteraction.type === "setMarquee") {
+    state.setInteraction.current = point;
     return;
   }
 
@@ -3060,6 +3389,22 @@ function onSetPointerUp(event) {
   ) {
     clearSetSelection();
   }
+  if (state.setInteraction?.type === "setMarquee") {
+    const { start, current } = state.setInteraction;
+    const marquee = {
+      left: Math.min(start.x, current.x),
+      top: Math.min(start.y, current.y),
+      right: Math.max(start.x, current.x),
+      bottom: Math.max(start.y, current.y),
+    };
+    if (Math.abs(current.x - start.x) > 4 || Math.abs(current.y - start.y) > 4) {
+      setSetSelection(
+        getActiveSet().items
+          .filter((item) => rectContainsRect(marquee, getItemBounds(item)))
+          .map((item) => item.id),
+      );
+    }
+  }
   state.setInteraction = null;
   state.setPointerMoved = false;
   if (event?.pointerId != null) {
@@ -3075,7 +3420,6 @@ function onSetContextMenu(event) {
   const point = getSetCanvasPoint(event);
   const item = hitTestSetItem(getActiveSet(), point.x, point.y);
   if (item) {
-    state.setSelectedItemId = item.id;
     openSetMiniCodePanel(item.id);
     renderStageModule();
   }
@@ -3313,12 +3657,20 @@ function handleKeyDown(event) {
 
   if ((event.ctrlKey || event.metaKey) && key === "c") {
     event.preventDefault();
+    if (state.stageModuleOpen) {
+      copySetSelection();
+      return;
+    }
     copySelection();
     return;
   }
 
   if ((event.ctrlKey || event.metaKey) && key === "v") {
     event.preventDefault();
+    if (state.stageModuleOpen) {
+      pasteSetClipboard();
+      return;
+    }
     pasteClipboard();
     return;
   }
@@ -3440,6 +3792,17 @@ function ensureCanvasSize() {
 function buildPattern(textureId) {
   if (patternCache.has(textureId)) {
     return patternCache.get(textureId);
+  }
+
+  const customTexture = state.customTextures.find((texture) => texture.id === textureId);
+  if (customTexture?.imageData) {
+    const image = getImportedImage(customTexture.imageData);
+    if (!image?.complete || image.naturalWidth === 0) {
+      return null;
+    }
+    const pattern = ctx.createPattern(image, "repeat");
+    patternCache.set(textureId, pattern);
+    return pattern;
   }
 
   const canvas = document.createElement("canvas");
@@ -3640,6 +4003,24 @@ function resolveFill(item, fallbackColor) {
   return buildPattern(item.textureId) || fallbackColor;
 }
 
+function drawImportedImageItem(item, imageData, fallbackColor) {
+  const image = getImportedImage(imageData);
+  const size = getItemSize(item);
+  const visual = item.runtime?.visual ?? createItemRuntime().visual;
+  drawShadow(item);
+
+  ctx.save();
+  ctx.translate(item.x + visual.offsetX, item.y + visual.offsetY);
+  ctx.rotate(visual.rotation);
+  ctx.scale(item.facing * visual.scaleX, visual.scaleY);
+  if (image?.complete && image.naturalWidth > 0) {
+    ctx.drawImage(image, -size.w * 0.5, -size.h * 0.5, size.w, size.h);
+  } else {
+    drawFilledRoundedRect(ctx, -size.w * 0.5, -size.h * 0.5, size.w, size.h, 16, fallbackColor, "rgba(47, 28, 15, 0.7)");
+  }
+  ctx.restore();
+}
+
 function drawShadow(item) {
   const size = getItemSize(item);
   const visual = item.runtime?.visual ?? createItemRuntime().visual;
@@ -3661,7 +4042,11 @@ function drawShadow(item) {
 }
 
 function drawCharacter(item) {
-  const character = characterMap.get(item.subtype);
+  const character = getCharacterDef(item.subtype);
+  if (character.imageData) {
+    drawImportedImageItem(item, character.imageData, "#dfe8f4");
+    return;
+  }
   const bodyFill = resolveFill(item, character.bodyColor);
   const scale = (item.sizePct || 100) / 100;
   const visual = item.runtime?.visual ?? createItemRuntime().visual;
@@ -3823,7 +4208,11 @@ function drawCharacter(item) {
 }
 
 function drawObject(item) {
-  const objectDef = objectMap.get(item.subtype);
+  const objectDef = getObjectDef(item.subtype);
+  if (objectDef.imageData) {
+    drawImportedImageItem(item, objectDef.imageData, "#f4a261");
+    return;
+  }
   const fillStyle = resolveFill(item, objectDef.baseColor);
   const scale = (item.sizePct || 100) / 100;
   const visual = item.runtime?.visual ?? createItemRuntime().visual;
@@ -4030,6 +4419,13 @@ function drawSetDrawings(set) {
   ctx.lineJoin = "round";
   ctx.lineWidth = 5;
   for (const drawing of set.drawings) {
+    if (drawing.type === "image") {
+      const image = getImportedImage(drawing.imageData);
+      if (image?.complete && image.naturalWidth > 0) {
+        ctx.drawImage(image, drawing.x - drawing.w * 0.5, drawing.y - drawing.h * 0.5, drawing.w, drawing.h);
+      }
+      continue;
+    }
     if (!drawing.points || drawing.points.length < 2) {
       continue;
     }
@@ -4044,6 +4440,38 @@ function drawSetDrawings(set) {
     });
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+function drawDrawingSelection(drawing) {
+  const bounds = getDrawingBounds(drawing);
+  if (!bounds) {
+    return;
+  }
+  ctx.save();
+  ctx.strokeStyle = "#2f8f83";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([7, 6]);
+  ctx.strokeRect(bounds.left - 8, bounds.top - 8, bounds.right - bounds.left + 16, bounds.bottom - bounds.top + 16);
+  ctx.restore();
+}
+
+function drawSetMarquee() {
+  if (!state.setInteraction || state.setInteraction.type !== "setMarquee") {
+    return;
+  }
+  const { start, current } = state.setInteraction;
+  const left = Math.min(start.x, current.x);
+  const top = Math.min(start.y, current.y);
+  const width = Math.abs(current.x - start.x);
+  const height = Math.abs(current.y - start.y);
+  ctx.save();
+  ctx.fillStyle = "rgba(47, 143, 131, 0.12)";
+  ctx.strokeStyle = "rgba(47, 143, 131, 0.95)";
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([8, 5]);
+  ctx.fillRect(left, top, width, height);
+  ctx.strokeRect(left, top, width, height);
   ctx.restore();
 }
 
@@ -4095,11 +4523,21 @@ function drawSetContent(set, options = {}) {
 
   if (showEditorHandles) {
     for (const item of set.items) {
-      if (item.id === state.setSelectedItemId) {
+      if (state.setSelection.has(item.id)) {
         drawSelectionOutline(item);
-        drawResizeHandles(item);
       }
     }
+    if (state.setSelection.size === 1) {
+      const selectedItem = getSetSelectedItem();
+      if (selectedItem) {
+        drawResizeHandles(selectedItem);
+      }
+    }
+    const selectedDrawing = set.drawings.find((drawing) => drawing.id === state.setSelectedDrawingId);
+    if (selectedDrawing) {
+      drawDrawingSelection(selectedDrawing);
+    }
+    drawSetMarquee();
   }
 }
 
@@ -4507,6 +4945,10 @@ function buildToolCard(definition, options) {
   } else if (options.previewType === "background") {
     preview.style.background = definition.preview;
   }
+  if (definition.imageData) {
+    preview.textContent = "";
+    preview.style.background = `center / contain no-repeat url("${definition.imageData}"), linear-gradient(135deg, #fff8ed, #f7ead7)`;
+  }
 
   const title = document.createElement("div");
   title.className = "tool-card-title";
@@ -4522,7 +4964,10 @@ function buildToolCard(definition, options) {
 }
 
 function populateToolLists() {
-  for (const character of CHARACTER_DEFS) {
+  elements.characterList.innerHTML = "";
+  elements.textureList.innerHTML = "";
+  elements.objectList.innerHTML = "";
+  for (const character of getCharacterDefs()) {
     elements.characterList.append(
       buildToolCard(character, {
         toolType: "character",
@@ -4532,7 +4977,7 @@ function populateToolLists() {
     );
   }
 
-  for (const texture of TEXTURE_DEFS) {
+  for (const texture of getTextureDefs()) {
     elements.textureList.append(
       buildToolCard(texture, {
         toolType: "texture",
@@ -4542,7 +4987,7 @@ function populateToolLists() {
     );
   }
 
-  for (const objectDef of OBJECT_DEFS) {
+  for (const objectDef of getObjectDefs()) {
     elements.objectList.append(
       buildToolCard(objectDef, {
         toolType: "object",
@@ -4567,6 +5012,10 @@ function buildSetToolCard(definition, options) {
   } else {
     preview.style.background = definition.preview;
   }
+  if (definition.imageData) {
+    preview.textContent = "";
+    preview.style.background = `center / contain no-repeat url("${definition.imageData}"), linear-gradient(135deg, #fff8ed, #f7ead7)`;
+  }
 
   const title = document.createElement("div");
   title.className = "tool-card-title";
@@ -4585,6 +5034,10 @@ function buildSetToolCard(definition, options) {
 }
 
 function populateSetToolLists() {
+  elements.setBaseColors.innerHTML = "";
+  elements.setCharacterList.innerHTML = "";
+  elements.setObjectList.innerHTML = "";
+  elements.setTextureList.innerHTML = "";
   for (const color of SET_PEN_COLORS) {
     const button = document.createElement("button");
     button.type = "button";
@@ -4599,7 +5052,7 @@ function populateSetToolLists() {
     elements.setBaseColors.append(button);
   }
 
-  for (const character of CHARACTER_DEFS) {
+  for (const character of getCharacterDefs()) {
     elements.setCharacterList.append(
       buildSetToolCard(character, {
         toolType: "character",
@@ -4609,7 +5062,7 @@ function populateSetToolLists() {
     );
   }
 
-  for (const objectDef of OBJECT_DEFS) {
+  for (const objectDef of getObjectDefs()) {
     elements.setObjectList.append(
       buildSetToolCard(objectDef, {
         toolType: "object",
@@ -4619,7 +5072,7 @@ function populateSetToolLists() {
     );
   }
 
-  for (const texture of TEXTURE_DEFS) {
+  for (const texture of getTextureDefs()) {
     elements.setTextureList.append(
       buildSetToolCard(texture, {
         toolType: "texture",
@@ -4726,6 +5179,103 @@ function renderStageModule() {
   }
 }
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function createImportedAssetName(file, fallback) {
+  return file?.name ? file.name.replace(/\.[^.]+$/, "") : fallback;
+}
+
+async function importImageAsset(kind, file) {
+  if (!file) {
+    return;
+  }
+  const imageData = await readFileAsDataUrl(file);
+  const id = `custom-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const name = createImportedAssetName(file, `Imported ${kind}`);
+
+  if (kind === "character") {
+    state.customCharacters.push({
+      id,
+      name,
+      preview: "IMG",
+      copy: "Imported from your computer.",
+      imageData,
+    });
+    state.setToolSelection.character = id;
+    setActiveTool("character", id);
+  } else if (kind === "object") {
+    state.customObjects.push({
+      id,
+      name,
+      preview: "IMG",
+      copy: "Imported prop image.",
+      imageData,
+      baseColor: "#f4a261",
+    });
+    state.setToolSelection.object = id;
+    setActiveTool("object", id);
+  } else if (kind === "texture") {
+    state.customTextures.push({
+      id,
+      name,
+      copy: "Imported texture image.",
+      preview: `center / cover no-repeat url("${imageData}")`,
+      imageData,
+    });
+    state.setToolSelection.texture = id;
+    setActiveTool("texture", id);
+  } else if (kind === "stage") {
+    const set = getActiveSet();
+    const drawing = {
+      id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: "image",
+      color: "#ffffff",
+      imageData,
+      x: state.stageWidth * 0.5,
+      y: state.stageHeight * 0.5,
+      w: state.stageWidth * 0.58,
+      h: state.stageHeight * 0.46,
+      points: [],
+    };
+    set.drawings.push(drawing);
+    state.setSelectedDrawingId = drawing.id;
+    state.setSelection.clear();
+    state.setSelectedItemId = null;
+    state.setSelectedLightId = null;
+    renderStageModule();
+  }
+
+  populateToolLists();
+  populateSetToolLists();
+  renderScriptPalette();
+  renderActiveScriptEditor();
+  markProjectDirty();
+  saveProjectState();
+}
+
+async function importMusicAsset(file, blockId = null) {
+  if (!file) {
+    return;
+  }
+  const dataUrl = await readFileAsDataUrl(file);
+  const value = `custom-music-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const label = createImportedAssetName(file, "Imported music");
+  state.customMusic.push({ value, label, dataUrl });
+  if (blockId) {
+    updateBlockParam(blockId, "musicId", value);
+  }
+  markProjectDirty();
+  saveProjectState();
+  renderActiveScriptEditor();
+}
+
 function bindEvents() {
   elements.playButton.addEventListener("click", goToStudio);
   elements.libraryButton.addEventListener("click", openLibrary);
@@ -4738,6 +5288,31 @@ function bindEvents() {
   elements.stopButton.addEventListener("click", stopRecording);
   elements.openLibraryButton.addEventListener("click", openLibrary);
   elements.scriptsModuleCloseButton.addEventListener("click", closeScriptsModule);
+  elements.importCharacterButton.addEventListener("click", () => elements.importCharacterInput.click());
+  elements.importTextureButton.addEventListener("click", () => elements.importTextureInput.click());
+  elements.importObjectButton.addEventListener("click", () => elements.importObjectInput.click());
+  elements.importStageButton.addEventListener("click", () => elements.importStageInput.click());
+  elements.importCharacterInput.addEventListener("change", () => {
+    importImageAsset("character", elements.importCharacterInput.files?.[0]);
+    elements.importCharacterInput.value = "";
+  });
+  elements.importTextureInput.addEventListener("change", () => {
+    importImageAsset("texture", elements.importTextureInput.files?.[0]);
+    elements.importTextureInput.value = "";
+  });
+  elements.importObjectInput.addEventListener("change", () => {
+    importImageAsset("object", elements.importObjectInput.files?.[0]);
+    elements.importObjectInput.value = "";
+  });
+  elements.importStageInput.addEventListener("change", () => {
+    importImageAsset("stage", elements.importStageInput.files?.[0]);
+    elements.importStageInput.value = "";
+  });
+  elements.importMusicInput.addEventListener("change", () => {
+    importMusicAsset(elements.importMusicInput.files?.[0], elements.importMusicInput.dataset.blockId || null);
+    elements.importMusicInput.value = "";
+    elements.importMusicInput.dataset.blockId = "";
+  });
   elements.stageModuleCloseButton.addEventListener("click", closeStageModule);
   elements.addSetButton.addEventListener("click", addStageSet);
   elements.setMiniCodeCloseButton.addEventListener("click", closeSetMiniCodePanel);

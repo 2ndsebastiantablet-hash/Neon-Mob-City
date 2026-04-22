@@ -64,14 +64,17 @@
 
           <div class="sidebar-card">
             <section id="charactersPanel" class="tool-panel" aria-label="Characters">
+              <button id="importCharacterButton" type="button" class="secondary-button full-width import-button">Import Character Image</button>
               <div id="characterList" class="tool-grid character-grid"></div>
             </section>
 
             <section id="texturesPanel" class="tool-panel hidden" aria-label="Textures">
+              <button id="importTextureButton" type="button" class="secondary-button full-width import-button">Import Texture Image</button>
               <div id="textureList" class="tool-grid texture-grid"></div>
             </section>
 
             <section id="objectsPanel" class="tool-panel hidden" aria-label="Objects">
+              <button id="importObjectButton" type="button" class="secondary-button full-width import-button">Import Object Image</button>
               <div id="objectList" class="tool-grid object-grid"></div>
             </section>
 
@@ -203,6 +206,7 @@
                 <label class="set-control-label">Tint <input id="setLightColor" type="color" value="#fff2a6"></label>
                 <label class="set-control-label">Brightness <input id="setLightBrightness" type="range" min="0" max="100" value="55"></label>
               </div>
+              <button id="importStageButton" type="button" class="secondary-button full-width import-button">Import Stage Image</button>
             </aside>
           </div>
 
@@ -229,6 +233,12 @@
         </div>
       </section>
     </section>
+
+    <input id="importCharacterInput" class="hidden" type="file" accept="image/*">
+    <input id="importTextureInput" class="hidden" type="file" accept="image/*">
+    <input id="importObjectInput" class="hidden" type="file" accept="image/*">
+    <input id="importStageInput" class="hidden" type="file" accept="image/*">
+    <input id="importMusicInput" class="hidden" type="file" accept="audio/*">
 
     <section id="libraryScreen" class="screen library-screen hidden" aria-label="Recording library">
       <header class="topbar">
