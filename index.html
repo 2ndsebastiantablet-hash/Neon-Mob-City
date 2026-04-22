@@ -50,6 +50,24 @@
             <p id="selectionLabel" class="stage-status">No selection.</p>
             <p id="toolLabel" class="stage-status subtle">Choose a tool on the right, then click on the stage.</p>
           </div>
+          <div id="actorContextMenu" class="actor-context-menu hidden">
+            <button id="actorContextCodeButton" type="button">Code</button>
+            <button id="actorContextPenButton" type="button">Pen Animation</button>
+          </div>
+          <div id="penAnimationPanel" class="pen-animation-panel hidden">
+            <div class="texture-editor-header">
+              <strong id="penAnimationTitle">Pen Animation</strong>
+              <button id="closePenAnimationButton" type="button" class="ghost-button">Close</button>
+            </div>
+            <div class="pen-animation-actions">
+              <button id="penLineToolButton" type="button" class="secondary-button">Straight Line</button>
+              <button id="penFreehandToolButton" type="button" class="secondary-button">Freehand Pen</button>
+              <button id="previewPenAnimationButton" type="button" class="ghost-button">Preview</button>
+              <button id="deletePenAnimationButton" type="button" class="ghost-button">Delete</button>
+            </div>
+            <label class="set-control-label">Duration seconds <input id="penAnimationDuration" type="number" min="0.1" max="60" step="0.1" value="2"></label>
+            <p id="penAnimationHelp">Pick a tool, then draw a motion path starting from the actor.</p>
+          </div>
         </section>
 
         <aside class="sidebar" aria-label="Scene tools">
@@ -70,7 +88,17 @@
 
             <section id="texturesPanel" class="tool-panel hidden" aria-label="Textures">
               <button id="importTextureButton" type="button" class="secondary-button full-width import-button">Import Texture Image</button>
+              <button id="editTextureButton" type="button" class="ghost-button full-width import-button">Edit Selected Texture</button>
               <div id="textureList" class="tool-grid texture-grid"></div>
+              <div id="textureEditorPanel" class="texture-editor-panel hidden">
+                <div class="texture-editor-header">
+                  <strong id="textureEditorTitle">Texture Editor</strong>
+                  <button id="closeTextureEditorButton" type="button" class="ghost-button">Close</button>
+                </div>
+                <canvas id="textureEditorCanvas" aria-label="Texture drawing editor"></canvas>
+                <label class="set-control-label">Pen color <input id="textureEditorColor" type="color" value="#2f8f83"></label>
+                <button id="saveTextureEditorButton" type="button" class="secondary-button full-width">Save Texture Drawing</button>
+              </div>
             </section>
 
             <section id="objectsPanel" class="tool-panel hidden" aria-label="Objects">

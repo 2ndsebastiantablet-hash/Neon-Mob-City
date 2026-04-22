@@ -538,6 +538,7 @@ const elements = {
   objectList: document.querySelector("#objectList"),
   importCharacterButton: document.querySelector("#importCharacterButton"),
   importTextureButton: document.querySelector("#importTextureButton"),
+  editTextureButton: document.querySelector("#editTextureButton"),
   importObjectButton: document.querySelector("#importObjectButton"),
   importStageButton: document.querySelector("#importStageButton"),
   importCharacterInput: document.querySelector("#importCharacterInput"),
@@ -545,6 +546,24 @@ const elements = {
   importObjectInput: document.querySelector("#importObjectInput"),
   importStageInput: document.querySelector("#importStageInput"),
   importMusicInput: document.querySelector("#importMusicInput"),
+  textureEditorPanel: document.querySelector("#textureEditorPanel"),
+  textureEditorTitle: document.querySelector("#textureEditorTitle"),
+  textureEditorCanvas: document.querySelector("#textureEditorCanvas"),
+  textureEditorColor: document.querySelector("#textureEditorColor"),
+  closeTextureEditorButton: document.querySelector("#closeTextureEditorButton"),
+  saveTextureEditorButton: document.querySelector("#saveTextureEditorButton"),
+  actorContextMenu: document.querySelector("#actorContextMenu"),
+  actorContextCodeButton: document.querySelector("#actorContextCodeButton"),
+  actorContextPenButton: document.querySelector("#actorContextPenButton"),
+  penAnimationPanel: document.querySelector("#penAnimationPanel"),
+  penAnimationTitle: document.querySelector("#penAnimationTitle"),
+  penAnimationDuration: document.querySelector("#penAnimationDuration"),
+  penAnimationHelp: document.querySelector("#penAnimationHelp"),
+  penLineToolButton: document.querySelector("#penLineToolButton"),
+  penFreehandToolButton: document.querySelector("#penFreehandToolButton"),
+  previewPenAnimationButton: document.querySelector("#previewPenAnimationButton"),
+  deletePenAnimationButton: document.querySelector("#deletePenAnimationButton"),
+  closePenAnimationButton: document.querySelector("#closePenAnimationButton"),
   scriptsModule: document.querySelector("#scriptsModule"),
   scriptsModuleCloseButton: document.querySelector("#scriptsModuleCloseButton"),
   stageModule: document.querySelector("#stageModule"),
@@ -596,6 +615,7 @@ const importedImageCache = new Map();
 const setCanvas = elements.setCanvas;
 const setFrame = setCanvas.parentElement;
 const setCtx = setCanvas.getContext("2d");
+const textureEditorCtx = elements.textureEditorCanvas.getContext("2d");
 
 const state = {
   screen: "menu",
@@ -645,6 +665,17 @@ const state = {
   selection: new Set(),
   clipboard: [],
   interaction: null,
+  contextActorId: null,
+  penAnimation: {
+    actorId: null,
+    tool: null,
+    drawing: false,
+    preview: null,
+  },
+  textureEditor: {
+    textureId: null,
+    drawing: false,
+  },
   dragPaintedIds: new Set(),
   lastPointer: { x: 0, y: 0, inside: false },
   nextId: 1,
@@ -657,6 +688,7 @@ const state = {
   lastProjectSaveTime: 0,
   projectDirty: false,
   scriptRunners: [],
+  penAnimationRunners: [],
   stopAllScriptsRequested: false,
   globalVolume: 0.65,
   audio: {
@@ -816,8 +848,34 @@ function getImportedImage(imageData) {
   }
   const image = new Image();
   image.src = imageData;
+  image.onload = () => {
+    patternCaches.stage.clear();
+    patternCaches.recording.clear();
+    patternCaches.set.clear();
+  };
   importedImageCache.set(imageData, image);
   return image;
+}
+
+function normalizePenAnimation(animation) {
+  if (!animation) {
+    return null;
+  }
+  return {
+    type: animation.type === "line" ? "line" : "freehand",
+    duration: clamp(Number(animation.duration || 2), 0.1, 60),
+    points: Array.isArray(animation.points)
+      ? animation.points.map((point) => ({ x: Number(point.x || 0), y: Number(point.y || 0) }))
+      : [],
+  };
+}
+
+function serializePenAnimation(animation) {
+  return {
+    type: animation.type,
+    duration: animation.duration,
+    points: animation.points.map((point) => ({ x: point.x, y: point.y })),
+  };
 }
 
 function normalizeItem(item) {
@@ -825,7 +883,10 @@ function normalizeItem(item) {
     ...item,
     facing: item.facing === -1 ? -1 : 1,
     sizePct: typeof item.sizePct === "number" ? item.sizePct : 100,
+    scaleX: typeof item.scaleX === "number" ? item.scaleX : 1,
+    scaleY: typeof item.scaleY === "number" ? item.scaleY : 1,
     imageData: item.imageData || null,
+    penAnimation: item.penAnimation ? normalizePenAnimation(item.penAnimation) : null,
     scripts: Array.isArray(item.scripts) ? item.scripts.map(deserializeBlock) : [],
     runtime: createItemRuntime(),
   };
@@ -862,6 +923,9 @@ function serializeItem(item) {
     imageData: item.imageData || null,
     facing: item.facing,
     sizePct: item.sizePct,
+    scaleX: item.scaleX,
+    scaleY: item.scaleY,
+    penAnimation: item.penAnimation ? serializePenAnimation(item.penAnimation) : null,
     scripts: item.scripts.map(serializeBlock),
   };
 }
@@ -1127,8 +1191,8 @@ function createBlockFromType(type) {
 function getItemSize(item) {
   const scale = clamp((item.sizePct || 100) / 100, 0.2, 3);
   return {
-    w: item.w * scale,
-    h: item.h * scale,
+    w: item.w * scale * (item.scaleX || 1),
+    h: item.h * scale * (item.scaleY || 1),
   };
 }
 
@@ -1997,6 +2061,7 @@ function setLoopAnimation(item, type, seconds) {
 
 function clearAllScriptRunners() {
   state.scriptRunners = [];
+  state.penAnimationRunners = [];
   state.stopAllScriptsRequested = false;
   for (const item of state.items) {
     item.runtime.animation = null;
@@ -2073,6 +2138,74 @@ function createTimedMoveRunner(actor, dx, dy, duration) {
       }
     },
   };
+}
+
+function createPenAnimationRunner(actor, animation, options = {}) {
+  const sourcePoints = animation.points?.length >= 2 ? animation.points : null;
+  if (!actor || !sourcePoints) {
+    return { done: true, update() {} };
+  }
+  const offsetX = actor.x - sourcePoints[0].x;
+  const offsetY = actor.y - sourcePoints[0].y;
+  const points = sourcePoints.map((point) => ({ x: point.x + offsetX, y: point.y + offsetY }));
+  const lengths = [];
+  let totalLength = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const length = Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
+    lengths.push(length);
+    totalLength += length;
+  }
+  const duration = Math.max(0.1, Number(animation.duration || 2));
+  let elapsed = 0;
+
+  return {
+    actorId: actor.id,
+    preview: Boolean(options.preview),
+    done: totalLength <= 0,
+    update(deltaSeconds) {
+      if (this.done) {
+        return;
+      }
+      elapsed += deltaSeconds;
+      const targetDistance = totalLength * clamp(elapsed / duration, 0, 1);
+      let walked = 0;
+      for (let index = 0; index < lengths.length; index += 1) {
+        const segmentLength = lengths[index];
+        if (walked + segmentLength >= targetDistance) {
+          const progress = segmentLength === 0 ? 1 : (targetDistance - walked) / segmentLength;
+          actor.x = points[index].x + (points[index + 1].x - points[index].x) * progress;
+          actor.y = points[index].y + (points[index + 1].y - points[index].y) * progress;
+          clampItemToStage(actor);
+          break;
+        }
+        walked += segmentLength;
+      }
+      if (elapsed >= duration) {
+        actor.x = points[points.length - 1].x;
+        actor.y = points[points.length - 1].y;
+        if (options.restorePosition) {
+          actor.x = options.restorePosition.x;
+          actor.y = options.restorePosition.y;
+        }
+        this.done = true;
+      }
+    },
+  };
+}
+
+function startPenAnimationRunners() {
+  for (const actor of state.items) {
+    if (actor.penAnimation?.points?.length >= 2) {
+      state.penAnimationRunners.push(createPenAnimationRunner(actor, actor.penAnimation));
+    }
+  }
+}
+
+function updatePenAnimationRunners(deltaSeconds) {
+  for (const runner of state.penAnimationRunners) {
+    runner.update(deltaSeconds);
+  }
+  state.penAnimationRunners = state.penAnimationRunners.filter((runner) => !runner.done);
 }
 
 function createInstantRunner(action) {
@@ -2495,6 +2628,8 @@ function updateScripts(deltaSeconds) {
   } else {
     state.scriptRunners = state.scriptRunners.filter((run) => !run.stopped);
   }
+
+  updatePenAnimationRunners(deltaSeconds);
 }
 
 function clamp(value, min, max) {
@@ -2925,6 +3060,91 @@ function hitTestResizeHandle(item, point) {
   return null;
 }
 
+function applyResizeFromHandle(item, handleId, point, startBounds) {
+  const minSize = 18;
+  const centerX = (startBounds.left + startBounds.right) * 0.5;
+  const centerY = (startBounds.top + startBounds.bottom) * 0.5;
+  let width = startBounds.right - startBounds.left;
+  let height = startBounds.bottom - startBounds.top;
+
+  if (handleId.includes("e") || handleId.includes("w")) {
+    width = Math.max(minSize, Math.abs(point.x - centerX) * 2);
+  }
+  if (handleId.includes("n") || handleId.includes("s")) {
+    height = Math.max(minSize, Math.abs(point.y - centerY) * 2);
+  }
+
+  if (handleId.length === 2) {
+    const ratio = Math.max(width / Math.max(minSize, startBounds.right - startBounds.left), height / Math.max(minSize, startBounds.bottom - startBounds.top));
+    width = Math.max(minSize, (startBounds.right - startBounds.left) * ratio);
+    height = Math.max(minSize, (startBounds.bottom - startBounds.top) * ratio);
+  }
+
+  const baseScale = clamp((item.sizePct || 100) / 100, 0.2, 3);
+  item.scaleX = clamp(width / Math.max(1, item.w * baseScale), 0.15, 8);
+  item.scaleY = clamp(height / Math.max(1, item.h * baseScale), 0.15, 8);
+  clampItemToStage(item);
+  markProjectDirty();
+}
+
+function applyDrawingResizeFromHandle(drawing, handleId, point, startBounds) {
+  if (drawing.type !== "image") {
+    return;
+  }
+  const minSize = 24;
+  const centerX = (startBounds.left + startBounds.right) * 0.5;
+  const centerY = (startBounds.top + startBounds.bottom) * 0.5;
+  let width = startBounds.right - startBounds.left;
+  let height = startBounds.bottom - startBounds.top;
+
+  if (handleId.includes("e") || handleId.includes("w")) {
+    width = Math.max(minSize, Math.abs(point.x - centerX) * 2);
+  }
+  if (handleId.includes("n") || handleId.includes("s")) {
+    height = Math.max(minSize, Math.abs(point.y - centerY) * 2);
+  }
+  if (handleId.length === 2) {
+    const ratio = Math.max(width / Math.max(minSize, startBounds.right - startBounds.left), height / Math.max(minSize, startBounds.bottom - startBounds.top));
+    width = Math.max(minSize, (startBounds.right - startBounds.left) * ratio);
+    height = Math.max(minSize, (startBounds.bottom - startBounds.top) * ratio);
+  }
+
+  drawing.w = width;
+  drawing.h = height;
+  markProjectDirty();
+}
+
+function getDrawingResizeHandles(drawing) {
+  const bounds = getDrawingBounds(drawing);
+  if (!bounds) {
+    return [];
+  }
+  const centerX = (bounds.left + bounds.right) * 0.5;
+  const centerY = (bounds.top + bounds.bottom) * 0.5;
+  return [
+    { id: "nw", x: bounds.left, y: bounds.top },
+    { id: "n", x: centerX, y: bounds.top },
+    { id: "ne", x: bounds.right, y: bounds.top },
+    { id: "e", x: bounds.right, y: centerY },
+    { id: "se", x: bounds.right, y: bounds.bottom },
+    { id: "s", x: centerX, y: bounds.bottom },
+    { id: "sw", x: bounds.left, y: bounds.bottom },
+    { id: "w", x: bounds.left, y: centerY },
+  ];
+}
+
+function hitTestDrawingResizeHandle(drawing, point) {
+  if (!drawing || drawing.type !== "image") {
+    return null;
+  }
+  for (const handle of getDrawingResizeHandles(drawing)) {
+    if (Math.hypot(handle.x - point.x, handle.y - point.y) <= 13) {
+      return handle;
+    }
+  }
+  return null;
+}
+
 function getDrawingBounds(drawing) {
   if (drawing.type === "image") {
     return {
@@ -3228,13 +3448,24 @@ function onSetPointerDown(event) {
   const resizeHandle = hitTestResizeHandle(getSetSelectedItem(), point);
   if (resizeHandle) {
     const item = getSetSelectedItem();
-    const startDistance = Math.max(1, Math.hypot(point.x - item.x, point.y - item.y));
     state.setInteraction = {
       type: "resizeItem",
       itemId: item.id,
       start: point,
-      startDistance,
-      startSizePct: item.sizePct || 100,
+      handleId: resizeHandle.id,
+      startBounds: getItemBounds(item),
+    };
+    return;
+  }
+
+  const selectedDrawing = set.drawings.find((drawing) => drawing.id === state.setSelectedDrawingId);
+  const drawingResizeHandle = hitTestDrawingResizeHandle(selectedDrawing, point);
+  if (drawingResizeHandle) {
+    state.setInteraction = {
+      type: "resizeDrawing",
+      drawingId: selectedDrawing.id,
+      handleId: drawingResizeHandle.id,
+      startBounds: getDrawingBounds(selectedDrawing),
     };
     return;
   }
@@ -3362,11 +3593,15 @@ function onSetPointerMove(event) {
   if (state.setInteraction.type === "resizeItem") {
     const item = set.items.find((candidate) => candidate.id === state.setInteraction.itemId);
     if (item) {
-      const distance = Math.max(1, Math.hypot(point.x - item.x, point.y - item.y));
-      const scale = distance / state.setInteraction.startDistance;
-      item.sizePct = clamp(state.setInteraction.startSizePct * scale, 20, 300);
-      clampItemToStage(item);
-      markProjectDirty();
+      applyResizeFromHandle(item, state.setInteraction.handleId, point, state.setInteraction.startBounds);
+    }
+    return;
+  }
+
+  if (state.setInteraction.type === "resizeDrawing") {
+    const drawing = set.drawings.find((candidate) => candidate.id === state.setInteraction.drawingId);
+    if (drawing) {
+      applyDrawingResizeFromHandle(drawing, state.setInteraction.handleId, point, state.setInteraction.startBounds);
     }
     return;
   }
@@ -3478,6 +3713,12 @@ function onPointerDown(event) {
   const point = getCanvasPoint(event);
   state.lastPointer = { x: point.x, y: point.y, inside: true };
   stageCanvas.setPointerCapture?.(event.pointerId);
+  hideActorContextMenu();
+
+  if (state.penAnimation.actorId && state.penAnimation.tool) {
+    startPenAnimationDrawing(point);
+    return;
+  }
 
   if (state.activeTool && (state.activeTool.type === "character" || state.activeTool.type === "object")) {
     placeItemFromTool(point);
@@ -3488,6 +3729,18 @@ function onPointerDown(event) {
     state.dragPaintedIds = new Set();
     applyTextureAtPoint(point);
     state.interaction = { type: "paintTexture" };
+    return;
+  }
+
+  const selectedItem = getSingleSelectedItem();
+  const resizeHandle = hitTestResizeHandle(selectedItem, point);
+  if (resizeHandle) {
+    state.interaction = {
+      type: "resize",
+      itemId: selectedItem.id,
+      handleId: resizeHandle.id,
+      startBounds: getItemBounds(selectedItem),
+    };
     return;
   }
 
@@ -3534,8 +3787,29 @@ function onPointerMove(event) {
     return;
   }
 
+  if (state.interaction.type === "resize") {
+    const item = getItemById(state.interaction.itemId);
+    if (item) {
+      applyResizeFromHandle(item, state.interaction.handleId, point, state.interaction.startBounds);
+    }
+    return;
+  }
+
   if (state.interaction.type === "paintTexture") {
     applyTextureAtPoint(point);
+    return;
+  }
+
+  if (state.interaction.type === "penLine") {
+    const actor = getItemById(state.interaction.actorId);
+    if (actor) {
+      state.penAnimation.draft = [state.interaction.startPoint, point];
+    }
+    return;
+  }
+
+  if (state.interaction.type === "penFreehand") {
+    state.penAnimation.draft.push(point);
   }
 }
 
@@ -3557,12 +3831,139 @@ function onPointerUp(event) {
     }
   }
 
+  if (state.interaction?.type === "penLine" || state.interaction?.type === "penFreehand") {
+    saveDraftPenAnimation();
+  }
+
   state.interaction = null;
   state.dragPaintedIds = new Set();
   if (event?.pointerId != null) {
     stageCanvas.releasePointerCapture?.(event.pointerId);
   }
   markProjectDirty();
+}
+
+function showActorContextMenu(actor, event) {
+  state.contextActorId = actor.id;
+  const panelRect = elements.actorContextMenu.parentElement.getBoundingClientRect();
+  elements.actorContextMenu.style.left = `${clamp(event.clientX - panelRect.left, 12, panelRect.width - 150)}px`;
+  elements.actorContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - 92)}px`;
+  elements.actorContextMenu.classList.remove("hidden");
+}
+
+function hideActorContextMenu() {
+  elements.actorContextMenu.classList.add("hidden");
+}
+
+function onStageContextMenu(event) {
+  if (state.screen !== "studio" || state.stageModuleOpen) {
+    return;
+  }
+  event.preventDefault();
+  const point = getCanvasPoint(event);
+  const actor = hitTest(point.x, point.y);
+  if (!actor) {
+    hideActorContextMenu();
+    return;
+  }
+  setSelection([actor.id]);
+  showActorContextMenu(actor, event);
+}
+
+function openContextActorCode() {
+  const actor = getItemById(state.contextActorId);
+  if (!actor) {
+    return;
+  }
+  state.scriptTargetId = actor.id;
+  state.selectedScriptBlockId = null;
+  setSelection([actor.id]);
+  hideActorContextMenu();
+  openScriptsModule();
+}
+
+function openPenAnimationEditor() {
+  const actor = getItemById(state.contextActorId);
+  if (!actor) {
+    return;
+  }
+  state.penAnimation.actorId = actor.id;
+  state.penAnimation.tool = null;
+  state.penAnimation.drawing = false;
+  state.penAnimation.draft = null;
+  elements.penAnimationDuration.value = String(actor.penAnimation?.duration || 2);
+  elements.penAnimationTitle.textContent = `Pen Animation: ${getActorDisplayName(actor)}`;
+  elements.penAnimationPanel.classList.remove("hidden");
+  hideActorContextMenu();
+  updatePenAnimationUi();
+}
+
+function closePenAnimationEditor() {
+  state.penAnimation.actorId = null;
+  state.penAnimation.tool = null;
+  state.penAnimation.drawing = false;
+  state.penAnimation.draft = null;
+  elements.penAnimationPanel.classList.add("hidden");
+  updatePenAnimationUi();
+}
+
+function setPenAnimationTool(tool) {
+  state.penAnimation.tool = tool;
+  state.penAnimation.draft = null;
+  updatePenAnimationUi();
+}
+
+function updatePenAnimationUi() {
+  elements.penLineToolButton.classList.toggle("active", state.penAnimation.tool === "line");
+  elements.penFreehandToolButton.classList.toggle("active", state.penAnimation.tool === "freehand");
+}
+
+function startPenAnimationDrawing(point) {
+  const actor = getItemById(state.penAnimation.actorId);
+  if (!actor) {
+    return;
+  }
+  const startPoint = { x: actor.x, y: actor.y };
+  if (state.penAnimation.tool === "line") {
+    state.penAnimation.draft = [startPoint, point];
+    state.interaction = { type: "penLine", actorId: actor.id, startPoint };
+  } else {
+    state.penAnimation.draft = [startPoint, point];
+    state.interaction = { type: "penFreehand", actorId: actor.id, startPoint };
+  }
+}
+
+function saveDraftPenAnimation() {
+  const actor = getItemById(state.penAnimation.actorId);
+  if (!actor || !state.penAnimation.draft || state.penAnimation.draft.length < 2) {
+    return;
+  }
+  actor.penAnimation = normalizePenAnimation({
+    type: state.penAnimation.tool === "line" ? "line" : "freehand",
+    duration: Number(elements.penAnimationDuration.value || 2),
+    points: state.penAnimation.draft,
+  });
+  state.penAnimation.draft = null;
+  markProjectDirty();
+}
+
+function deletePenAnimation() {
+  const actor = getItemById(state.penAnimation.actorId);
+  if (!actor) {
+    return;
+  }
+  actor.penAnimation = null;
+  state.penAnimation.draft = null;
+  markProjectDirty();
+}
+
+function previewPenAnimation() {
+  const actor = getItemById(state.penAnimation.actorId);
+  if (!actor?.penAnimation) {
+    return;
+  }
+  state.penAnimationRunners = state.penAnimationRunners.filter((runner) => runner.actorId !== actor.id || !runner.preview);
+  state.penAnimationRunners.push(createPenAnimationRunner(actor, actor.penAnimation, { preview: true, restorePosition: { x: actor.x, y: actor.y } }));
 }
 
 function copySelection() {
@@ -3585,8 +3986,8 @@ function pasteClipboard() {
   const bounds = state.clipboard.reduce(
     (accumulator, item) => {
       const scale = (item.sizePct || 100) / 100;
-      const width = item.w * scale;
-      const height = item.h * scale;
+      const width = item.w * scale * (item.scaleX || 1);
+      const height = item.h * scale * (item.scaleY || 1);
       const left = item.x - width * 0.5;
       const top = item.y - height * 0.5;
       const right = item.x + width * 0.5;
@@ -3617,8 +4018,12 @@ function pasteClipboard() {
     item.w = template.w;
     item.h = template.h;
     item.textureId = template.textureId;
+    item.imageData = template.imageData || null;
     item.facing = template.facing ?? 1;
     item.sizePct = template.sizePct ?? 100;
+    item.scaleX = template.scaleX ?? 1;
+    item.scaleY = template.scaleY ?? 1;
+    item.penAnimation = template.penAnimation ? normalizePenAnimation(template.penAnimation) : null;
     item.scripts = Array.isArray(template.scripts) ? template.scripts.map(deserializeBlock) : [];
     clampItemToStage(item);
     state.items.push(item);
@@ -3689,6 +4094,11 @@ function handleKeyDown(event) {
 
   if (key === "escape") {
     hideBlockInfo();
+    hideActorContextMenu();
+    if (!elements.penAnimationPanel.classList.contains("hidden")) {
+      closePenAnimationEditor();
+      return;
+    }
     if (state.stageModuleOpen && state.setMiniCodeItemId != null) {
       closeSetMiniCodePanel();
       return;
@@ -4018,6 +4428,12 @@ function drawImportedImageItem(item, imageData, fallbackColor) {
   } else {
     drawFilledRoundedRect(ctx, -size.w * 0.5, -size.h * 0.5, size.w, size.h, 16, fallbackColor, "rgba(47, 28, 15, 0.7)");
   }
+  if (item.textureId) {
+    ctx.globalAlpha = 0.68;
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = resolveFill(item, fallbackColor);
+    ctx.fillRect(-size.w * 0.5, -size.h * 0.5, size.w, size.h);
+  }
   ctx.restore();
 }
 
@@ -4055,7 +4471,7 @@ function drawCharacter(item) {
   ctx.save();
   ctx.translate(item.x + visual.offsetX, item.y + visual.offsetY);
   ctx.rotate(visual.rotation);
-  ctx.scale(scale * item.facing * visual.scaleX, scale * visual.scaleY);
+  ctx.scale(scale * (item.scaleX || 1) * item.facing * visual.scaleX, scale * (item.scaleY || 1) * visual.scaleY);
 
   if (character.variant === "ghost") {
     ctx.fillStyle = bodyFill;
@@ -4221,7 +4637,7 @@ function drawObject(item) {
   ctx.save();
   ctx.translate(item.x + visual.offsetX, item.y + visual.offsetY);
   ctx.rotate(visual.rotation);
-  ctx.scale(scale * item.facing * visual.scaleX, scale * visual.scaleY);
+  ctx.scale(scale * (item.scaleX || 1) * item.facing * visual.scaleX, scale * (item.scaleY || 1) * visual.scaleY);
   ctx.fillStyle = fillStyle;
   ctx.strokeStyle = "rgba(47, 28, 15, 0.78)";
   ctx.lineWidth = 2.5;
@@ -4324,6 +4740,21 @@ function drawResizeHandles(item) {
   ctx.save();
   ctx.setLineDash([]);
   for (const handle of getResizeHandles(item)) {
+    ctx.fillStyle = "#fffdfa";
+    ctx.strokeStyle = "#2f8f83";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(handle.x, handle.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawDrawingResizeHandles(drawing) {
+  ctx.save();
+  ctx.setLineDash([]);
+  for (const handle of getDrawingResizeHandles(drawing)) {
     ctx.fillStyle = "#fffdfa";
     ctx.strokeStyle = "#2f8f83";
     ctx.lineWidth = 2.5;
@@ -4536,8 +4967,62 @@ function drawSetContent(set, options = {}) {
     const selectedDrawing = set.drawings.find((drawing) => drawing.id === state.setSelectedDrawingId);
     if (selectedDrawing) {
       drawDrawingSelection(selectedDrawing);
+      if (selectedDrawing.type === "image") {
+        drawDrawingResizeHandles(selectedDrawing);
+      }
     }
     drawSetMarquee();
+  }
+}
+
+function drawPath(points, color = "#2f8f83") {
+  if (!points || points.length < 2) {
+    return;
+  }
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([9, 6]);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    if (index === 0) {
+      ctx.moveTo(point.x, point.y);
+    } else {
+      ctx.lineTo(point.x, point.y);
+    }
+  });
+  ctx.stroke();
+  ctx.fillStyle = color;
+  const end = points[points.length - 1];
+  ctx.beginPath();
+  ctx.arc(end.x, end.y, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function getDisplayPenPath(item) {
+  if (!item.penAnimation?.points?.length) {
+    return null;
+  }
+  const first = item.penAnimation.points[0];
+  const offsetX = item.x - first.x;
+  const offsetY = item.y - first.y;
+  return item.penAnimation.points.map((point) => ({ x: point.x + offsetX, y: point.y + offsetY }));
+}
+
+function drawPenAnimationEditor() {
+  if (state.recording) {
+    return;
+  }
+  for (const item of state.items) {
+    if (item.penAnimation?.points?.length >= 2) {
+      drawPath(getDisplayPenPath(item), "rgba(47, 143, 131, 0.82)");
+    }
+  }
+  if (state.penAnimation.draft?.length >= 2) {
+    drawPath(state.penAnimation.draft, "#e76f51");
   }
 }
 
@@ -4599,11 +5084,18 @@ function drawStage(now, options = {}) {
     for (const item of getSelectedItems()) {
       drawSelectionOutline(item);
     }
+    if (state.selection.size === 1) {
+      const selectedItem = getSingleSelectedItem();
+      if (selectedItem) {
+        drawResizeHandles(selectedItem);
+      }
+    }
   }
 
   if (showEditorOverlays) {
     drawPlacementPreview();
     drawMarquee();
+    drawPenAnimationEditor();
   }
 
   if (showRecordingOverlay) {
@@ -4866,6 +5358,7 @@ function startRecording() {
   recorder.start(150);
   state.recording = recordingState;
   triggerScripts("recording_start");
+  startPenAnimationRunners();
   updateRecordingUi();
 }
 
@@ -4924,6 +5417,8 @@ function clearStage() {
     lightingStrength: 0,
   };
   state.scriptTargetId = SCENE_TARGET_ID;
+  closePenAnimationEditor();
+  hideActorContextMenu();
   clearAllScriptRunners();
   stopAllAudioNodes();
   clearSelection();
@@ -5254,6 +5749,7 @@ async function importImageAsset(kind, file) {
 
   populateToolLists();
   populateSetToolLists();
+  updateToolButtons();
   renderScriptPalette();
   renderActiveScriptEditor();
   markProjectDirty();
@@ -5276,6 +5772,119 @@ async function importMusicAsset(file, blockId = null) {
   renderActiveScriptEditor();
 }
 
+function openTextureEditor() {
+  const textureId = state.activeTool?.type === "texture" ? state.activeTool.id : state.setToolSelection.texture;
+  const texture = getTextureDef(textureId);
+  if (!texture) {
+    elements.toolLabel.textContent = "Pick a texture first, then open the texture editor.";
+    return;
+  }
+  state.textureEditor.textureId = textureId;
+  elements.textureEditorTitle.textContent = `Editing: ${texture.name}`;
+  elements.textureEditorPanel.classList.remove("hidden");
+  setupTextureEditorCanvas(texture);
+}
+
+function setupTextureEditorCanvas(texture) {
+  const canvas = elements.textureEditorCanvas;
+  canvas.width = 320;
+  canvas.height = 320;
+  textureEditorCtx.clearRect(0, 0, canvas.width, canvas.height);
+  textureEditorCtx.fillStyle = "#fffdfa";
+  textureEditorCtx.fillRect(0, 0, canvas.width, canvas.height);
+  if (texture.imageData) {
+    const image = getImportedImage(texture.imageData);
+    const drawImage = () => {
+      textureEditorCtx.clearRect(0, 0, canvas.width, canvas.height);
+      textureEditorCtx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    };
+    if (image.complete && image.naturalWidth > 0) {
+      drawImage();
+    } else {
+      image.onload = drawImage;
+    }
+  }
+}
+
+function closeTextureEditor() {
+  state.textureEditor.textureId = null;
+  state.textureEditor.drawing = false;
+  elements.textureEditorPanel.classList.add("hidden");
+}
+
+function getTextureEditorPoint(event) {
+  const rect = elements.textureEditorCanvas.getBoundingClientRect();
+  return {
+    x: (event.clientX - rect.left) * (elements.textureEditorCanvas.width / Math.max(1, rect.width)),
+    y: (event.clientY - rect.top) * (elements.textureEditorCanvas.height / Math.max(1, rect.height)),
+  };
+}
+
+function startTextureEditorStroke(event) {
+  if (!state.textureEditor.textureId) {
+    return;
+  }
+  const point = getTextureEditorPoint(event);
+  state.textureEditor.drawing = true;
+  elements.textureEditorCanvas.setPointerCapture?.(event.pointerId);
+  textureEditorCtx.strokeStyle = elements.textureEditorColor.value;
+  textureEditorCtx.lineWidth = 8;
+  textureEditorCtx.lineCap = "round";
+  textureEditorCtx.lineJoin = "round";
+  textureEditorCtx.beginPath();
+  textureEditorCtx.moveTo(point.x, point.y);
+}
+
+function moveTextureEditorStroke(event) {
+  if (!state.textureEditor.drawing) {
+    return;
+  }
+  const point = getTextureEditorPoint(event);
+  textureEditorCtx.lineTo(point.x, point.y);
+  textureEditorCtx.stroke();
+}
+
+function endTextureEditorStroke(event) {
+  state.textureEditor.drawing = false;
+  if (event?.pointerId != null) {
+    elements.textureEditorCanvas.releasePointerCapture?.(event.pointerId);
+  }
+}
+
+function saveTextureEditor() {
+  const existingId = state.textureEditor.textureId;
+  if (!existingId) {
+    return;
+  }
+  const imageData = elements.textureEditorCanvas.toDataURL("image/png");
+  let texture = state.customTextures.find((candidate) => candidate.id === existingId);
+  if (!texture) {
+    const baseTexture = getTextureDef(existingId);
+    texture = {
+      id: `custom-texture-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: `${baseTexture?.name || "Texture"} Drawing`,
+      copy: "Drawn texture.",
+      preview: `center / cover no-repeat url("${imageData}")`,
+      imageData,
+    };
+    state.customTextures.push(texture);
+  } else {
+    texture.imageData = imageData;
+    texture.preview = `center / cover no-repeat url("${imageData}")`;
+  }
+  state.activeTool = { type: "texture", id: texture.id };
+  state.setToolSelection.texture = texture.id;
+  patternCaches.stage.clear();
+  patternCaches.recording.clear();
+  patternCaches.set.clear();
+  populateToolLists();
+  populateSetToolLists();
+  updateToolButtons();
+  markProjectDirty();
+  saveProjectState();
+  elements.toolLabel.textContent = `Saved texture drawing: ${texture.name}.`;
+}
+
 function bindEvents() {
   elements.playButton.addEventListener("click", goToStudio);
   elements.libraryButton.addEventListener("click", openLibrary);
@@ -5288,8 +5897,29 @@ function bindEvents() {
   elements.stopButton.addEventListener("click", stopRecording);
   elements.openLibraryButton.addEventListener("click", openLibrary);
   elements.scriptsModuleCloseButton.addEventListener("click", closeScriptsModule);
+  elements.actorContextCodeButton.addEventListener("click", openContextActorCode);
+  elements.actorContextPenButton.addEventListener("click", openPenAnimationEditor);
+  elements.penLineToolButton.addEventListener("click", () => setPenAnimationTool("line"));
+  elements.penFreehandToolButton.addEventListener("click", () => setPenAnimationTool("freehand"));
+  elements.previewPenAnimationButton.addEventListener("click", previewPenAnimation);
+  elements.deletePenAnimationButton.addEventListener("click", deletePenAnimation);
+  elements.closePenAnimationButton.addEventListener("click", closePenAnimationEditor);
+  elements.penAnimationDuration.addEventListener("input", () => {
+    const actor = getItemById(state.penAnimation.actorId);
+    if (actor?.penAnimation) {
+      actor.penAnimation.duration = clamp(Number(elements.penAnimationDuration.value || 2), 0.1, 60);
+      markProjectDirty();
+    }
+  });
   elements.importCharacterButton.addEventListener("click", () => elements.importCharacterInput.click());
   elements.importTextureButton.addEventListener("click", () => elements.importTextureInput.click());
+  elements.editTextureButton.addEventListener("click", openTextureEditor);
+  elements.closeTextureEditorButton.addEventListener("click", closeTextureEditor);
+  elements.saveTextureEditorButton.addEventListener("click", saveTextureEditor);
+  elements.textureEditorCanvas.addEventListener("pointerdown", startTextureEditorStroke);
+  elements.textureEditorCanvas.addEventListener("pointermove", moveTextureEditorStroke);
+  elements.textureEditorCanvas.addEventListener("pointerup", endTextureEditorStroke);
+  elements.textureEditorCanvas.addEventListener("pointercancel", endTextureEditorStroke);
   elements.importObjectButton.addEventListener("click", () => elements.importObjectInput.click());
   elements.importStageButton.addEventListener("click", () => elements.importStageInput.click());
   elements.importCharacterInput.addEventListener("change", () => {
@@ -5345,6 +5975,7 @@ function bindEvents() {
   stageCanvas.addEventListener("pointerdown", onPointerDown);
   stageCanvas.addEventListener("pointermove", onPointerMove);
   stageCanvas.addEventListener("pointerup", onPointerUp);
+  stageCanvas.addEventListener("contextmenu", onStageContextMenu);
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("pointercancel", onPointerUp);
   stageCanvas.addEventListener("pointerleave", () => {
