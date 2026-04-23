@@ -133,8 +133,9 @@
                   <button id="stopMicButton" type="button" class="secondary-button full-width" disabled>Stop Mic Recording</button>
                   <p id="audioCountdownLabel" class="audio-countdown">Mic idle.</p>
                 </div>
-                <div class="set-control-card">
+                <div id="musicMakerCard" class="set-control-card music-maker-card">
                   <p>Music Maker: click notes in the grid, preview the loop, then save it into the audio library.</p>
+                  <button id="expandMusicMakerButton" type="button" class="ghost-button full-width">Music Maker -&gt;</button>
                   <label class="set-control-label">Song name <input id="musicMakerName" type="text" value="My Loop"></label>
                   <div id="musicMakerGrid" class="music-maker-grid" aria-label="Music maker note grid"></div>
                   <div class="audio-actions">
@@ -328,6 +329,8 @@
               </div>
               <button id="characterBuilderImportButton" type="button" class="secondary-button full-width import-button">Import Image</button>
               <label class="set-control-label">Pen color <input id="characterBuilderPenColor" type="color" value="#2f8f83"></label>
+              <label class="set-control-label">Fill color <input id="characterBuilderFillColor" type="color" value="#ffd166"></label>
+              <button id="characterBuilderBucketButton" type="button" class="secondary-button full-width">Paint Bucket</button>
               <h4>Objects</h4>
               <div id="characterBuilderObjectList" class="set-tool-grid compact-builder-grid"></div>
               <h4>Textures</h4>

@@ -420,25 +420,52 @@ button:disabled {
 
 .music-maker-grid {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(16, minmax(0, 1fr));
   gap: 0.25rem;
   padding: 0.5rem;
   border-radius: var(--radius-md);
   background: rgba(67, 42, 22, 0.08);
 }
 
+.music-maker-card {
+  transition: width 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+
+.music-maker-card.expanded {
+  position: fixed;
+  top: 6.5rem;
+  right: 1.2rem;
+  z-index: 9;
+  width: min(72vw, 46rem);
+  max-height: calc(100vh - 8rem);
+  overflow: auto;
+  box-shadow: 0 30px 80px rgba(54, 27, 12, 0.28);
+}
+
+.music-maker-card.expanded .music-maker-grid {
+  gap: 0.36rem;
+}
+
 .music-maker-note {
   aspect-ratio: 1;
-  min-height: 1.6rem;
+  min-height: 1.25rem;
   padding: 0;
   border-radius: 0.5rem;
-  background: rgba(255, 253, 250, 0.95);
+  color: #fffaf3;
+  font-size: 0.72rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, rgba(255, 253, 250, 0.88), rgba(255, 253, 250, 0.68)), var(--note-color, #2f8f83);
   box-shadow: inset 0 0 0 1px rgba(82, 47, 18, 0.12);
 }
 
 .music-maker-note.active {
-  background: linear-gradient(135deg, #2f8f83, #52c0a7);
+  background: linear-gradient(135deg, var(--note-color, #2f8f83), rgba(255, 255, 255, 0.28));
   box-shadow: 0 8px 16px rgba(47, 143, 131, 0.22);
+}
+
+.music-maker-note.percussion {
+  border-radius: 999px;
+  color: #fffaf3;
 }
 
 .audio-library-list {
@@ -650,6 +677,11 @@ button:disabled {
 .set-mini-code-header h4,
 .set-mini-code-layout h5 {
   margin: 0;
+}
+
+.character-builder-tools button.active {
+  color: #fffaf3;
+  background: linear-gradient(135deg, #2f8f83, #247066);
 }
 
 .compact-button {

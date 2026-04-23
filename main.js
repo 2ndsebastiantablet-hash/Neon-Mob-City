@@ -189,9 +189,24 @@ const MUSIC_OPTIONS = [
 ];
 const SET_PEN_COLORS = ["#2f8f83", "#e76f51", "#f4a261", "#264653", "#ffd166", "#ef476f", "#ffffff", "#2c1d14"];
 const DRAWING_CLOSE_DISTANCE = 18;
-const MUSIC_MAKER_ROWS = 8;
-const MUSIC_MAKER_COLUMNS = 8;
-const MUSIC_MAKER_FREQUENCIES = [523.25, 493.88, 440, 392, 349.23, 329.63, 293.66, 261.63];
+const MUSIC_MAKER_COLUMNS = 16;
+const MUSIC_MAKER_TRACKS = [
+  { type: "note", label: "C6", frequency: 1046.5, color: "#ef476f" },
+  { type: "note", label: "A5", frequency: 880, color: "#f78c6b" },
+  { type: "note", label: "G5", frequency: 783.99, color: "#ffd166" },
+  { type: "note", label: "E5", frequency: 659.25, color: "#8ac926" },
+  { type: "note", label: "C5", frequency: 523.25, color: "#06d6a0" },
+  { type: "note", label: "A4", frequency: 440, color: "#4cc9f0" },
+  { type: "note", label: "G4", frequency: 392, color: "#4895ef" },
+  { type: "note", label: "E4", frequency: 329.63, color: "#4361ee" },
+  { type: "note", label: "C4", frequency: 261.63, color: "#7209b7" },
+  { type: "note", label: "A3", frequency: 220, color: "#b5179e" },
+  { type: "note", label: "G3", frequency: 196, color: "#9b5de5" },
+  { type: "note", label: "C3", frequency: 130.81, color: "#577590" },
+  { type: "snare", label: "Snare", color: "#f4a261" },
+  { type: "bass", label: "Bass", color: "#2c1d14" },
+];
+const MUSIC_MAKER_ROWS = MUSIC_MAKER_TRACKS.length;
 const SCRIPT_GROUPS = [
   { id: "scene", name: "Scene" },
   { id: "motion", name: "Motion" },
@@ -381,6 +396,20 @@ const SCRIPT_BLOCK_DEFS = [
     title: "Change Size",
     copy: "Set the actor size as a percentage.",
     params: [{ name: "percent", label: "Size %", input: "number", min: 20, max: 300, step: 5 }],
+  },
+  {
+    type: "rotate_by_degrees",
+    category: "animation",
+    title: "Rotate By Degrees",
+    copy: "Turn this actor by a number of degrees from its current rotation.",
+    params: [{ name: "degrees", label: "Degrees", input: "number", min: -720, max: 720, step: 5 }],
+  },
+  {
+    type: "set_rotation_degrees",
+    category: "animation",
+    title: "Set Rotation",
+    copy: "Set this actor to an exact rotation in degrees.",
+    params: [{ name: "degrees", label: "Degrees", input: "number", min: -360, max: 360, step: 5 }],
   },
   {
     type: "flip_360",
@@ -607,6 +636,8 @@ const elements = {
   recordMicButton: document.querySelector("#recordMicButton"),
   stopMicButton: document.querySelector("#stopMicButton"),
   audioCountdownLabel: document.querySelector("#audioCountdownLabel"),
+  musicMakerCard: document.querySelector("#musicMakerCard"),
+  expandMusicMakerButton: document.querySelector("#expandMusicMakerButton"),
   musicMakerName: document.querySelector("#musicMakerName"),
   musicMakerGrid: document.querySelector("#musicMakerGrid"),
   previewMusicMakerButton: document.querySelector("#previewMusicMakerButton"),
@@ -626,6 +657,8 @@ const elements = {
   characterBuilderPenButton: document.querySelector("#characterBuilderPenButton"),
   characterBuilderImportButton: document.querySelector("#characterBuilderImportButton"),
   characterBuilderPenColor: document.querySelector("#characterBuilderPenColor"),
+  characterBuilderFillColor: document.querySelector("#characterBuilderFillColor"),
+  characterBuilderBucketButton: document.querySelector("#characterBuilderBucketButton"),
   characterBuilderObjectList: document.querySelector("#characterBuilderObjectList"),
   characterBuilderTextureList: document.querySelector("#characterBuilderTextureList"),
   setEditorLabel: document.querySelector("#setEditorLabel"),
@@ -725,6 +758,7 @@ const state = {
     items: [],
     drawings: [],
     penColor: "#2f8f83",
+    fillColor: "#ffd166",
     toolSelection: {
       object: "cube",
       texture: "sunset-stripe",
@@ -784,6 +818,7 @@ const state = {
     micChunks: [],
     countdownTimer: null,
     musicPreviewStops: [],
+    musicMakerExpanded: false,
   },
   musicMaker: {
     cells: Array.from({ length: MUSIC_MAKER_ROWS }, () => Array.from({ length: MUSIC_MAKER_COLUMNS }, () => false)),
@@ -982,6 +1017,7 @@ function normalizeItem(item) {
     color: item.color || null,
     groupId: item.groupId || null,
     groupScriptHostId: item.groupScriptHostId || null,
+    rotation: typeof item.rotation === "number" ? item.rotation : 0,
     imageData: item.imageData || null,
     penAnimation: item.penAnimation ? normalizePenAnimation(item.penAnimation) : null,
     scripts: Array.isArray(item.scripts) ? item.scripts.map(deserializeBlock) : [],
@@ -1047,6 +1083,7 @@ function serializeItem(item) {
     color: item.color || null,
     groupId: item.groupId || null,
     groupScriptHostId: item.groupScriptHostId || null,
+    rotation: item.rotation || 0,
     penAnimation: item.penAnimation ? serializePenAnimation(item.penAnimation) : null,
     scripts: item.scripts.map(serializeBlock),
   };
@@ -1299,6 +1336,12 @@ function createBlockFromType(type) {
   }
   if (type === "change_size") {
     params.percent = 100;
+  }
+  if (type === "rotate_by_degrees") {
+    params.degrees = 45;
+  }
+  if (type === "set_rotation_degrees") {
+    params.degrees = 0;
   }
   if (type === "set_volume") {
     params.volume = 70;
@@ -2286,6 +2329,60 @@ function stopMusicMakerPreview() {
   state.audio.musicPreviewStops = [];
 }
 
+function playMusicMakerCell(rowIndex, columnIndex = 0, startAt = null, stepDuration = 0.22) {
+  const audio = createAudioEngine();
+  if (!audio) {
+    return null;
+  }
+  audio.ctx.resume?.();
+  const track = MUSIC_MAKER_TRACKS[rowIndex] || MUSIC_MAKER_TRACKS[0];
+  const startTime = startAt ?? audio.ctx.currentTime + 0.02 + columnIndex * stepDuration;
+
+  if (track.type === "snare") {
+    const bufferSize = Math.floor(audio.ctx.sampleRate * 0.16);
+    const buffer = audio.ctx.createBuffer(1, bufferSize, audio.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let index = 0; index < bufferSize; index += 1) {
+      data[index] = (Math.random() * 2 - 1) * (1 - index / bufferSize);
+    }
+    const source = audio.ctx.createBufferSource();
+    const gain = audio.ctx.createGain();
+    const filter = audio.ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 900;
+    source.buffer = buffer;
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(audio.master);
+    gain.gain.setValueAtTime(0.42, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.16);
+    source.start(startTime);
+    source.stop(startTime + 0.18);
+    state.audio.activeNodes.push({ source, gain, loop: false });
+    source.onended = () => {
+      state.audio.activeNodes = state.audio.activeNodes.filter((node) => node.source !== source);
+    };
+    return source;
+  }
+
+  const oscillator = audio.ctx.createOscillator();
+  const gain = audio.ctx.createGain();
+  oscillator.type = track.type === "bass" ? "triangle" : "sine";
+  oscillator.frequency.setValueAtTime(track.type === "bass" ? 82.41 : track.frequency || 261.63, startTime);
+  oscillator.connect(gain);
+  gain.connect(audio.master);
+  gain.gain.setValueAtTime(0.0001, startTime);
+  gain.gain.linearRampToValueAtTime(track.type === "bass" ? 0.48 : 0.3, startTime + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + (track.type === "bass" ? 0.24 : stepDuration * 0.9));
+  oscillator.start(startTime);
+  oscillator.stop(startTime + (track.type === "bass" ? 0.26 : stepDuration * 0.95));
+  state.audio.activeNodes.push({ source: oscillator, gain, loop: false });
+  oscillator.onended = () => {
+    state.audio.activeNodes = state.audio.activeNodes.filter((node) => node.source !== oscillator);
+  };
+  return oscillator;
+}
+
 function playMusicPattern(pattern, options = {}) {
   const audio = createAudioEngine();
   if (!audio) {
@@ -2302,28 +2399,14 @@ function playMusicPattern(pattern, options = {}) {
       if (!enabled) {
         return;
       }
-      const oscillator = audio.ctx.createOscillator();
-      const gain = audio.ctx.createGain();
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(MUSIC_MAKER_FREQUENCIES[rowIndex] || 261.63, startAt + columnIndex * stepDuration);
-      gain.gain.setValueAtTime(0.0001, startAt + columnIndex * stepDuration);
-      gain.gain.linearRampToValueAtTime(0.14, startAt + columnIndex * stepDuration + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.001, startAt + columnIndex * stepDuration + stepDuration * 0.85);
-      oscillator.connect(gain);
-      gain.connect(audio.master);
-      oscillator.start(startAt + columnIndex * stepDuration);
-      oscillator.stop(startAt + columnIndex * stepDuration + stepDuration * 0.9);
-      state.audio.activeNodes.push({ source: oscillator, gain, loop: false });
+      const source = playMusicMakerCell(rowIndex, columnIndex, startAt, stepDuration);
       state.audio.musicPreviewStops.push(() => {
         try {
-          oscillator.stop();
+          source?.stop();
         } catch {
           // noop
         }
       });
-      oscillator.onended = () => {
-        state.audio.activeNodes = state.audio.activeNodes.filter((node) => node.source !== oscillator);
-      };
     });
   });
 
@@ -2863,6 +2946,18 @@ function createRunnerForBlock(actor, block, run) {
       return createInstantRunner(() => {
         actor.sizePct = clamp(Number(block.params.percent || 100), 20, 300);
         clampItemToStage(actor);
+        markProjectDirty();
+      });
+    case "rotate_by_degrees":
+      if (!actor) return createInstantRunner(() => {});
+      return createInstantRunner(() => {
+        actor.rotation = (actor.rotation || 0) + (Number(block.params.degrees || 0) * Math.PI) / 180;
+        markProjectDirty();
+      });
+    case "set_rotation_degrees":
+      if (!actor) return createInstantRunner(() => {});
+      return createInstantRunner(() => {
+        actor.rotation = (Number(block.params.degrees || 0) * Math.PI) / 180;
         markProjectDirty();
       });
     case "flip_360":
@@ -3411,6 +3506,9 @@ function hitTestBuilderDrawing(point) {
     if (drawing.type === "image" && rectContainsPoint(getDrawingBounds(drawing), point.x, point.y)) {
       return drawing;
     }
+    if (drawing.closed && pointInPolygon(point, drawing.points || [])) {
+      return drawing;
+    }
     for (let pointIndex = 1; pointIndex < (drawing.points?.length || 0); pointIndex += 1) {
       if (distanceToSegment(point, drawing.points[pointIndex - 1], drawing.points[pointIndex]) <= 8) {
         return drawing;
@@ -3430,6 +3528,7 @@ function setCharacterBuilderTool(tool, id = null) {
   }
   elements.characterBuilderSelectButton.classList.toggle("active", tool === "select");
   elements.characterBuilderPenButton.classList.toggle("active", tool === "pen");
+  elements.characterBuilderBucketButton.classList.toggle("active", tool === "bucket");
   renderCharacterBuilderTools();
 }
 
@@ -3494,6 +3593,7 @@ function openCharacterBuilder(characterId = null) {
   state.characterBuilder.selectedDrawingId = null;
   state.characterBuilder.interaction = null;
   state.characterBuilder.penColor = elements.characterBuilderPenColor.value;
+  state.characterBuilder.fillColor = elements.characterBuilderFillColor.value;
   elements.characterBuilderName.value = character?.name || "Custom Character";
   elements.characterBuilderLabel.textContent = character
     ? `Editing ${character.name}. Save to update every placed copy of this custom character.`
@@ -3577,6 +3677,7 @@ function drawCharacterBuilderContent(options = {}) {
   if (selectedItem) {
     drawSelectionOutline(selectedItem);
     drawResizeHandles(selectedItem);
+    drawRotationHandle(selectedItem);
   }
   const selectedDrawing = state.characterBuilder.drawings.find((drawing) => drawing.id === state.characterBuilder.selectedDrawingId);
   if (selectedDrawing) {
@@ -3734,6 +3835,17 @@ function onCharacterBuilderPointerDown(event) {
     return;
   }
 
+  if (state.characterBuilder.activeTool === "bucket") {
+    const drawing = hitTestBuilderDrawing(point);
+    if (drawing?.closed) {
+      drawing.fillColor = state.characterBuilder.fillColor;
+      state.characterBuilder.selectedDrawingId = drawing.id;
+      state.characterBuilder.selectedItemId = null;
+      markProjectDirty();
+    }
+    return;
+  }
+
   if (state.characterBuilder.activeTool === "pen") {
     const drawing = normalizeDrawing({
       id: `builder-drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -3752,6 +3864,11 @@ function onCharacterBuilderPointerDown(event) {
   }
 
   const selectedItem = state.characterBuilder.items.find((item) => item.id === state.characterBuilder.selectedItemId);
+  const rotateHandle = hitTestRotationHandle(selectedItem, point);
+  if (rotateHandle) {
+    state.characterBuilder.interaction = beginRotateInteraction(selectedItem, point);
+    return;
+  }
   const resizeHandle = hitTestResizeHandle(selectedItem, point);
   if (resizeHandle) {
     state.characterBuilder.interaction = {
@@ -3842,6 +3959,14 @@ function onCharacterBuilderPointerMove(event) {
     if (item) {
       applyResizeFromHandle(item, interaction.handleId, point, interaction.startBounds);
       clampBuilderItem(item);
+    }
+    return;
+  }
+
+  if (interaction.type === "rotate") {
+    const item = state.characterBuilder.items.find((candidate) => candidate.id === interaction.itemId);
+    if (item) {
+      applyRotationFromPoint(item, interaction, point);
     }
     return;
   }
@@ -4013,6 +4138,41 @@ function hitTestResizeHandle(item, point) {
     }
   }
   return null;
+}
+
+function getRotationHandle(item) {
+  const bounds = getItemBounds(item);
+  return {
+    id: "rotate",
+    x: (bounds.left + bounds.right) * 0.5,
+    y: bounds.top - 34,
+  };
+}
+
+function hitTestRotationHandle(item, point) {
+  if (!item) {
+    return null;
+  }
+  const handle = getRotationHandle(item);
+  return Math.hypot(handle.x - point.x, handle.y - point.y) <= 14 ? handle : null;
+}
+
+function getPointerRotation(item, point) {
+  return Math.atan2(point.y - item.y, point.x - item.x);
+}
+
+function beginRotateInteraction(item, point) {
+  return {
+    type: "rotate",
+    itemId: item.id,
+    startAngle: getPointerRotation(item, point),
+    startRotation: item.rotation || 0,
+  };
+}
+
+function applyRotationFromPoint(item, interaction, point) {
+  item.rotation = interaction.startRotation + getPointerRotation(item, point) - interaction.startAngle;
+  markProjectDirty();
 }
 
 function applyResizeFromHandle(item, handleId, point, startBounds) {
@@ -4480,15 +4640,21 @@ function onSetPointerDown(event) {
     return;
   }
 
-  const resizeHandle = hitTestResizeHandle(getSetSelectedItem(), point);
+  const setSelectedItem = getSetSelectedItem();
+  const rotateHandle = hitTestRotationHandle(setSelectedItem, point);
+  if (rotateHandle) {
+    state.setInteraction = beginRotateInteraction(setSelectedItem, point);
+    return;
+  }
+
+  const resizeHandle = hitTestResizeHandle(setSelectedItem, point);
   if (resizeHandle) {
-    const item = getSetSelectedItem();
     state.setInteraction = {
       type: "resizeItem",
-      itemId: item.id,
+      itemId: setSelectedItem.id,
       start: point,
       handleId: resizeHandle.id,
-      startBounds: getItemBounds(item),
+      startBounds: getItemBounds(setSelectedItem),
     };
     return;
   }
@@ -4629,6 +4795,14 @@ function onSetPointerMove(event) {
     const item = set.items.find((candidate) => candidate.id === state.setInteraction.itemId);
     if (item) {
       applyResizeFromHandle(item, state.setInteraction.handleId, point, state.setInteraction.startBounds);
+    }
+    return;
+  }
+
+  if (state.setInteraction.type === "rotate") {
+    const item = set.items.find((candidate) => candidate.id === state.setInteraction.itemId);
+    if (item) {
+      applyRotationFromPoint(item, state.setInteraction, point);
     }
     return;
   }
@@ -4832,6 +5006,11 @@ function onPointerDown(event) {
   }
 
   const selectedItem = getSingleSelectedItem();
+  const rotateHandle = hitTestRotationHandle(selectedItem, point);
+  if (rotateHandle) {
+    state.interaction = beginRotateInteraction(selectedItem, point);
+    return;
+  }
   const resizeHandle = hitTestResizeHandle(selectedItem, point);
   if (resizeHandle) {
     state.interaction = {
@@ -4902,6 +5081,14 @@ function onPointerMove(event) {
     const item = getItemById(state.interaction.itemId);
     if (item) {
       applyResizeFromHandle(item, state.interaction.handleId, point, state.interaction.startBounds);
+    }
+    return;
+  }
+
+  if (state.interaction.type === "rotate") {
+    const item = getItemById(state.interaction.itemId);
+    if (item) {
+      applyRotationFromPoint(item, state.interaction, point);
     }
     return;
   }
@@ -5251,11 +5438,12 @@ function pasteClipboard() {
     item.h = template.h;
     item.textureId = template.textureId;
     item.imageData = template.imageData || null;
-    item.facing = template.facing ?? 1;
-    item.sizePct = template.sizePct ?? 100;
-    item.scaleX = template.scaleX ?? 1;
-    item.scaleY = template.scaleY ?? 1;
-    item.penAnimation = template.penAnimation ? normalizePenAnimation(template.penAnimation) : null;
+  item.facing = template.facing ?? 1;
+  item.sizePct = template.sizePct ?? 100;
+  item.scaleX = template.scaleX ?? 1;
+  item.scaleY = template.scaleY ?? 1;
+  item.rotation = template.rotation ?? 0;
+  item.penAnimation = template.penAnimation ? normalizePenAnimation(template.penAnimation) : null;
     item.color = template.color || null;
     if (template.groupId) {
       if (!pastedGroupIds.has(template.groupId)) {
@@ -5692,7 +5880,7 @@ function drawImportedImageItem(item, imageData, fallbackColor) {
 
   ctx.save();
   ctx.translate(item.x + visual.offsetX, item.y + visual.offsetY);
-  ctx.rotate(visual.rotation);
+  ctx.rotate((item.rotation || 0) + visual.rotation);
   ctx.scale(item.facing * visual.scaleX, visual.scaleY);
   if (image?.complete && image.naturalWidth > 0) {
     ctx.drawImage(image, -size.w * 0.5, -size.h * 0.5, size.w, size.h);
@@ -5741,7 +5929,7 @@ function drawCharacter(item) {
 
   ctx.save();
   ctx.translate(item.x + visual.offsetX, item.y + visual.offsetY);
-  ctx.rotate(visual.rotation);
+  ctx.rotate((item.rotation || 0) + visual.rotation);
   ctx.scale(scale * (item.scaleX || 1) * item.facing * visual.scaleX, scale * (item.scaleY || 1) * visual.scaleY);
 
   if (character.variant === "ghost") {
@@ -5907,7 +6095,7 @@ function drawObject(item) {
 
   ctx.save();
   ctx.translate(item.x + visual.offsetX, item.y + visual.offsetY);
-  ctx.rotate(visual.rotation);
+  ctx.rotate((item.rotation || 0) + visual.rotation);
   ctx.scale(scale * (item.scaleX || 1) * item.facing * visual.scaleX, scale * (item.scaleY || 1) * visual.scaleY);
   ctx.fillStyle = fillStyle;
   ctx.strokeStyle = "rgba(47, 28, 15, 0.78)";
@@ -6023,6 +6211,33 @@ function drawResizeHandlesForBounds(bounds) {
     ctx.fill();
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+function drawRotationHandle(item) {
+  if (!item) {
+    return;
+  }
+  const bounds = getItemBounds(item);
+  const handle = getRotationHandle(item);
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = "#e56c3f";
+  ctx.fillStyle = "#fffdfa";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo((bounds.left + bounds.right) * 0.5, bounds.top - 8);
+  ctx.lineTo(handle.x, handle.y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(handle.x, handle.y, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#e56c3f";
+  ctx.font = "900 12px Trebuchet MS";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("R", handle.x, handle.y + 0.5);
   ctx.restore();
 }
 
@@ -6248,6 +6463,7 @@ function drawSetContent(set, options = {}) {
       const selectedItem = getSetSelectedItem();
       if (selectedItem) {
         drawResizeHandles(selectedItem);
+        drawRotationHandle(selectedItem);
       }
     }
     const selectedDrawing = set.drawings.find((drawing) => drawing.id === state.setSelectedDrawingId);
@@ -7104,13 +7320,18 @@ function renderMusicMakerGrid() {
   elements.musicMakerGrid.innerHTML = "";
   for (let row = 0; row < MUSIC_MAKER_ROWS; row += 1) {
     for (let column = 0; column < MUSIC_MAKER_COLUMNS; column += 1) {
+      const track = MUSIC_MAKER_TRACKS[row];
       const button = document.createElement("button");
       button.type = "button";
       button.className = "music-maker-note";
+      button.classList.toggle("percussion", track.type !== "note");
       button.classList.toggle("active", Boolean(state.musicMaker.cells[row][column]));
-      button.title = `Row ${row + 1}, beat ${column + 1}`;
+      button.style.setProperty("--note-color", track.color);
+      button.textContent = track.type === "snare" ? "▲" : track.type === "bass" ? "●" : "";
+      button.title = `${track.label}, beat ${column + 1}`;
       button.addEventListener("click", () => {
         state.musicMaker.cells[row][column] = !state.musicMaker.cells[row][column];
+        playMusicMakerCell(row);
         renderMusicMakerGrid();
       });
       elements.musicMakerGrid.append(button);
@@ -7183,6 +7404,12 @@ function renderAudioLibrary() {
     card.append(text, actions);
     elements.audioLibraryList.append(card);
   }
+}
+
+function toggleMusicMakerExpanded() {
+  state.audio.musicMakerExpanded = !state.audio.musicMakerExpanded;
+  elements.musicMakerCard.classList.toggle("expanded", state.audio.musicMakerExpanded);
+  elements.expandMusicMakerButton.textContent = state.audio.musicMakerExpanded ? "Music Maker <-" : "Music Maker ->";
 }
 
 function setMicRecordingUi(recording, label = null) {
@@ -7425,6 +7652,7 @@ function bindEvents() {
     importMusicAsset(elements.importAudioInput.files?.[0]);
     elements.importAudioInput.value = "";
   });
+  elements.expandMusicMakerButton.addEventListener("click", toggleMusicMakerExpanded);
   elements.recordMicButton.addEventListener("click", startMicCountdown);
   elements.stopMicButton.addEventListener("click", stopMicRecording);
   elements.previewMusicMakerButton.addEventListener("click", () => playMusicPattern(cloneMusicPattern()));
@@ -7434,8 +7662,12 @@ function bindEvents() {
   elements.saveCharacterBuilderButton.addEventListener("click", saveCharacterBuilder);
   elements.characterBuilderSelectButton.addEventListener("click", () => setCharacterBuilderTool("select"));
   elements.characterBuilderPenButton.addEventListener("click", () => setCharacterBuilderTool("pen"));
+  elements.characterBuilderBucketButton.addEventListener("click", () => setCharacterBuilderTool("bucket"));
   elements.characterBuilderPenColor.addEventListener("input", () => {
     state.characterBuilder.penColor = elements.characterBuilderPenColor.value;
+  });
+  elements.characterBuilderFillColor.addEventListener("input", () => {
+    state.characterBuilder.fillColor = elements.characterBuilderFillColor.value;
   });
   elements.characterBuilderImportButton.addEventListener("click", () => elements.characterBuilderImportInput.click());
   elements.characterBuilderImportInput.addEventListener("change", async () => {
