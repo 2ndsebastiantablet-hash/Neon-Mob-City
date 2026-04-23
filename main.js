@@ -175,6 +175,8 @@ const TEXTURE_DEFS = [
 const PROJECT_STORAGE_KEY = "worms-project-v2";
 const STAGE_GRID_SIZE = 48;
 const SCENE_TARGET_ID = "scene";
+const CHARACTER_BUILDER_WIDTH = 420;
+const CHARACTER_BUILDER_HEIGHT = 520;
 const SOUND_EFFECT_OPTIONS = [
   { value: "pop", label: "Pop" },
   { value: "click", label: "Click" },
@@ -456,6 +458,13 @@ const SCRIPT_BLOCK_DEFS = [
     params: [],
   },
   {
+    type: "remove_character",
+    category: "control",
+    title: "Remove Character",
+    copy: "Remove this actor, or its whole group, from the scene.",
+    params: [],
+  },
+  {
     type: "set_volume",
     category: "sound",
     title: "Set Volume",
@@ -528,6 +537,7 @@ const patternCaches = {
   stage: new Map(),
   recording: new Map(),
   set: new Map(),
+  builder: new Map(),
 };
 
 const elements = {
@@ -550,6 +560,7 @@ const elements = {
   characterList: document.querySelector("#characterList"),
   textureList: document.querySelector("#textureList"),
   objectList: document.querySelector("#objectList"),
+  createCharacterButton: document.querySelector("#createCharacterButton"),
   importCharacterButton: document.querySelector("#importCharacterButton"),
   importTextureButton: document.querySelector("#importTextureButton"),
   editTextureButton: document.querySelector("#editTextureButton"),
@@ -560,6 +571,7 @@ const elements = {
   importObjectInput: document.querySelector("#importObjectInput"),
   importStageInput: document.querySelector("#importStageInput"),
   importMusicInput: document.querySelector("#importMusicInput"),
+  characterBuilderImportInput: document.querySelector("#characterBuilderImportInput"),
   textureEditorPanel: document.querySelector("#textureEditorPanel"),
   textureEditorTitle: document.querySelector("#textureEditorTitle"),
   textureEditorCanvas: document.querySelector("#textureEditorCanvas"),
@@ -569,6 +581,7 @@ const elements = {
   actorContextMenu: document.querySelector("#actorContextMenu"),
   actorContextCodeButton: document.querySelector("#actorContextCodeButton"),
   actorContextPenButton: document.querySelector("#actorContextPenButton"),
+  actorContextEditCharacterButton: document.querySelector("#actorContextEditCharacterButton"),
   actorContextGroupButton: document.querySelector("#actorContextGroupButton"),
   actorContextUngroupButton: document.querySelector("#actorContextUngroupButton"),
   actorContextColor: document.querySelector("#actorContextColor"),
@@ -587,6 +600,18 @@ const elements = {
   scriptsModuleCloseButton: document.querySelector("#scriptsModuleCloseButton"),
   stageModule: document.querySelector("#stageModule"),
   stageModuleCloseButton: document.querySelector("#stageModuleCloseButton"),
+  characterBuilderModule: document.querySelector("#characterBuilderModule"),
+  characterBuilderCanvas: document.querySelector("#characterBuilderCanvas"),
+  characterBuilderLabel: document.querySelector("#characterBuilderLabel"),
+  characterBuilderName: document.querySelector("#characterBuilderName"),
+  saveCharacterBuilderButton: document.querySelector("#saveCharacterBuilderButton"),
+  closeCharacterBuilderButton: document.querySelector("#closeCharacterBuilderButton"),
+  characterBuilderSelectButton: document.querySelector("#characterBuilderSelectButton"),
+  characterBuilderPenButton: document.querySelector("#characterBuilderPenButton"),
+  characterBuilderImportButton: document.querySelector("#characterBuilderImportButton"),
+  characterBuilderPenColor: document.querySelector("#characterBuilderPenColor"),
+  characterBuilderObjectList: document.querySelector("#characterBuilderObjectList"),
+  characterBuilderTextureList: document.querySelector("#characterBuilderTextureList"),
   setEditorLabel: document.querySelector("#setEditorLabel"),
   setList: document.querySelector("#setList"),
   addSetButton: document.querySelector("#addSetButton"),
@@ -636,6 +661,8 @@ const setCanvas = elements.setCanvas;
 const setFrame = setCanvas.parentElement;
 const setCtx = setCanvas.getContext("2d");
 const textureEditorCtx = elements.textureEditorCanvas.getContext("2d");
+const characterBuilderCanvas = elements.characterBuilderCanvas;
+const characterBuilderCtx = characterBuilderCanvas.getContext("2d");
 
 const state = {
   screen: "menu",
@@ -649,6 +676,7 @@ const state = {
   scriptTargetId: SCENE_TARGET_ID,
   scriptsModuleOpen: false,
   stageModuleOpen: false,
+  characterBuilderOpen: false,
   lastNonScriptPanel: "characters",
   scriptDrag: null,
   scriptDropTarget: null,
@@ -671,6 +699,20 @@ const state = {
   },
   setMiniCodeItemId: null,
   setPenColor: "#2f8f83",
+  characterBuilder: {
+    editingId: null,
+    activeTool: "select",
+    selectedItemId: null,
+    selectedDrawingId: null,
+    interaction: null,
+    items: [],
+    drawings: [],
+    penColor: "#2f8f83",
+    toolSelection: {
+      object: "cube",
+      texture: "sunset-stripe",
+    },
+  },
   items: [],
   sets: [],
   customCharacters: [],
@@ -875,6 +917,7 @@ function getImportedImage(imageData) {
     patternCaches.stage.clear();
     patternCaches.recording.clear();
     patternCaches.set.clear();
+    patternCaches.builder.clear();
   };
   importedImageCache.set(imageData, image);
   return image;
@@ -912,6 +955,7 @@ function normalizeItem(item) {
     spawnY: typeof item.spawnY === "number" ? item.spawnY : item.y,
     color: item.color || null,
     groupId: item.groupId || null,
+    groupScriptHostId: item.groupScriptHostId || null,
     imageData: item.imageData || null,
     penAnimation: item.penAnimation ? normalizePenAnimation(item.penAnimation) : null,
     scripts: Array.isArray(item.scripts) ? item.scripts.map(deserializeBlock) : [],
@@ -976,6 +1020,7 @@ function serializeItem(item) {
     spawnY: item.spawnY,
     color: item.color || null,
     groupId: item.groupId || null,
+    groupScriptHostId: item.groupScriptHostId || null,
     penAnimation: item.penAnimation ? serializePenAnimation(item.penAnimation) : null,
     scripts: item.scripts.map(serializeBlock),
   };
@@ -1272,6 +1317,22 @@ function getSingleSelectedItem() {
   return selected.length === 1 ? selected[0] : null;
 }
 
+function getGroupItems(groupId) {
+  return groupId ? state.items.filter((item) => item.groupId === groupId) : [];
+}
+
+function getGroupScriptHost(item) {
+  if (!item?.groupId) {
+    return item || null;
+  }
+  const hostId = item.groupScriptHostId || item.id;
+  return getItemById(hostId) || item;
+}
+
+function getScriptTargetHost(item) {
+  return item?.groupId ? getGroupScriptHost(item) : item;
+}
+
 function getScriptTargetItem() {
   if (state.scriptEditorMode === "set") {
     return getSetMiniScriptTarget();
@@ -1284,14 +1345,17 @@ function getScriptTargetItem() {
   if (state.scriptTargetId != null) {
     const target = getItemById(state.scriptTargetId);
     if (target) {
-      return target;
+      const host = getScriptTargetHost(target);
+      state.scriptTargetId = host.id;
+      return host;
     }
   }
 
   const selected = getSingleSelectedItem();
   if (selected) {
-    state.scriptTargetId = selected.id;
-    return selected;
+    const host = getScriptTargetHost(selected);
+    state.scriptTargetId = host.id;
+    return host;
   }
 
   const firstItem = state.items[0] || null;
@@ -2011,23 +2075,29 @@ function renderScriptActorList() {
   }
 
   for (const item of state.items) {
+    if (item.groupId && item.groupScriptHostId && item.groupScriptHostId !== item.id) {
+      continue;
+    }
+    const groupMembers = getGroupItems(item.groupId);
+    const scriptCount = item.scripts.length;
     const button = document.createElement("button");
     button.type = "button";
     button.className = "script-actor-card";
     button.classList.toggle("active", item.id === state.scriptTargetId);
 
     const title = document.createElement("strong");
-    title.textContent = getActorDisplayName(item);
+    title.textContent = item.groupId ? `Group (${groupMembers.length})` : getActorDisplayName(item);
 
     const meta = document.createElement("span");
     meta.className = "script-actor-meta";
-    meta.textContent = `${item.kind} | ${item.scripts.length} stack${item.scripts.length === 1 ? "" : "s"}`;
+    meta.textContent = `${item.groupId ? "group" : item.kind} | ${scriptCount} stack${scriptCount === 1 ? "" : "s"}`;
 
     button.append(title, meta);
     button.addEventListener("click", () => {
-      state.scriptTargetId = item.id;
+      const host = getScriptTargetHost(item);
+      state.scriptTargetId = host.id;
       state.selectedScriptBlockId = null;
-      setSelection([item.id]);
+      setSelection(item.groupId ? groupMembers.map((member) => member.id) : [item.id]);
       renderScriptActorList();
       renderScriptPalette();
       renderScriptEditor();
@@ -2491,6 +2561,27 @@ function transferActorToSet(actor, setId) {
   renderStageModule();
 }
 
+function removeActorFromScene(actor) {
+  if (!actor) {
+    return;
+  }
+  const idsToRemove = new Set(actor.groupId ? getGroupItems(actor.groupId).map((item) => item.id) : [actor.id]);
+  state.items = state.items.filter((item) => !idsToRemove.has(item.id));
+  for (const set of state.sets) {
+    set.items = set.items.filter((item) => !idsToRemove.has(item.id));
+  }
+  for (const id of idsToRemove) {
+    state.selection.delete(id);
+  }
+  if (idsToRemove.has(state.scriptTargetId)) {
+    state.scriptTargetId = SCENE_TARGET_ID;
+  }
+  updateSelectionLabel();
+  markProjectDirty();
+  renderActiveScriptEditor();
+  renderStageModule();
+}
+
 function createLightingFadeRunner(block) {
   const startRgb = hexToRgb(state.scene.lightingColor);
   const endRgb = hexToRgb(block.params.color || "#fff7d6");
@@ -2722,6 +2813,11 @@ function createRunnerForBlock(actor, block, run) {
       return createInstantRunner(() => playPlaceholderTone("music", block.params.musicId));
     case "stop_sound":
       return createInstantRunner(stopAllAudioNodes);
+    case "remove_character":
+      return createInstantRunner(() => {
+        removeActorFromScene(actor);
+        run.stopped = true;
+      });
     case "set_volume":
       return createInstantRunner(() => setAudioVolume(Number(block.params.volume || 0) / 100));
     case "stop_this_script":
@@ -2768,20 +2864,24 @@ function triggerScripts(eventName, options = {}) {
   }
 
   for (const actor of state.items) {
-    if (actorId != null && actor.id !== actorId) {
+    if (actor.groupId && actor.groupScriptHostId && actor.groupScriptHostId !== actor.id) {
+      continue;
+    }
+    const targets = actor.groupId ? getGroupItems(actor.groupId) : [actor];
+    if (actorId != null && !targets.some((target) => target.id === actorId)) {
       continue;
     }
 
     for (const rootBlock of actor.scripts) {
       if (eventName === "recording_start" && rootBlock.type === "when_recording_start") {
-        startScriptRun(actor, rootBlock, "actor");
+        targets.forEach((target) => startScriptRun(target, rootBlock, "actor"));
       }
       if (eventName === "clicked" && rootBlock.type === "when_clicked") {
-        startScriptRun(actor, rootBlock, "actor");
+        targets.forEach((target) => startScriptRun(target, rootBlock, "actor"));
       }
       if (eventName === "key_pressed" && rootBlock.type === "when_key_pressed") {
         if (normalizeScriptKey(rootBlock.params.key || "") === key) {
-          startScriptRun(actor, rootBlock, "actor");
+          targets.forEach((target) => startScriptRun(target, rootBlock, "actor"));
         }
       }
     }
@@ -2973,6 +3073,7 @@ function updateSidebarTabs() {
 
 function openScriptsModule() {
   state.scriptsModuleOpen = true;
+  closeCharacterBuilder();
   elements.scriptsModule.classList.remove("hidden");
   updateSidebarTabs();
   renderScriptEditor();
@@ -2992,6 +3093,7 @@ function openStageModule() {
   state.scriptEditorMode = "main";
   elements.stageModule.classList.remove("hidden");
   closeScriptsModule();
+  closeCharacterBuilder();
   updateSidebarTabs();
   renderStageModule();
   ensureCanvasSize();
@@ -3034,6 +3136,7 @@ function setActivePanel(panelName) {
 
   closeScriptsModule();
   closeStageModule();
+  closeCharacterBuilder();
 
   if (previousPanel !== panelName && state.activeTool) {
     const panelToolType = getPanelToolType(panelName);
@@ -3124,6 +3227,7 @@ function showScreen(screenName) {
   if (screenName !== "studio") {
     closeScriptsModule();
     closeStageModule();
+    closeCharacterBuilder();
     clearAllScriptRunners();
     stopAllAudioNodes();
   }
@@ -3185,6 +3289,501 @@ function placeItemFromTool(point) {
   state.items.push(item);
   setSelection([item.id]);
   markProjectDirty();
+}
+
+function clampBuilderItem(item) {
+  const size = getItemSize(item);
+  item.x = clamp(item.x, size.w * 0.5 + 8, CHARACTER_BUILDER_WIDTH - size.w * 0.5 - 8);
+  item.y = clamp(item.y, size.h * 0.5 + 8, CHARACTER_BUILDER_HEIGHT - size.h * 0.5 - 8);
+}
+
+function getCharacterBuilderPoint(event) {
+  const rect = characterBuilderCanvas.getBoundingClientRect();
+  return {
+    x: clamp((event.clientX - rect.left) * (CHARACTER_BUILDER_WIDTH / Math.max(1, rect.width)), 0, CHARACTER_BUILDER_WIDTH),
+    y: clamp((event.clientY - rect.top) * (CHARACTER_BUILDER_HEIGHT / Math.max(1, rect.height)), 0, CHARACTER_BUILDER_HEIGHT),
+  };
+}
+
+function hitTestBuilderItem(point) {
+  for (let index = state.characterBuilder.items.length - 1; index >= 0; index -= 1) {
+    const item = state.characterBuilder.items[index];
+    if (rectContainsPoint(getItemBounds(item), point.x, point.y)) {
+      return item;
+    }
+  }
+  return null;
+}
+
+function hitTestBuilderDrawing(point) {
+  for (let index = state.characterBuilder.drawings.length - 1; index >= 0; index -= 1) {
+    const drawing = state.characterBuilder.drawings[index];
+    if (drawing.type === "image" && rectContainsPoint(getDrawingBounds(drawing), point.x, point.y)) {
+      return drawing;
+    }
+    for (let pointIndex = 1; pointIndex < (drawing.points?.length || 0); pointIndex += 1) {
+      if (distanceToSegment(point, drawing.points[pointIndex - 1], drawing.points[pointIndex]) <= 8) {
+        return drawing;
+      }
+    }
+  }
+  return null;
+}
+
+function setCharacterBuilderTool(tool, id = null) {
+  state.characterBuilder.activeTool = tool;
+  if (tool === "object" && id) {
+    state.characterBuilder.toolSelection.object = id;
+  }
+  if (tool === "texture" && id) {
+    state.characterBuilder.toolSelection.texture = id;
+  }
+  elements.characterBuilderSelectButton.classList.toggle("active", tool === "select");
+  elements.characterBuilderPenButton.classList.toggle("active", tool === "pen");
+  renderCharacterBuilderTools();
+}
+
+function renderCharacterBuilderTools() {
+  elements.characterBuilderObjectList.innerHTML = "";
+  elements.characterBuilderTextureList.innerHTML = "";
+
+  const createBuilderCard = (definition, options, onClick) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tool-card";
+    const preview = document.createElement("div");
+    preview.className = options.previewClass;
+    if (options.previewType === "background") {
+      preview.style.background = definition.preview;
+    } else {
+      preview.textContent = definition.preview;
+    }
+    if (definition.imageData) {
+      preview.textContent = "";
+      preview.style.background = `center / contain no-repeat url("${definition.imageData}"), linear-gradient(135deg, #fff8ed, #f7ead7)`;
+    }
+    const title = document.createElement("div");
+    title.className = "tool-card-title";
+    title.textContent = definition.name;
+    button.append(preview, title);
+    button.addEventListener("click", onClick);
+    return button;
+  };
+
+  for (const objectDef of getObjectDefs()) {
+    const card = createBuilderCard(objectDef, {
+      previewType: "text",
+      previewClass: "object-preview",
+    }, () => setCharacterBuilderTool("object", objectDef.id));
+    card.classList.toggle(
+      "active",
+      state.characterBuilder.activeTool === "object" && state.characterBuilder.toolSelection.object === objectDef.id,
+    );
+    elements.characterBuilderObjectList.append(card);
+  }
+
+  for (const texture of getTextureDefs()) {
+    const card = createBuilderCard(texture, {
+      previewType: "background",
+      previewClass: "texture-preview",
+    }, () => setCharacterBuilderTool("texture", texture.id));
+    card.classList.toggle(
+      "active",
+      state.characterBuilder.activeTool === "texture" && state.characterBuilder.toolSelection.texture === texture.id,
+    );
+    elements.characterBuilderTextureList.append(card);
+  }
+}
+
+function openCharacterBuilder(characterId = null) {
+  const character = characterId ? state.customCharacters.find((candidate) => candidate.id === characterId) : null;
+  state.characterBuilderOpen = true;
+  state.characterBuilder.editingId = character?.id || null;
+  state.characterBuilder.activeTool = "select";
+  state.characterBuilder.selectedItemId = null;
+  state.characterBuilder.selectedDrawingId = null;
+  state.characterBuilder.interaction = null;
+  state.characterBuilder.penColor = elements.characterBuilderPenColor.value;
+  elements.characterBuilderName.value = character?.name || "Custom Character";
+  elements.characterBuilderLabel.textContent = character
+    ? `Editing ${character.name}. Save to update every placed copy of this custom character.`
+    : "Build a reusable character out of props, imported images, textures, and pen drawings.";
+
+  if (character?.builderData) {
+    state.characterBuilder.items = (character.builderData.items || []).map(normalizeItem);
+    state.characterBuilder.drawings = (character.builderData.drawings || []).map(normalizeDrawing);
+  } else if (character?.imageData) {
+    state.characterBuilder.items = [];
+    state.characterBuilder.drawings = [normalizeDrawing({
+      type: "image",
+      imageData: character.imageData,
+      x: CHARACTER_BUILDER_WIDTH * 0.5,
+      y: CHARACTER_BUILDER_HEIGHT * 0.5,
+      w: CHARACTER_BUILDER_WIDTH * 0.62,
+      h: CHARACTER_BUILDER_HEIGHT * 0.62,
+      points: [],
+    })];
+  } else {
+    state.characterBuilder.items = [];
+    state.characterBuilder.drawings = [];
+  }
+
+  elements.characterBuilderModule.classList.remove("hidden");
+  ensureCharacterBuilderCanvasSize();
+  setCharacterBuilderTool("select");
+}
+
+function closeCharacterBuilder() {
+  state.characterBuilderOpen = false;
+  state.characterBuilder.interaction = null;
+  state.characterBuilder.selectedItemId = null;
+  state.characterBuilder.selectedDrawingId = null;
+  elements.characterBuilderModule.classList.add("hidden");
+}
+
+function ensureCharacterBuilderCanvasSize() {
+  if (characterBuilderCanvas.width !== CHARACTER_BUILDER_WIDTH) {
+    characterBuilderCanvas.width = CHARACTER_BUILDER_WIDTH;
+  }
+  if (characterBuilderCanvas.height !== CHARACTER_BUILDER_HEIGHT) {
+    characterBuilderCanvas.height = CHARACTER_BUILDER_HEIGHT;
+  }
+}
+
+function drawCharacterBuilderContent(options = {}) {
+  const { showSelection = true, showBackground = true } = options;
+  if (showBackground) {
+    ctx.clearRect(0, 0, CHARACTER_BUILDER_WIDTH, CHARACTER_BUILDER_HEIGHT);
+    ctx.fillStyle = "#fffdfa";
+    ctx.fillRect(0, 0, CHARACTER_BUILDER_WIDTH, CHARACTER_BUILDER_HEIGHT);
+    ctx.save();
+    ctx.strokeStyle = "rgba(189, 150, 114, 0.18)";
+    ctx.lineWidth = 1;
+    for (let x = 35; x < CHARACTER_BUILDER_WIDTH; x += 35) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CHARACTER_BUILDER_HEIGHT);
+      ctx.stroke();
+    }
+    for (let y = 35; y < CHARACTER_BUILDER_HEIGHT; y += 35) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(CHARACTER_BUILDER_WIDTH, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawSetDrawings({ drawings: state.characterBuilder.drawings });
+  for (const item of state.characterBuilder.items) {
+    drawObject(item);
+  }
+
+  if (!showSelection) {
+    return;
+  }
+
+  const selectedItem = state.characterBuilder.items.find((item) => item.id === state.characterBuilder.selectedItemId);
+  if (selectedItem) {
+    drawSelectionOutline(selectedItem);
+    drawResizeHandles(selectedItem);
+  }
+  const selectedDrawing = state.characterBuilder.drawings.find((drawing) => drawing.id === state.characterBuilder.selectedDrawingId);
+  if (selectedDrawing) {
+    drawDrawingSelection(selectedDrawing);
+    drawDrawingResizeHandles(selectedDrawing);
+  }
+}
+
+function renderCharacterBuilder() {
+  if (!state.characterBuilderOpen) {
+    return;
+  }
+  ensureCharacterBuilderCanvasSize();
+  withRenderTarget(characterBuilderCtx, patternCaches.builder, () => {
+    drawCharacterBuilderContent({ showSelection: true, showBackground: true });
+  });
+}
+
+function getCharacterBuilderContentBounds() {
+  const bounds = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+  const includeBounds = (rect) => {
+    if (!rect) return;
+    bounds.left = Math.min(bounds.left, rect.left);
+    bounds.top = Math.min(bounds.top, rect.top);
+    bounds.right = Math.max(bounds.right, rect.right);
+    bounds.bottom = Math.max(bounds.bottom, rect.bottom);
+  };
+
+  state.characterBuilder.items.forEach((item) => includeBounds(getItemBounds(item)));
+  state.characterBuilder.drawings.forEach((drawing) => includeBounds(getDrawingBounds(drawing)));
+
+  if (!Number.isFinite(bounds.left)) {
+    return {
+      left: CHARACTER_BUILDER_WIDTH * 0.3,
+      top: CHARACTER_BUILDER_HEIGHT * 0.24,
+      right: CHARACTER_BUILDER_WIDTH * 0.7,
+      bottom: CHARACTER_BUILDER_HEIGHT * 0.76,
+    };
+  }
+
+  return {
+    left: clamp(bounds.left - 22, 0, CHARACTER_BUILDER_WIDTH - 1),
+    top: clamp(bounds.top - 22, 0, CHARACTER_BUILDER_HEIGHT - 1),
+    right: clamp(bounds.right + 22, 1, CHARACTER_BUILDER_WIDTH),
+    bottom: clamp(bounds.bottom + 22, 1, CHARACTER_BUILDER_HEIGHT),
+  };
+}
+
+function renderCharacterBuilderImage() {
+  const bounds = getCharacterBuilderContentBounds();
+  const width = Math.max(32, Math.ceil(bounds.right - bounds.left));
+  const height = Math.max(32, Math.ceil(bounds.bottom - bounds.top));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const targetCtx = canvas.getContext("2d");
+  withRenderTarget(targetCtx, new Map(), () => {
+    ctx.clearRect(0, 0, width, height);
+    ctx.save();
+    ctx.translate(-bounds.left, -bounds.top);
+    drawCharacterBuilderContent({ showSelection: false, showBackground: false });
+    ctx.restore();
+  });
+  return canvas.toDataURL("image/png");
+}
+
+function saveCharacterBuilder() {
+  const name = elements.characterBuilderName.value.trim() || "Custom Character";
+  const imageData = renderCharacterBuilderImage();
+  const builderData = {
+    items: state.characterBuilder.items.map(serializeItem),
+    drawings: state.characterBuilder.drawings.map(serializeDrawing),
+  };
+  let character = state.customCharacters.find((candidate) => candidate.id === state.characterBuilder.editingId);
+
+  if (!character) {
+    character = {
+      id: `custom-character-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      preview: "IMG",
+      copy: "Created in the Character Builder.",
+      imageData,
+      builderData,
+    };
+    state.customCharacters.push(character);
+  } else {
+    character.name = name;
+    character.preview = "IMG";
+    character.copy = "Created in the Character Builder.";
+    character.imageData = imageData;
+    character.builderData = builderData;
+  }
+
+  state.setToolSelection.character = character.id;
+  setActiveTool("character", character.id);
+  patternCaches.stage.clear();
+  patternCaches.recording.clear();
+  patternCaches.set.clear();
+  patternCaches.builder.clear();
+  populateToolLists();
+  populateSetToolLists();
+  markProjectDirty();
+  saveProjectState();
+  elements.toolLabel.textContent = `Saved custom character: ${name}.`;
+  closeCharacterBuilder();
+}
+
+function addImportedImageToCharacterBuilder(imageData) {
+  state.characterBuilder.drawings.push(normalizeDrawing({
+    id: `builder-image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type: "image",
+    imageData,
+    x: CHARACTER_BUILDER_WIDTH * 0.5,
+    y: CHARACTER_BUILDER_HEIGHT * 0.5,
+    w: CHARACTER_BUILDER_WIDTH * 0.45,
+    h: CHARACTER_BUILDER_HEIGHT * 0.36,
+    points: [],
+  }));
+  state.characterBuilder.selectedDrawingId = state.characterBuilder.drawings.at(-1).id;
+  state.characterBuilder.selectedItemId = null;
+  markProjectDirty();
+}
+
+function applyBuilderTexture(point) {
+  const hit = hitTestBuilderItem(point);
+  if (!hit) {
+    return;
+  }
+  hit.textureId = state.characterBuilder.toolSelection.texture;
+  state.characterBuilder.selectedItemId = hit.id;
+  state.characterBuilder.selectedDrawingId = null;
+  markProjectDirty();
+}
+
+function onCharacterBuilderPointerDown(event) {
+  if (!state.characterBuilderOpen || event.button !== 0) {
+    return;
+  }
+  const point = getCharacterBuilderPoint(event);
+  characterBuilderCanvas.setPointerCapture?.(event.pointerId);
+
+  if (state.characterBuilder.activeTool === "object") {
+    const item = createObjectItem(state.characterBuilder.toolSelection.object, point.x, point.y);
+    clampBuilderItem(item);
+    state.characterBuilder.items.push(item);
+    state.characterBuilder.selectedItemId = item.id;
+    state.characterBuilder.selectedDrawingId = null;
+    markProjectDirty();
+    return;
+  }
+
+  if (state.characterBuilder.activeTool === "texture") {
+    applyBuilderTexture(point);
+    state.characterBuilder.interaction = { type: "paintTexture" };
+    return;
+  }
+
+  if (state.characterBuilder.activeTool === "pen") {
+    const drawing = normalizeDrawing({
+      id: `builder-drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: "path",
+      color: state.characterBuilder.penColor,
+      points: [point],
+    });
+    state.characterBuilder.drawings.push(drawing);
+    state.characterBuilder.selectedDrawingId = drawing.id;
+    state.characterBuilder.selectedItemId = null;
+    state.characterBuilder.interaction = { type: "draw", drawingId: drawing.id };
+    markProjectDirty();
+    return;
+  }
+
+  const selectedItem = state.characterBuilder.items.find((item) => item.id === state.characterBuilder.selectedItemId);
+  const resizeHandle = hitTestResizeHandle(selectedItem, point);
+  if (resizeHandle) {
+    state.characterBuilder.interaction = {
+      type: "resize",
+      itemId: selectedItem.id,
+      handleId: resizeHandle.id,
+      startBounds: getItemBounds(selectedItem),
+    };
+    return;
+  }
+
+  const selectedDrawing = state.characterBuilder.drawings.find((drawing) => drawing.id === state.characterBuilder.selectedDrawingId);
+  const drawingResizeHandle = hitTestDrawingResizeHandle(selectedDrawing, point);
+  if (drawingResizeHandle) {
+    state.characterBuilder.interaction = {
+      type: "drawingResize",
+      drawingId: selectedDrawing.id,
+      handleId: drawingResizeHandle.id,
+      startBounds: getDrawingBounds(selectedDrawing),
+    };
+    return;
+  }
+
+  const hitItem = hitTestBuilderItem(point);
+  if (hitItem) {
+    state.characterBuilder.selectedItemId = hitItem.id;
+    state.characterBuilder.selectedDrawingId = null;
+    state.characterBuilder.interaction = { type: "dragItem", itemId: hitItem.id, start: point, x: hitItem.x, y: hitItem.y };
+    return;
+  }
+
+  const hitDrawing = hitTestBuilderDrawing(point);
+  if (hitDrawing) {
+    state.characterBuilder.selectedDrawingId = hitDrawing.id;
+    state.characterBuilder.selectedItemId = null;
+    state.characterBuilder.interaction = { type: "dragDrawing", drawingId: hitDrawing.id, start: point, x: hitDrawing.x, y: hitDrawing.y };
+    return;
+  }
+
+  state.characterBuilder.selectedItemId = null;
+  state.characterBuilder.selectedDrawingId = null;
+}
+
+function onCharacterBuilderPointerMove(event) {
+  if (!state.characterBuilderOpen || !state.characterBuilder.interaction) {
+    return;
+  }
+  const point = getCharacterBuilderPoint(event);
+  const interaction = state.characterBuilder.interaction;
+
+  if (interaction.type === "paintTexture") {
+    applyBuilderTexture(point);
+    return;
+  }
+
+  if (interaction.type === "draw") {
+    const drawing = state.characterBuilder.drawings.find((candidate) => candidate.id === interaction.drawingId);
+    if (drawing) {
+      drawing.points.push(point);
+      markProjectDirty();
+    }
+    return;
+  }
+
+  if (interaction.type === "dragItem") {
+    const item = state.characterBuilder.items.find((candidate) => candidate.id === interaction.itemId);
+    if (item) {
+      item.x = interaction.x + point.x - interaction.start.x;
+      item.y = interaction.y + point.y - interaction.start.y;
+      clampBuilderItem(item);
+      markProjectDirty();
+    }
+    return;
+  }
+
+  if (interaction.type === "dragDrawing") {
+    const drawing = state.characterBuilder.drawings.find((candidate) => candidate.id === interaction.drawingId);
+    if (drawing?.type === "image") {
+      drawing.x = interaction.x + point.x - interaction.start.x;
+      drawing.y = interaction.y + point.y - interaction.start.y;
+      markProjectDirty();
+    }
+    return;
+  }
+
+  if (interaction.type === "resize") {
+    const item = state.characterBuilder.items.find((candidate) => candidate.id === interaction.itemId);
+    if (item) {
+      applyResizeFromHandle(item, interaction.handleId, point, interaction.startBounds);
+      clampBuilderItem(item);
+    }
+    return;
+  }
+
+  if (interaction.type === "drawingResize") {
+    const drawing = state.characterBuilder.drawings.find((candidate) => candidate.id === interaction.drawingId);
+    if (drawing) {
+      applyDrawingResizeFromHandle(drawing, interaction.handleId, point, interaction.startBounds);
+    }
+  }
+}
+
+function onCharacterBuilderPointerUp(event) {
+  state.characterBuilder.interaction = null;
+  if (event?.pointerId != null) {
+    characterBuilderCanvas.releasePointerCapture?.(event.pointerId);
+  }
+}
+
+function deleteCharacterBuilderSelection() {
+  const builder = state.characterBuilder;
+  if (builder.selectedItemId != null) {
+    builder.items = builder.items.filter((item) => item.id !== builder.selectedItemId);
+    builder.selectedItemId = null;
+    markProjectDirty();
+    return true;
+  }
+  if (builder.selectedDrawingId != null) {
+    builder.drawings = builder.drawings.filter((drawing) => drawing.id !== builder.selectedDrawingId);
+    builder.selectedDrawingId = null;
+    markProjectDirty();
+    return true;
+  }
+  return false;
 }
 
 function createLight(x = state.stageWidth * 0.5, y = state.stageHeight * 0.36) {
@@ -3256,6 +3855,10 @@ function clearSetSelection() {
 
 function getResizeHandles(item) {
   const bounds = getItemBounds(item);
+  return getResizeHandlesForBounds(bounds);
+}
+
+function getResizeHandlesForBounds(bounds) {
   const centerX = (bounds.left + bounds.right) * 0.5;
   const centerY = (bounds.top + bounds.bottom) * 0.5;
   return [
@@ -3268,6 +3871,37 @@ function getResizeHandles(item) {
     { id: "sw", x: bounds.left, y: bounds.bottom },
     { id: "w", x: bounds.left, y: centerY },
   ];
+}
+
+function getItemsBounds(items) {
+  if (!items.length) {
+    return null;
+  }
+  return items.reduce(
+    (bounds, item) => {
+      const itemBounds = getItemBounds(item);
+      bounds.left = Math.min(bounds.left, itemBounds.left);
+      bounds.top = Math.min(bounds.top, itemBounds.top);
+      bounds.right = Math.max(bounds.right, itemBounds.right);
+      bounds.bottom = Math.max(bounds.bottom, itemBounds.bottom);
+      return bounds;
+    },
+    { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
+  );
+}
+
+function hitTestSelectionResizeHandle(point) {
+  const selectedItems = getSelectedItems();
+  if (selectedItems.length < 2) {
+    return null;
+  }
+  const bounds = getItemsBounds(selectedItems);
+  for (const handle of getResizeHandlesForBounds(bounds)) {
+    if (Math.hypot(handle.x - point.x, handle.y - point.y) <= 13) {
+      return handle;
+    }
+  }
+  return null;
 }
 
 function hitTestResizeHandle(item, point) {
@@ -3307,6 +3941,43 @@ function applyResizeFromHandle(item, handleId, point, startBounds) {
   item.scaleX = clamp(width / Math.max(1, item.w * baseScale), 0.15, 8);
   item.scaleY = clamp(height / Math.max(1, item.h * baseScale), 0.15, 8);
   clampItemToStage(item);
+  markProjectDirty();
+}
+
+function applySelectionResizeFromHandle(handleId, point, startBounds, snapshots) {
+  const minSize = 32;
+  const centerX = (startBounds.left + startBounds.right) * 0.5;
+  const centerY = (startBounds.top + startBounds.bottom) * 0.5;
+  const startWidth = Math.max(minSize, startBounds.right - startBounds.left);
+  const startHeight = Math.max(minSize, startBounds.bottom - startBounds.top);
+  let width = startWidth;
+  let height = startHeight;
+
+  if (handleId.includes("e") || handleId.includes("w")) {
+    width = Math.max(minSize, Math.abs(point.x - centerX) * 2);
+  }
+  if (handleId.includes("n") || handleId.includes("s")) {
+    height = Math.max(minSize, Math.abs(point.y - centerY) * 2);
+  }
+  if (handleId.length === 2) {
+    const ratio = Math.max(width / startWidth, height / startHeight);
+    width = startWidth * ratio;
+    height = startHeight * ratio;
+  }
+
+  const scaleX = width / startWidth;
+  const scaleY = height / startHeight;
+  for (const item of getSelectedItems()) {
+    const snapshot = snapshots.get(item.id);
+    if (!snapshot) {
+      continue;
+    }
+    item.x = centerX + (snapshot.x - centerX) * scaleX;
+    item.y = centerY + (snapshot.y - centerY) * scaleY;
+    item.scaleX = clamp(snapshot.scaleX * scaleX, 0.15, 8);
+    item.scaleY = clamp(snapshot.scaleY * scaleY, 0.15, 8);
+    clampItemToStage(item);
+  }
   markProjectDirty();
 }
 
@@ -3929,7 +4600,7 @@ function applyTextureAtPoint(point) {
 }
 
 function onPointerDown(event) {
-  if (state.screen !== "studio" || event.button !== 0) {
+  if (state.screen !== "studio" || state.characterBuilderOpen || event.button !== 0) {
     return;
   }
 
@@ -3965,6 +4636,26 @@ function onPointerDown(event) {
     state.stageDrawings.push(drawing);
     state.interaction = { type: "stageDraw", drawingId: drawing.id };
     markProjectDirty();
+    return;
+  }
+
+  const selectionResizeHandle = hitTestSelectionResizeHandle(point);
+  if (selectionResizeHandle) {
+    const snapshots = new Map();
+    for (const item of getSelectedItems()) {
+      snapshots.set(item.id, {
+        x: item.x,
+        y: item.y,
+        scaleX: item.scaleX || 1,
+        scaleY: item.scaleY || 1,
+      });
+    }
+    state.interaction = {
+      type: "selectionResize",
+      handleId: selectionResizeHandle.id,
+      startBounds: getItemsBounds(getSelectedItems()),
+      snapshots,
+    };
     return;
   }
 
@@ -4035,6 +4726,16 @@ function onPointerMove(event) {
     return;
   }
 
+  if (state.interaction.type === "selectionResize") {
+    applySelectionResizeFromHandle(
+      state.interaction.handleId,
+      point,
+      state.interaction.startBounds,
+      state.interaction.snapshots,
+    );
+    return;
+  }
+
   if (state.interaction.type === "paintTexture") {
     applyTextureAtPoint(point);
     return;
@@ -4096,8 +4797,12 @@ function showActorContextMenu(actor, event) {
   state.contextActorId = actor.id;
   const selectedItems = getSelectedItems();
   const selectedObject = selectedItems.find((item) => item.kind === "object");
-  elements.actorContextCodeButton.classList.toggle("hidden", selectedItems.length !== 1);
+  const selectedGroupId = actor.groupId && selectedItems.every((item) => item.groupId === actor.groupId) ? actor.groupId : null;
+  const canCodeSelection = selectedItems.length === 1 || Boolean(selectedGroupId);
+  const characterDef = actor.kind === "character" ? getCharacterDef(actor.subtype) : null;
+  elements.actorContextCodeButton.classList.toggle("hidden", !canCodeSelection);
   elements.actorContextPenButton.classList.toggle("hidden", selectedItems.length !== 1 || actor.kind !== "character");
+  elements.actorContextEditCharacterButton.classList.toggle("hidden", selectedItems.length !== 1 || !characterDef?.builderData);
   elements.actorContextGroupButton.classList.toggle("hidden", selectedItems.length < 2);
   elements.actorContextUngroupButton.classList.toggle("hidden", !selectedItems.some((item) => item.groupId));
   elements.actorContextColor.parentElement.classList.toggle("hidden", !selectedObject);
@@ -4115,7 +4820,7 @@ function hideActorContextMenu() {
 }
 
 function onStageContextMenu(event) {
-  if (state.screen !== "studio" || state.stageModuleOpen) {
+  if (state.screen !== "studio" || state.stageModuleOpen || state.characterBuilderOpen) {
     return;
   }
   event.preventDefault();
@@ -4140,11 +4845,21 @@ function openContextActorCode() {
   if (!actor) {
     return;
   }
-  state.scriptTargetId = actor.id;
+  const host = getScriptTargetHost(actor);
+  state.scriptTargetId = host.id;
   state.selectedScriptBlockId = null;
-  setSelection([actor.id]);
+  setSelection(actor.groupId ? getGroupItems(actor.groupId).map((item) => item.id) : [actor.id]);
   hideActorContextMenu();
   openScriptsModule();
+}
+
+function openContextCharacterBuilder() {
+  const actor = getItemById(state.contextActorId);
+  if (!actor || actor.kind !== "character") {
+    return;
+  }
+  hideActorContextMenu();
+  openCharacterBuilder(actor.subtype);
 }
 
 function openPenAnimationEditor() {
@@ -4251,8 +4966,10 @@ function groupSelection() {
     return;
   }
   const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const hostId = selected[0].id;
   for (const item of selected) {
     item.groupId = groupId;
+    item.groupScriptHostId = hostId;
   }
   markProjectDirty();
   hideActorContextMenu();
@@ -4264,6 +4981,7 @@ function ungroupSelection() {
   for (const item of state.items) {
     if (groupIds.has(item.groupId)) {
       item.groupId = null;
+      item.groupScriptHostId = null;
     }
   }
   markProjectDirty();
@@ -4323,12 +5041,15 @@ function pasteClipboard() {
 
   const newIds = [];
   const pastedGroupIds = new Map();
+  const pastedGroupHosts = new Map();
+  const oldToNewIds = new Map();
   for (const template of state.clipboard) {
     const item =
       template.kind === "character"
         ? createCharacterItem(template.subtype, template.x + dx, template.y + dy)
         : createObjectItem(template.subtype, template.x + dx, template.y + dy);
 
+    oldToNewIds.set(template.id, item.id);
     item.w = template.w;
     item.h = template.h;
     item.textureId = template.textureId;
@@ -4344,11 +5065,22 @@ function pasteClipboard() {
         pastedGroupIds.set(template.groupId, `group-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
       }
       item.groupId = pastedGroupIds.get(template.groupId);
+      if (!pastedGroupHosts.has(template.groupId)) {
+        pastedGroupHosts.set(template.groupId, item.id);
+      }
+      item.groupScriptHostId = pastedGroupHosts.get(template.groupId);
     }
     item.scripts = Array.isArray(template.scripts) ? template.scripts.map(deserializeBlock) : [];
     clampItemToStage(item);
     state.items.push(item);
     newIds.push(item.id);
+  }
+
+  for (const item of state.items) {
+    const template = state.clipboard.find((candidate) => oldToNewIds.get(candidate.id) === item.id);
+    if (template?.groupScriptHostId && oldToNewIds.has(template.groupScriptHostId)) {
+      item.groupScriptHostId = oldToNewIds.get(template.groupScriptHostId);
+    }
   }
 
   setSelection(newIds);
@@ -4383,6 +5115,9 @@ function handleKeyDown(event) {
 
   if ((event.ctrlKey || event.metaKey) && key === "c") {
     event.preventDefault();
+    if (state.characterBuilderOpen) {
+      return;
+    }
     if (state.stageModuleOpen) {
       copySetSelection();
       return;
@@ -4393,6 +5128,9 @@ function handleKeyDown(event) {
 
   if ((event.ctrlKey || event.metaKey) && key === "v") {
     event.preventDefault();
+    if (state.characterBuilderOpen) {
+      return;
+    }
     if (state.stageModuleOpen) {
       pasteSetClipboard();
       return;
@@ -4403,6 +5141,10 @@ function handleKeyDown(event) {
 
   if (key === "backspace") {
     event.preventDefault();
+    if (state.characterBuilderOpen) {
+      deleteCharacterBuilderSelection();
+      return;
+    }
     if (!deleteSelectedScriptBlock()) {
       if (state.stageModuleOpen) {
         deleteSelectedSetThing();
@@ -4426,6 +5168,10 @@ function handleKeyDown(event) {
     }
     if (state.stageModuleOpen) {
       clearSetSelection();
+      return;
+    }
+    if (state.characterBuilderOpen) {
+      closeCharacterBuilder();
       return;
     }
     clearActiveTool();
@@ -5058,9 +5804,13 @@ function drawSelectionOutline(item) {
 }
 
 function drawResizeHandles(item) {
+  drawResizeHandlesForBounds(getItemBounds(item));
+}
+
+function drawResizeHandlesForBounds(bounds) {
   ctx.save();
   ctx.setLineDash([]);
-  for (const handle of getResizeHandles(item)) {
+  for (const handle of getResizeHandlesForBounds(bounds)) {
     ctx.fillStyle = "#fffdfa";
     ctx.strokeStyle = "#2f8f83";
     ctx.lineWidth = 2.5;
@@ -5412,6 +6162,17 @@ function drawStage(now, options = {}) {
       if (selectedItem) {
         drawResizeHandles(selectedItem);
       }
+    } else if (state.selection.size > 1) {
+      const bounds = getItemsBounds(getSelectedItems());
+      if (bounds) {
+        ctx.save();
+        ctx.strokeStyle = "#2f8f83";
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([12, 7]);
+        ctx.strokeRect(bounds.left - 10, bounds.top - 10, bounds.right - bounds.left + 20, bounds.bottom - bounds.top + 20);
+        ctx.restore();
+        drawResizeHandlesForBounds(bounds);
+      }
     }
   }
 
@@ -5473,6 +6234,8 @@ function renderStageViews(now) {
       ctx.restore();
     });
   }
+
+  renderCharacterBuilder();
 }
 
 function animate(now) {
@@ -6027,12 +6790,25 @@ async function importImageAsset(kind, file) {
   const name = createImportedAssetName(file, `Imported ${kind}`);
 
   if (kind === "character") {
+    const builderData = {
+      items: [],
+      drawings: [serializeDrawing(normalizeDrawing({
+        type: "image",
+        imageData,
+        x: CHARACTER_BUILDER_WIDTH * 0.5,
+        y: CHARACTER_BUILDER_HEIGHT * 0.5,
+        w: CHARACTER_BUILDER_WIDTH * 0.62,
+        h: CHARACTER_BUILDER_HEIGHT * 0.62,
+        points: [],
+      }))],
+    };
     state.customCharacters.push({
       id,
       name,
       preview: "IMG",
       copy: "Imported from your computer.",
       imageData,
+      builderData,
     });
     state.setToolSelection.character = id;
     setActiveTool("character", id);
@@ -6080,6 +6856,7 @@ async function importImageAsset(kind, file) {
 
   populateToolLists();
   populateSetToolLists();
+  patternCaches.builder.clear();
   updateToolButtons();
   renderScriptPalette();
   renderActiveScriptEditor();
@@ -6208,6 +6985,7 @@ function saveTextureEditor() {
   patternCaches.stage.clear();
   patternCaches.recording.clear();
   patternCaches.set.clear();
+  patternCaches.builder.clear();
   populateToolLists();
   populateSetToolLists();
   updateToolButtons();
@@ -6230,6 +7008,7 @@ function bindEvents() {
   elements.scriptsModuleCloseButton.addEventListener("click", closeScriptsModule);
   elements.actorContextCodeButton.addEventListener("click", openContextActorCode);
   elements.actorContextPenButton.addEventListener("click", openPenAnimationEditor);
+  elements.actorContextEditCharacterButton.addEventListener("click", openContextCharacterBuilder);
   elements.actorContextGroupButton.addEventListener("click", groupSelection);
   elements.actorContextUngroupButton.addEventListener("click", ungroupSelection);
   elements.actorContextColor.addEventListener("input", () => changeSelectedObjectColor(elements.actorContextColor.value));
@@ -6250,6 +7029,22 @@ function bindEvents() {
     if (state.activeTool?.type === "draw") {
       setActiveTool("draw", elements.stagePenColor.value);
     }
+  });
+  elements.createCharacterButton.addEventListener("click", () => openCharacterBuilder());
+  elements.closeCharacterBuilderButton.addEventListener("click", closeCharacterBuilder);
+  elements.saveCharacterBuilderButton.addEventListener("click", saveCharacterBuilder);
+  elements.characterBuilderSelectButton.addEventListener("click", () => setCharacterBuilderTool("select"));
+  elements.characterBuilderPenButton.addEventListener("click", () => setCharacterBuilderTool("pen"));
+  elements.characterBuilderPenColor.addEventListener("input", () => {
+    state.characterBuilder.penColor = elements.characterBuilderPenColor.value;
+  });
+  elements.characterBuilderImportButton.addEventListener("click", () => elements.characterBuilderImportInput.click());
+  elements.characterBuilderImportInput.addEventListener("change", async () => {
+    const file = elements.characterBuilderImportInput.files?.[0];
+    if (file) {
+      addImportedImageToCharacterBuilder(await readFileAsDataUrl(file));
+    }
+    elements.characterBuilderImportInput.value = "";
   });
   elements.importCharacterButton.addEventListener("click", () => elements.importCharacterInput.click());
   elements.importTextureButton.addEventListener("click", () => elements.importTextureInput.click());
@@ -6316,6 +7111,10 @@ function bindEvents() {
   stageCanvas.addEventListener("pointermove", onPointerMove);
   stageCanvas.addEventListener("pointerup", onPointerUp);
   stageCanvas.addEventListener("contextmenu", onStageContextMenu);
+  characterBuilderCanvas.addEventListener("pointerdown", onCharacterBuilderPointerDown);
+  characterBuilderCanvas.addEventListener("pointermove", onCharacterBuilderPointerMove);
+  characterBuilderCanvas.addEventListener("pointerup", onCharacterBuilderPointerUp);
+  characterBuilderCanvas.addEventListener("pointercancel", onCharacterBuilderPointerUp);
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("pointercancel", onPointerUp);
   stageCanvas.addEventListener("pointerleave", () => {

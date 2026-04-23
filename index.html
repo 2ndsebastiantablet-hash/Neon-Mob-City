@@ -53,6 +53,7 @@
           <div id="actorContextMenu" class="actor-context-menu hidden">
             <button id="actorContextCodeButton" type="button">Code</button>
             <button id="actorContextPenButton" type="button">Pen Animation</button>
+            <button id="actorContextEditCharacterButton" type="button">Edit Character</button>
             <button id="actorContextGroupButton" type="button">Group</button>
             <button id="actorContextUngroupButton" type="button">Ungroup</button>
             <label class="set-control-label">Object color <input id="actorContextColor" type="color" value="#f4a261"></label>
@@ -87,6 +88,7 @@
           <div class="sidebar-card">
             <section id="charactersPanel" class="tool-panel" aria-label="Characters">
               <button id="importCharacterButton" type="button" class="secondary-button full-width import-button">Import Character Image</button>
+              <button id="createCharacterButton" type="button" class="primary-button full-width import-button">Create Character</button>
               <div id="characterList" class="tool-grid character-grid"></div>
             </section>
 
@@ -272,6 +274,46 @@
           </aside>
         </div>
       </section>
+
+      <section id="characterBuilderModule" class="character-builder-module hidden" aria-label="Character creator">
+        <div class="scripts-module-backdrop"></div>
+        <div class="character-builder-shell">
+          <header class="scripts-module-header">
+            <div>
+              <p class="topbar-label">Custom Actor Workshop</p>
+              <h3>Create Character</h3>
+              <p id="characterBuilderLabel" class="scripts-copy">Build a reusable character out of props, imported images, textures, and pen drawings.</p>
+            </div>
+            <div class="scripts-module-actions">
+              <button id="saveCharacterBuilderButton" type="button" class="primary-button">Save Character</button>
+              <button id="closeCharacterBuilderButton" type="button" class="ghost-button">Back To Studio</button>
+            </div>
+          </header>
+
+          <div class="character-builder-layout">
+            <aside class="character-builder-tools">
+              <label class="set-control-label">Character name <input id="characterBuilderName" type="text" value="Custom Character"></label>
+              <div class="set-tool-tabs">
+                <button id="characterBuilderSelectButton" type="button" class="set-tool-tab active">Select</button>
+                <button id="characterBuilderPenButton" type="button" class="set-tool-tab">Pen</button>
+              </div>
+              <button id="characterBuilderImportButton" type="button" class="secondary-button full-width import-button">Import Image</button>
+              <label class="set-control-label">Pen color <input id="characterBuilderPenColor" type="color" value="#2f8f83"></label>
+              <h4>Objects</h4>
+              <div id="characterBuilderObjectList" class="set-tool-grid compact-builder-grid"></div>
+              <h4>Textures</h4>
+              <div id="characterBuilderTextureList" class="set-tool-grid compact-builder-grid"></div>
+            </aside>
+
+            <section class="character-builder-canvas-panel">
+              <div class="character-builder-canvas-frame">
+                <canvas id="characterBuilderCanvas" aria-label="Character builder canvas"></canvas>
+              </div>
+              <p class="stage-status subtle">Place objects, paint textures, import images, draw details, then save the result into the Characters menu.</p>
+            </section>
+          </div>
+        </div>
+      </section>
     </section>
 
     <input id="importCharacterInput" class="hidden" type="file" accept="image/*">
@@ -279,6 +321,7 @@
     <input id="importObjectInput" class="hidden" type="file" accept="image/*">
     <input id="importStageInput" class="hidden" type="file" accept="image/*">
     <input id="importMusicInput" class="hidden" type="file" accept="audio/*">
+    <input id="characterBuilderImportInput" class="hidden" type="file" accept="image/*">
 
     <section id="libraryScreen" class="screen library-screen hidden" aria-label="Recording library">
       <header class="topbar">

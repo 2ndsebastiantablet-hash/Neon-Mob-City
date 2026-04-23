@@ -402,6 +402,7 @@ button:disabled {
 
 .scripts-module,
 .stage-module,
+.character-builder-module,
 .scripts-module-actions,
 .script-category-tabs,
 .script-stack-header,
@@ -414,7 +415,8 @@ button:disabled {
 }
 
 .scripts-module,
-.stage-module {
+.stage-module,
+.character-builder-module {
   position: absolute;
   inset: 0;
   z-index: 6;
@@ -464,6 +466,24 @@ button:disabled {
   overflow: hidden;
 }
 
+.character-builder-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: calc(100vw - 2rem);
+  height: calc(100vh - 2rem);
+  margin: 1rem;
+  padding: 1rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at top left, rgba(255, 211, 190, 0.9), transparent 30%),
+    linear-gradient(135deg, rgba(255, 249, 239, 0.98), rgba(255, 245, 232, 0.98));
+  box-shadow: 0 26px 60px rgba(54, 27, 12, 0.24);
+  overflow: hidden;
+}
+
 .scripts-module-header,
 .script-stack-header {
   display: flex;
@@ -503,12 +523,21 @@ button:disabled {
   min-height: 0;
 }
 
+.character-builder-layout {
+  display: grid;
+  grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
+  gap: 1rem;
+  min-height: 0;
+}
+
 .scripts-actor-panel,
 .scripts-palette-panel,
 .scripts-workspace-panel,
 .set-list-panel,
 .set-canvas-panel,
-.set-tools-panel {
+.set-tools-panel,
+.character-builder-tools,
+.character-builder-canvas-panel {
   min-height: 0;
   padding: 1rem;
   border-radius: var(--radius-lg);
@@ -517,14 +546,16 @@ button:disabled {
 }
 
 .set-list-panel,
-.set-tools-panel {
+.set-tools-panel,
+.character-builder-tools {
   display: grid;
   align-content: start;
   gap: 0.75rem;
   overflow: auto;
 }
 
-.set-canvas-panel {
+.set-canvas-panel,
+.character-builder-canvas-panel {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 0.7rem;
@@ -540,6 +571,7 @@ button:disabled {
 
 .set-list-heading h4,
 .set-tools-panel h4,
+.character-builder-tools h4,
 .set-mini-code-header h4,
 .set-mini-code-layout h5 {
   margin: 0;
@@ -604,6 +636,26 @@ button:disabled {
   cursor: crosshair;
 }
 
+.character-builder-canvas-frame {
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(82, 47, 18, 0.11);
+  background:
+    linear-gradient(45deg, rgba(47, 143, 131, 0.08) 25%, transparent 25% 75%, rgba(47, 143, 131, 0.08) 75%),
+    linear-gradient(45deg, rgba(47, 143, 131, 0.08) 25%, transparent 25% 75%, rgba(47, 143, 131, 0.08) 75%),
+    #fffdfa;
+  background-position: 0 0, 14px 14px;
+  background-size: 28px 28px;
+  overflow: hidden;
+}
+
+#characterBuilderCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
 .set-tool-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -621,6 +673,10 @@ button:disabled {
   max-height: 17rem;
   overflow: auto;
   padding-right: 0.15rem;
+}
+
+.compact-builder-grid {
+  max-height: 12rem;
 }
 
 .set-tool-grid .tool-card {
@@ -1192,12 +1248,14 @@ button:disabled {
   }
 
   .scripts-module-layout,
-  .stage-module-layout {
+  .stage-module-layout,
+  .character-builder-layout {
     grid-template-columns: 1fr;
   }
 
   .scripts-module-shell,
-  .stage-module-shell {
+  .stage-module-shell,
+  .character-builder-shell {
     height: calc(100vh - 1.2rem);
     width: calc(100vw - 1.2rem);
     margin: 0.6rem;
