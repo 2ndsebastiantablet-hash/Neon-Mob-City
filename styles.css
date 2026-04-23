@@ -400,6 +400,81 @@ button:disabled {
   gap: 0.8rem;
 }
 
+.audio-panel {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.audio-countdown {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 800;
+  text-align: center;
+}
+
+.audio-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.music-maker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  background: rgba(67, 42, 22, 0.08);
+}
+
+.music-maker-note {
+  aspect-ratio: 1;
+  min-height: 1.6rem;
+  padding: 0;
+  border-radius: 0.5rem;
+  background: rgba(255, 253, 250, 0.95);
+  box-shadow: inset 0 0 0 1px rgba(82, 47, 18, 0.12);
+}
+
+.music-maker-note.active {
+  background: linear-gradient(135deg, #2f8f83, #52c0a7);
+  box-shadow: 0 8px 16px rgba(47, 143, 131, 0.22);
+}
+
+.audio-library-list {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 11rem;
+  overflow: auto;
+}
+
+.audio-library-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 253, 250, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(82, 47, 18, 0.08);
+}
+
+.audio-library-card strong,
+.audio-library-card span {
+  display: block;
+}
+
+.audio-library-card span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.audio-library-card button {
+  padding: 0.45rem 0.65rem;
+  font-size: 0.78rem;
+}
+
 .scripts-module,
 .stage-module,
 .character-builder-module,

@@ -188,6 +188,10 @@ const MUSIC_OPTIONS = [
   { value: "dream", label: "Dream Pad" },
 ];
 const SET_PEN_COLORS = ["#2f8f83", "#e76f51", "#f4a261", "#264653", "#ffd166", "#ef476f", "#ffffff", "#2c1d14"];
+const DRAWING_CLOSE_DISTANCE = 18;
+const MUSIC_MAKER_ROWS = 8;
+const MUSIC_MAKER_COLUMNS = 8;
+const MUSIC_MAKER_FREQUENCIES = [523.25, 493.88, 440, 392, 349.23, 329.63, 293.66, 261.63];
 const SCRIPT_GROUPS = [
   { id: "scene", name: "Scene" },
   { id: "motion", name: "Motion" },
@@ -446,8 +450,8 @@ const SCRIPT_BLOCK_DEFS = [
   {
     type: "play_music",
     category: "sound",
-    title: "Play Music",
-    copy: "Play a looping placeholder music bed.",
+    title: "Play Audio",
+    copy: "Play built-in audio or a saved item from the Audio library.",
     params: [{ name: "musicId", label: "Music", input: "select", options: MUSIC_OPTIONS }],
   },
   {
@@ -571,6 +575,7 @@ const elements = {
   importObjectInput: document.querySelector("#importObjectInput"),
   importStageInput: document.querySelector("#importStageInput"),
   importMusicInput: document.querySelector("#importMusicInput"),
+  importAudioInput: document.querySelector("#importAudioInput"),
   characterBuilderImportInput: document.querySelector("#characterBuilderImportInput"),
   textureEditorPanel: document.querySelector("#textureEditorPanel"),
   textureEditorTitle: document.querySelector("#textureEditorTitle"),
@@ -596,6 +601,17 @@ const elements = {
   closePenAnimationButton: document.querySelector("#closePenAnimationButton"),
   stagePenColor: document.querySelector("#stagePenColor"),
   stageDrawButton: document.querySelector("#stageDrawButton"),
+  stageFillColor: document.querySelector("#stageFillColor"),
+  stageBucketButton: document.querySelector("#stageBucketButton"),
+  importAudioButton: document.querySelector("#importAudioButton"),
+  recordMicButton: document.querySelector("#recordMicButton"),
+  stopMicButton: document.querySelector("#stopMicButton"),
+  audioCountdownLabel: document.querySelector("#audioCountdownLabel"),
+  musicMakerName: document.querySelector("#musicMakerName"),
+  musicMakerGrid: document.querySelector("#musicMakerGrid"),
+  previewMusicMakerButton: document.querySelector("#previewMusicMakerButton"),
+  saveMusicMakerButton: document.querySelector("#saveMusicMakerButton"),
+  audioLibraryList: document.querySelector("#audioLibraryList"),
   scriptsModule: document.querySelector("#scriptsModule"),
   scriptsModuleCloseButton: document.querySelector("#scriptsModuleCloseButton"),
   stageModule: document.querySelector("#stageModule"),
@@ -649,6 +665,7 @@ const elements = {
     textures: document.querySelector("#texturesPanel"),
     objects: document.querySelector("#objectsPanel"),
     draw: document.querySelector("#drawPanel"),
+    audio: document.querySelector("#audioPanel"),
     camera: document.querySelector("#cameraPanel"),
   },
 };
@@ -727,6 +744,7 @@ const state = {
   },
   selection: new Set(),
   stageDrawings: [],
+  stageSelectedDrawingId: null,
   clipboard: [],
   selectedScriptBlockIds: new Set(),
   interaction: null,
@@ -761,6 +779,14 @@ const state = {
     master: null,
     activeNodes: [],
     stopLooping: false,
+    micRecorder: null,
+    micStream: null,
+    micChunks: [],
+    countdownTimer: null,
+    musicPreviewStops: [],
+  },
+  musicMaker: {
+    cells: Array.from({ length: MUSIC_MAKER_ROWS }, () => Array.from({ length: MUSIC_MAKER_COLUMNS }, () => false)),
   },
 };
 
@@ -889,7 +915,7 @@ function getTextureDefs() {
 }
 
 function getMusicOptions() {
-  return [...MUSIC_OPTIONS, ...state.customMusic.map((music) => ({ value: music.value, label: music.label }))];
+  return [...MUSIC_OPTIONS, ...state.customMusic.map((music) => ({ value: music.value, label: music.label || music.name || "Audio" }))];
 }
 
 function getCharacterDef(characterId) {
@@ -1052,6 +1078,8 @@ function serializeDrawing(drawing) {
     y: drawing.y,
     w: drawing.w,
     h: drawing.h,
+    closed: Boolean(drawing.closed),
+    fillColor: drawing.fillColor || null,
     points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: point.x, y: point.y })) : [],
   };
 }
@@ -1066,6 +1094,8 @@ function normalizeDrawing(drawing) {
     y: Number(drawing.y || state.stageHeight * 0.5),
     w: Number(drawing.w || state.stageWidth * 0.55),
     h: Number(drawing.h || state.stageHeight * 0.45),
+    closed: Boolean(drawing.closed),
+    fillColor: drawing.fillColor || null,
     points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: Number(point.x || 0), y: Number(point.y || 0) })) : [],
   };
 }
@@ -2011,18 +2041,6 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
       input.addEventListener("input", () => updateBlockParam(block.id, param.name, input.value));
       label.append(input);
       paramGrid.append(label);
-
-      if (block.type === "play_music" && param.name === "musicId") {
-        const importButton = document.createElement("button");
-        importButton.type = "button";
-        importButton.className = "ghost-button full-width";
-        importButton.textContent = "Import Music";
-        importButton.addEventListener("click", () => {
-          elements.importMusicInput.dataset.blockId = block.id;
-          elements.importMusicInput.click();
-        });
-        paramGrid.append(importButton);
-      }
     }
     card.append(paramGrid);
   }
@@ -2175,6 +2193,7 @@ function createAudioEngine() {
 
 function stopAllAudioNodes() {
   state.audio.stopLooping = true;
+  stopMusicMakerPreview();
   for (const nodeInfo of state.audio.activeNodes) {
     try {
       nodeInfo.source.stop();
@@ -2188,7 +2207,11 @@ function stopAllAudioNodes() {
 function playPlaceholderTone(kind, value) {
   if (kind === "music") {
     const customMusic = state.customMusic.find((music) => music.value === value);
-    if (customMusic) {
+    if (customMusic?.pattern) {
+      playMusicPattern(customMusic.pattern, { loop: Boolean(state.recording) });
+      return;
+    }
+    if (customMusic?.dataUrl) {
       const audioElement = new Audio(customMusic.dataUrl);
       audioElement.volume = state.globalVolume;
       audioElement.loop = Boolean(state.recording);
@@ -2254,6 +2277,64 @@ function playPlaceholderTone(kind, value) {
       playPlaceholderTone("music", value);
     }
   };
+}
+
+function stopMusicMakerPreview() {
+  for (const stop of state.audio.musicPreviewStops) {
+    stop();
+  }
+  state.audio.musicPreviewStops = [];
+}
+
+function playMusicPattern(pattern, options = {}) {
+  const audio = createAudioEngine();
+  if (!audio) {
+    return;
+  }
+  stopMusicMakerPreview();
+  audio.ctx.resume?.();
+  const stepDuration = 0.22;
+  const startAt = audio.ctx.currentTime + 0.04;
+  const rows = Array.isArray(pattern) ? pattern : state.musicMaker.cells;
+
+  rows.forEach((row, rowIndex) => {
+    row.forEach((enabled, columnIndex) => {
+      if (!enabled) {
+        return;
+      }
+      const oscillator = audio.ctx.createOscillator();
+      const gain = audio.ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(MUSIC_MAKER_FREQUENCIES[rowIndex] || 261.63, startAt + columnIndex * stepDuration);
+      gain.gain.setValueAtTime(0.0001, startAt + columnIndex * stepDuration);
+      gain.gain.linearRampToValueAtTime(0.14, startAt + columnIndex * stepDuration + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, startAt + columnIndex * stepDuration + stepDuration * 0.85);
+      oscillator.connect(gain);
+      gain.connect(audio.master);
+      oscillator.start(startAt + columnIndex * stepDuration);
+      oscillator.stop(startAt + columnIndex * stepDuration + stepDuration * 0.9);
+      state.audio.activeNodes.push({ source: oscillator, gain, loop: false });
+      state.audio.musicPreviewStops.push(() => {
+        try {
+          oscillator.stop();
+        } catch {
+          // noop
+        }
+      });
+      oscillator.onended = () => {
+        state.audio.activeNodes = state.audio.activeNodes.filter((node) => node.source !== oscillator);
+      };
+    });
+  });
+
+  if (options.loop) {
+    const timeoutId = window.setTimeout(() => {
+      if (state.recording && !state.audio.stopLooping) {
+        playMusicPattern(pattern, options);
+      }
+    }, MUSIC_MAKER_COLUMNS * stepDuration * 1000);
+    state.audio.musicPreviewStops.push(() => window.clearTimeout(timeoutId));
+  }
 }
 
 function setAudioVolume(volumeFraction) {
@@ -3016,6 +3097,7 @@ function getSelectedItems() {
 
 function setSelection(ids) {
   state.selection = new Set(ids);
+  state.stageSelectedDrawingId = null;
   if (ids.length === 1) {
     state.scriptTargetId = ids[0];
   }
@@ -3028,6 +3110,7 @@ function setSelection(ids) {
 
 function clearSelection() {
   state.selection.clear();
+  state.stageSelectedDrawingId = null;
   state.selectedScriptBlockId = null;
   state.selectedScriptBlockIds.clear();
   updateSelectionLabel();
@@ -3051,6 +3134,8 @@ function getPanelToolType(panelName) {
       return "object";
     case "draw":
       return "draw";
+    case "audio":
+      return "audio";
     default:
       return null;
   }
@@ -3192,6 +3277,11 @@ function updateToolLabel() {
 
   if (state.activeTool.type === "draw") {
     elements.toolLabel.textContent = "Drawing pen: drag on the stage to draw.";
+    return;
+  }
+
+  if (state.activeTool.type === "bucket") {
+    elements.toolLabel.textContent = "Paint bucket: click a closed pen shape to fill it.";
   }
 }
 
@@ -3649,6 +3739,8 @@ function onCharacterBuilderPointerDown(event) {
       id: `builder-drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: "path",
       color: state.characterBuilder.penColor,
+      closed: false,
+      fillColor: null,
       points: [point],
     });
     state.characterBuilder.drawings.push(drawing);
@@ -3763,6 +3855,12 @@ function onCharacterBuilderPointerMove(event) {
 }
 
 function onCharacterBuilderPointerUp(event) {
+  if (state.characterBuilder.interaction?.type === "draw") {
+    const drawing = state.characterBuilder.drawings.find((candidate) => candidate.id === state.characterBuilder.interaction.drawingId);
+    if (drawing && finalizeDrawingClosure(drawing)) {
+      state.characterBuilder.selectedDrawingId = drawing.id;
+    }
+  }
   state.characterBuilder.interaction = null;
   if (event?.pointerId != null) {
     characterBuilderCanvas.releasePointerCapture?.(event.pointerId);
@@ -4062,6 +4160,40 @@ function getDrawingBounds(drawing) {
   );
 }
 
+function isDrawingCloseCandidate(drawing) {
+  if (!drawing || drawing.type === "image" || drawing.closed || !Array.isArray(drawing.points) || drawing.points.length < 4) {
+    return false;
+  }
+  const first = drawing.points[0];
+  const last = drawing.points[drawing.points.length - 1];
+  return Math.hypot(first.x - last.x, first.y - last.y) <= DRAWING_CLOSE_DISTANCE;
+}
+
+function finalizeDrawingClosure(drawing) {
+  if (!isDrawingCloseCandidate(drawing)) {
+    return false;
+  }
+  const first = drawing.points[0];
+  drawing.points[drawing.points.length - 1] = { x: first.x, y: first.y };
+  drawing.closed = true;
+  return true;
+}
+
+function pointInPolygon(point, points) {
+  let inside = false;
+  for (let index = 0, previous = points.length - 1; index < points.length; previous = index, index += 1) {
+    const currentPoint = points[index];
+    const previousPoint = points[previous];
+    const intersects =
+      currentPoint.y > point.y !== previousPoint.y > point.y &&
+      point.x < ((previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)) / (previousPoint.y - currentPoint.y || 1) + currentPoint.x;
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 function distanceToSegment(point, a, b) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -4082,6 +4214,9 @@ function hitTestSetDrawing(set, point) {
       }
       continue;
     }
+    if (drawing.closed && pointInPolygon(point, drawing.points || [])) {
+      return drawing;
+    }
     for (let pointIndex = 1; pointIndex < drawing.points.length; pointIndex += 1) {
       if (distanceToSegment(point, drawing.points[pointIndex - 1], drawing.points[pointIndex]) <= 8) {
         return drawing;
@@ -4089,6 +4224,10 @@ function hitTestSetDrawing(set, point) {
     }
   }
   return null;
+}
+
+function hitTestStageDrawing(point) {
+  return hitTestSetDrawing({ drawings: state.stageDrawings }, point);
 }
 
 function getSetMiniScriptTarget() {
@@ -4315,6 +4454,8 @@ function onSetPointerDown(event) {
     const drawing = {
       id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       color: state.setPenColor,
+      closed: false,
+      fillColor: null,
       points: [point],
     };
     set.drawings.push(drawing);
@@ -4511,6 +4652,12 @@ function onSetPointerMove(event) {
 }
 
 function onSetPointerUp(event) {
+  if (state.setInteraction?.type === "draw") {
+    const drawing = getActiveSet().drawings.find((candidate) => candidate.id === state.setInteraction.drawingId);
+    if (drawing && finalizeDrawingClosure(drawing)) {
+      state.setSelectedDrawingId = drawing.id;
+    }
+  }
   if (
     state.setInteraction?.type === "dragItem" &&
     state.setInteraction.wasAlreadySelected &&
@@ -4550,6 +4697,15 @@ function onSetContextMenu(event) {
   const item = hitTestSetItem(getActiveSet(), point.x, point.y);
   if (item) {
     openSetMiniCodePanel(item.id);
+    renderStageModule();
+    return;
+  }
+  const drawing = hitTestSetDrawing(getActiveSet(), point);
+  if (drawing) {
+    const set = getActiveSet();
+    set.drawings = set.drawings.filter((candidate) => candidate.id !== drawing.id);
+    state.setSelectedDrawingId = null;
+    markProjectDirty();
     renderStageModule();
   }
 }
@@ -4626,11 +4782,27 @@ function onPointerDown(event) {
     return;
   }
 
+  if (state.activeTool && state.activeTool.type === "bucket") {
+    const drawing = hitTestStageDrawing(point);
+    if (drawing?.closed) {
+      drawing.fillColor = state.activeTool.id || elements.stageFillColor.value;
+      state.stageSelectedDrawingId = drawing.id;
+      state.selection.clear();
+      elements.toolLabel.textContent = "Filled closed drawing.";
+      markProjectDirty();
+    } else {
+      elements.toolLabel.textContent = "The paint bucket only fills closed pen shapes.";
+    }
+    return;
+  }
+
   if (state.activeTool && state.activeTool.type === "draw") {
     const drawing = {
       id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: "path",
       color: state.activeTool.id || elements.stagePenColor.value,
+      closed: false,
+      fillColor: null,
       points: [point],
     };
     state.stageDrawings.push(drawing);
@@ -4683,8 +4855,16 @@ function onPointerDown(event) {
     }
     startDragSelection(point);
   } else {
-    clearSelection();
-    beginMarquee(point);
+    const drawing = hitTestStageDrawing(point);
+    if (drawing) {
+      state.selection.clear();
+      state.stageSelectedDrawingId = drawing.id;
+      updateSelectionLabel();
+      elements.selectionLabel.textContent = drawing.closed ? "Selected: closed pen shape" : "Selected: pen drawing";
+    } else {
+      clearSelection();
+      beginMarquee(point);
+    }
   }
 }
 
@@ -4785,6 +4965,14 @@ function onPointerUp(event) {
     saveDraftPenAnimation();
   }
 
+  if (state.interaction?.type === "stageDraw") {
+    const drawing = state.stageDrawings.find((candidate) => candidate.id === state.interaction.drawingId);
+    if (drawing && finalizeDrawingClosure(drawing)) {
+      state.stageSelectedDrawingId = drawing.id;
+      elements.toolLabel.textContent = "Closed shape created. Use the paint bucket to fill it.";
+    }
+  }
+
   state.interaction = null;
   state.dragPaintedIds = new Set();
   if (event?.pointerId != null) {
@@ -4827,6 +5015,15 @@ function onStageContextMenu(event) {
   const point = getCanvasPoint(event);
   const actor = hitTest(point.x, point.y);
   if (!actor) {
+    const drawing = hitTestStageDrawing(point);
+    if (drawing) {
+      state.stageDrawings = state.stageDrawings.filter((candidate) => candidate.id !== drawing.id);
+      state.stageSelectedDrawingId = null;
+      hideActorContextMenu();
+      elements.toolLabel.textContent = "Drawing deleted.";
+      markProjectDirty();
+      return;
+    }
     hideActorContextMenu();
     return;
   }
@@ -5088,6 +5285,13 @@ function pasteClipboard() {
 }
 
 function deleteSelection() {
+  if (state.stageSelectedDrawingId != null) {
+    state.stageDrawings = state.stageDrawings.filter((drawing) => drawing.id !== state.stageSelectedDrawingId);
+    state.stageSelectedDrawingId = null;
+    elements.toolLabel.textContent = "Drawing deleted.";
+    markProjectDirty();
+    return;
+  }
   if (state.selection.size === 0) {
     return;
   }
@@ -5931,7 +6135,11 @@ function drawSetDrawings(set) {
     if (!drawing.points || drawing.points.length < 2) {
       continue;
     }
-    ctx.strokeStyle = drawing.color || "#2f8f83";
+    const closeHint =
+      state.interaction?.drawingId === drawing.id ||
+      state.setInteraction?.drawingId === drawing.id ||
+      state.characterBuilder.interaction?.drawingId === drawing.id;
+    ctx.strokeStyle = closeHint && isDrawingCloseCandidate(drawing) ? "#ffd166" : drawing.color || "#2f8f83";
     ctx.beginPath();
     drawing.points.forEach((point, index) => {
       if (index === 0) {
@@ -5940,6 +6148,13 @@ function drawSetDrawings(set) {
         ctx.lineTo(point.x, point.y);
       }
     });
+    if (drawing.closed) {
+      ctx.closePath();
+      if (drawing.fillColor) {
+        ctx.fillStyle = drawing.fillColor;
+        ctx.fill();
+      }
+    }
     ctx.stroke();
   }
   ctx.restore();
@@ -6138,6 +6353,10 @@ function drawStage(now, options = {}) {
   ctx.fillText("WORMS STAGE", 18, state.stageHeight - 18);
 
   drawSetDrawings({ drawings: state.stageDrawings });
+  const selectedStageDrawing = state.stageDrawings.find((drawing) => drawing.id === state.stageSelectedDrawingId);
+  if (showSelectionOutlines && selectedStageDrawing) {
+    drawDrawingSelection(selectedStageDrawing);
+  }
 
   if (showSetContent) {
     drawSetContent(getActiveSet(), { showEditorHandles: false });
@@ -6871,13 +7090,178 @@ async function importMusicAsset(file, blockId = null) {
   const dataUrl = await readFileAsDataUrl(file);
   const value = `custom-music-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const label = createImportedAssetName(file, "Imported music");
-  state.customMusic.push({ value, label, dataUrl });
+  state.customMusic.push({ value, label, dataUrl, source: "imported" });
   if (blockId) {
     updateBlockParam(blockId, "musicId", value);
   }
   markProjectDirty();
   saveProjectState();
   renderActiveScriptEditor();
+  renderAudioLibrary();
+}
+
+function renderMusicMakerGrid() {
+  elements.musicMakerGrid.innerHTML = "";
+  for (let row = 0; row < MUSIC_MAKER_ROWS; row += 1) {
+    for (let column = 0; column < MUSIC_MAKER_COLUMNS; column += 1) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "music-maker-note";
+      button.classList.toggle("active", Boolean(state.musicMaker.cells[row][column]));
+      button.title = `Row ${row + 1}, beat ${column + 1}`;
+      button.addEventListener("click", () => {
+        state.musicMaker.cells[row][column] = !state.musicMaker.cells[row][column];
+        renderMusicMakerGrid();
+      });
+      elements.musicMakerGrid.append(button);
+    }
+  }
+}
+
+function cloneMusicPattern(pattern = state.musicMaker.cells) {
+  return pattern.map((row) => row.map(Boolean));
+}
+
+function saveMusicMakerLoop() {
+  const label = elements.musicMakerName.value.trim() || "My Loop";
+  const value = `custom-music-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  state.customMusic.push({
+    value,
+    label,
+    source: "music-maker",
+    pattern: cloneMusicPattern(),
+  });
+  markProjectDirty();
+  saveProjectState();
+  renderAudioLibrary();
+  renderActiveScriptEditor();
+}
+
+function renderAudioLibrary() {
+  if (!elements.audioLibraryList) {
+    return;
+  }
+  elements.audioLibraryList.innerHTML = "";
+  const audioItems = state.customMusic;
+  if (audioItems.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "script-empty";
+    empty.textContent = "No custom audio yet. Import, record, or save a loop.";
+    elements.audioLibraryList.append(empty);
+    return;
+  }
+
+  for (const audioItem of audioItems) {
+    const card = document.createElement("div");
+    card.className = "audio-library-card";
+    const text = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = audioItem.label || "Audio";
+    const meta = document.createElement("span");
+    meta.textContent = audioItem.source === "music-maker" ? "Music Maker loop" : audioItem.source === "mic" ? "Mic recording" : "Imported audio";
+    text.append(title, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "library-card-actions";
+    const playButton = document.createElement("button");
+    playButton.type = "button";
+    playButton.className = "ghost-button";
+    playButton.textContent = "Play";
+    playButton.addEventListener("click", () => playPlaceholderTone("music", audioItem.value));
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "ghost-button";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => {
+      state.customMusic = state.customMusic.filter((candidate) => candidate.value !== audioItem.value);
+      markProjectDirty();
+      saveProjectState();
+      renderAudioLibrary();
+      renderActiveScriptEditor();
+    });
+    actions.append(playButton, deleteButton);
+    card.append(text, actions);
+    elements.audioLibraryList.append(card);
+  }
+}
+
+function setMicRecordingUi(recording, label = null) {
+  elements.recordMicButton.disabled = recording;
+  elements.stopMicButton.disabled = !recording;
+  if (label) {
+    elements.audioCountdownLabel.textContent = label;
+  }
+}
+
+function startMicCountdown() {
+  if (!navigator.mediaDevices?.getUserMedia || state.audio.micRecorder) {
+    return;
+  }
+  let count = 3;
+  setMicRecordingUi(true, `Recording starts in ${count}...`);
+  state.audio.countdownTimer = window.setInterval(async () => {
+    count -= 1;
+    if (count > 0) {
+      elements.audioCountdownLabel.textContent = `Recording starts in ${count}...`;
+      return;
+    }
+    window.clearInterval(state.audio.countdownTimer);
+    state.audio.countdownTimer = null;
+    await beginMicRecording();
+  }, 1000);
+}
+
+async function beginMicRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    state.audio.micStream = stream;
+    state.audio.micRecorder = recorder;
+    state.audio.micChunks = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data?.size > 0) {
+        state.audio.micChunks.push(event.data);
+      }
+    };
+    recorder.onstop = async () => {
+      const blob = new Blob(state.audio.micChunks, { type: recorder.mimeType || "audio/webm" });
+      const dataUrl = await readFileAsDataUrl(blob);
+      const label = window.prompt("Name this audio recording:", "Mic Recording") || "Mic Recording";
+      state.customMusic.push({
+        value: `custom-music-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        label,
+        dataUrl,
+        source: "mic",
+      });
+      state.audio.micStream?.getTracks().forEach((track) => track.stop());
+      state.audio.micRecorder = null;
+      state.audio.micStream = null;
+      state.audio.micChunks = [];
+      setMicRecordingUi(false, "Mic recording saved.");
+      markProjectDirty();
+      saveProjectState();
+      renderAudioLibrary();
+      renderActiveScriptEditor();
+    };
+    recorder.start();
+    setMicRecordingUi(true, "Recording mic...");
+  } catch {
+    state.audio.micRecorder = null;
+    state.audio.micStream = null;
+    setMicRecordingUi(false, "Microphone unavailable.");
+  }
+}
+
+function stopMicRecording() {
+  if (state.audio.countdownTimer) {
+    window.clearInterval(state.audio.countdownTimer);
+    state.audio.countdownTimer = null;
+    setMicRecordingUi(false, "Mic idle.");
+    return;
+  }
+  if (state.audio.micRecorder && state.audio.micRecorder.state !== "inactive") {
+    state.audio.micRecorder.stop();
+  }
 }
 
 function openTextureEditor() {
@@ -7025,11 +7409,26 @@ function bindEvents() {
     }
   });
   elements.stageDrawButton.addEventListener("click", () => setActiveTool("draw", elements.stagePenColor.value));
+  elements.stageBucketButton.addEventListener("click", () => setActiveTool("bucket", elements.stageFillColor.value));
   elements.stagePenColor.addEventListener("input", () => {
     if (state.activeTool?.type === "draw") {
       setActiveTool("draw", elements.stagePenColor.value);
     }
   });
+  elements.stageFillColor.addEventListener("input", () => {
+    if (state.activeTool?.type === "bucket") {
+      setActiveTool("bucket", elements.stageFillColor.value);
+    }
+  });
+  elements.importAudioButton.addEventListener("click", () => elements.importAudioInput.click());
+  elements.importAudioInput.addEventListener("change", () => {
+    importMusicAsset(elements.importAudioInput.files?.[0]);
+    elements.importAudioInput.value = "";
+  });
+  elements.recordMicButton.addEventListener("click", startMicCountdown);
+  elements.stopMicButton.addEventListener("click", stopMicRecording);
+  elements.previewMusicMakerButton.addEventListener("click", () => playMusicPattern(cloneMusicPattern()));
+  elements.saveMusicMakerButton.addEventListener("click", saveMusicMakerLoop);
   elements.createCharacterButton.addEventListener("click", () => openCharacterBuilder());
   elements.closeCharacterBuilderButton.addEventListener("click", closeCharacterBuilder);
   elements.saveCharacterBuilderButton.addEventListener("click", saveCharacterBuilder);
@@ -7145,6 +7544,8 @@ async function init() {
   loadProjectState();
   populateToolLists();
   populateSetToolLists();
+  renderMusicMakerGrid();
+  renderAudioLibrary();
   renderScriptCategoryTabs();
   renderScriptPalette();
   bindEvents();

@@ -80,6 +80,7 @@
             <button type="button" class="sidebar-tab" data-panel="textures">Textures</button>
             <button type="button" class="sidebar-tab" data-panel="objects">Objects</button>
             <button type="button" class="sidebar-tab" data-panel="draw">Draw</button>
+            <button type="button" class="sidebar-tab" data-panel="audio">Audio</button>
             <button type="button" class="sidebar-tab" data-panel="camera">Camera</button>
             <button type="button" class="sidebar-tab" data-panel="stage">Stage</button>
             <button type="button" class="sidebar-tab" data-panel="scripts">Scripts</button>
@@ -117,6 +118,34 @@
                 <p>Draw directly on the regular stage. Drawings are visible in recordings.</p>
                 <label class="set-control-label">Pen color <input id="stagePenColor" type="color" value="#2f8f83"></label>
                 <button id="stageDrawButton" type="button" class="secondary-button full-width">Use Drawing Pen</button>
+                <label class="set-control-label">Fill color <input id="stageFillColor" type="color" value="#ffd166"></label>
+                <button id="stageBucketButton" type="button" class="secondary-button full-width">Use Paint Bucket</button>
+                <p>Close a drawing by ending near its start point. A yellow outline means it can be filled.</p>
+              </div>
+            </section>
+
+            <section id="audioPanel" class="tool-panel hidden" aria-label="Audio">
+              <div class="audio-panel">
+                <button id="importAudioButton" type="button" class="secondary-button full-width import-button">Import Audio</button>
+                <div class="set-control-card">
+                  <p>Record from your microphone. A 3-second countdown starts before capture.</p>
+                  <button id="recordMicButton" type="button" class="primary-button full-width">Microphone</button>
+                  <button id="stopMicButton" type="button" class="secondary-button full-width" disabled>Stop Mic Recording</button>
+                  <p id="audioCountdownLabel" class="audio-countdown">Mic idle.</p>
+                </div>
+                <div class="set-control-card">
+                  <p>Music Maker: click notes in the grid, preview the loop, then save it into the audio library.</p>
+                  <label class="set-control-label">Song name <input id="musicMakerName" type="text" value="My Loop"></label>
+                  <div id="musicMakerGrid" class="music-maker-grid" aria-label="Music maker note grid"></div>
+                  <div class="audio-actions">
+                    <button id="previewMusicMakerButton" type="button" class="ghost-button">Preview</button>
+                    <button id="saveMusicMakerButton" type="button" class="secondary-button">Save Loop</button>
+                  </div>
+                </div>
+                <div class="set-control-card">
+                  <h4>Audio Library</h4>
+                  <div id="audioLibraryList" class="audio-library-list"></div>
+                </div>
               </div>
             </section>
 
@@ -321,6 +350,7 @@
     <input id="importObjectInput" class="hidden" type="file" accept="image/*">
     <input id="importStageInput" class="hidden" type="file" accept="image/*">
     <input id="importMusicInput" class="hidden" type="file" accept="audio/*">
+    <input id="importAudioInput" class="hidden" type="file" accept="audio/*">
     <input id="characterBuilderImportInput" class="hidden" type="file" accept="image/*">
 
     <section id="libraryScreen" class="screen library-screen hidden" aria-label="Recording library">
