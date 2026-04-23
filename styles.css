@@ -435,8 +435,9 @@ button:disabled {
   position: fixed;
   top: 6.5rem;
   right: 1.2rem;
+  left: 1.2rem;
   z-index: 9;
-  width: min(72vw, 46rem);
+  width: auto;
   max-height: calc(100vh - 8rem);
   overflow: auto;
   box-shadow: 0 30px 80px rgba(54, 27, 12, 0.28);

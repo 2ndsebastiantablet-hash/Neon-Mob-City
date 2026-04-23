@@ -248,6 +248,17 @@ const SCRIPT_BLOCK_DEFS = [
     sceneOnly: true,
   },
   {
+    type: "change_light_color_brightness",
+    category: "scene",
+    title: "Change Light Brightness/Color",
+    copy: "Immediately change the stage light tint and brightness.",
+    params: [
+      { name: "color", label: "Color", input: "color" },
+      { name: "strength", label: "Light %", input: "number", min: 0, max: 100, step: 5 },
+    ],
+    sceneOnly: true,
+  },
+  {
     type: "spawn_actor",
     category: "scene",
     title: "Spawn Actor",
@@ -436,6 +447,13 @@ const SCRIPT_BLOCK_DEFS = [
     title: "Wait",
     copy: "Pause for a number of seconds.",
     params: [{ name: "seconds", label: "Seconds", input: "number", min: 0.1, max: 30, step: 0.1 }],
+  },
+  {
+    type: "delay_seconds",
+    category: "timing",
+    title: "Delay By Seconds",
+    copy: "Delay this script by a chosen number of seconds before continuing.",
+    params: [{ name: "seconds", label: "Seconds", input: "number", min: 0.1, max: 60, step: 0.1 }],
   },
   {
     type: "repeat",
@@ -757,6 +775,10 @@ const state = {
     interaction: null,
     items: [],
     drawings: [],
+    clipboard: {
+      items: [],
+      drawings: [],
+    },
     penColor: "#2f8f83",
     fillColor: "#ffd166",
     toolSelection: {
@@ -780,6 +802,7 @@ const state = {
   stageDrawings: [],
   stageSelectedDrawingId: null,
   clipboard: [],
+  stageDrawingClipboard: [],
   selectedScriptBlockIds: new Set(),
   interaction: null,
   contextActorId: null,
@@ -1331,7 +1354,7 @@ function createBlockFromType(type) {
     params[param.name] = 0;
   }
 
-  if (["move_right_seconds", "play_wiggle", "play_bounce", "play_stretch", "wait", "flip_360"].includes(type)) {
+  if (["move_right_seconds", "play_wiggle", "play_bounce", "play_stretch", "wait", "delay_seconds", "flip_360"].includes(type)) {
     params.seconds = params.seconds ?? 1;
   }
   if (type === "change_size") {
@@ -1346,7 +1369,7 @@ function createBlockFromType(type) {
   if (type === "set_volume") {
     params.volume = 70;
   }
-  if (type === "set_scene_lighting" || type === "fade_scene_lighting") {
+  if (type === "set_scene_lighting" || type === "fade_scene_lighting" || type === "change_light_color_brightness") {
     params.strength = 35;
     params.color = "#ffd36f";
   }
@@ -2336,7 +2359,7 @@ function playMusicMakerCell(rowIndex, columnIndex = 0, startAt = null, stepDurat
   }
   audio.ctx.resume?.();
   const track = MUSIC_MAKER_TRACKS[rowIndex] || MUSIC_MAKER_TRACKS[0];
-  const startTime = startAt ?? audio.ctx.currentTime + 0.02 + columnIndex * stepDuration;
+  const startTime = startAt != null ? startAt + columnIndex * stepDuration : audio.ctx.currentTime + 0.02 + columnIndex * stepDuration;
 
   if (track.type === "snare") {
     const bufferSize = Math.floor(audio.ctx.sampleRate * 0.16);
@@ -2841,6 +2864,8 @@ function createRunnerForBlock(actor, block, run) {
       return createLightingFadeRunner(block);
     case "clear_scene_lighting":
       return createInstantRunner(() => setSceneLighting("#fff7d6", 0));
+    case "change_light_color_brightness":
+      return createInstantRunner(() => setSceneLighting(block.params.color, block.params.strength));
     case "spawn_actor":
       return createInstantRunner(() => spawnScriptActor(block));
     case "add_light_source":
@@ -2974,6 +2999,8 @@ function createRunnerForBlock(actor, block, run) {
         markProjectDirty();
       });
     case "wait":
+      return createWaitRunner(Number(block.params.seconds || 1));
+    case "delay_seconds":
       return createWaitRunner(Number(block.params.seconds || 1));
     case "repeat":
       return createRepeatRunner(actor, block, run);
@@ -3801,6 +3828,19 @@ function addImportedImageToCharacterBuilder(imageData) {
   markProjectDirty();
 }
 
+function cloneDrawingForClipboard(drawing) {
+  return serializeDrawing(normalizeDrawing(drawing));
+}
+
+function offsetDrawing(drawing, dx, dy) {
+  if (drawing.type === "image") {
+    drawing.x += dx;
+    drawing.y += dy;
+  } else {
+    drawing.points = drawing.points.map((point) => ({ x: point.x + dx, y: point.y + dy }));
+  }
+}
+
 function applyBuilderTexture(point) {
   const hit = hitTestBuilderItem(point);
   if (!hit) {
@@ -3809,6 +3849,50 @@ function applyBuilderTexture(point) {
   hit.textureId = state.characterBuilder.toolSelection.texture;
   state.characterBuilder.selectedItemId = hit.id;
   state.characterBuilder.selectedDrawingId = null;
+  markProjectDirty();
+}
+
+function copyCharacterBuilderSelection() {
+  const builder = state.characterBuilder;
+  builder.clipboard = { items: [], drawings: [] };
+  const selectedItem = builder.items.find((item) => item.id === builder.selectedItemId);
+  if (selectedItem) {
+    builder.clipboard.items = [serializeItem(selectedItem)];
+    return;
+  }
+  const selectedDrawing = builder.drawings.find((drawing) => drawing.id === builder.selectedDrawingId);
+  if (selectedDrawing) {
+    builder.clipboard.drawings = [cloneDrawingForClipboard(selectedDrawing)];
+  }
+}
+
+function pasteCharacterBuilderClipboard() {
+  const builder = state.characterBuilder;
+  if (!builder.clipboard.items.length && !builder.clipboard.drawings.length) {
+    return;
+  }
+
+  if (builder.clipboard.items.length > 0) {
+    const template = builder.clipboard.items[0];
+    const item = normalizeItem({
+      ...template,
+      id: state.nextId++,
+      x: template.x + 24,
+      y: template.y + 24,
+      scripts: Array.isArray(template.scripts) ? template.scripts.map(deserializeBlock) : [],
+    });
+    clampBuilderItem(item);
+    builder.items.push(item);
+    builder.selectedItemId = item.id;
+    builder.selectedDrawingId = null;
+  } else {
+    const drawing = normalizeDrawing(builder.clipboard.drawings[0]);
+    drawing.id = `builder-drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    offsetDrawing(drawing, 24, 24);
+    builder.drawings.push(drawing);
+    builder.selectedDrawingId = drawing.id;
+    builder.selectedItemId = null;
+  }
   markProjectDirty();
 }
 
@@ -3904,7 +3988,14 @@ function onCharacterBuilderPointerDown(event) {
   if (hitDrawing) {
     state.characterBuilder.selectedDrawingId = hitDrawing.id;
     state.characterBuilder.selectedItemId = null;
-    state.characterBuilder.interaction = { type: "dragDrawing", drawingId: hitDrawing.id, start: point, x: hitDrawing.x, y: hitDrawing.y };
+    state.characterBuilder.interaction = {
+      type: "dragDrawing",
+      drawingId: hitDrawing.id,
+      start: point,
+      x: hitDrawing.x,
+      y: hitDrawing.y,
+      points: hitDrawing.points?.map((drawingPoint) => ({ ...drawingPoint })) || [],
+    };
     return;
   }
 
@@ -3946,9 +4037,17 @@ function onCharacterBuilderPointerMove(event) {
 
   if (interaction.type === "dragDrawing") {
     const drawing = state.characterBuilder.drawings.find((candidate) => candidate.id === interaction.drawingId);
+    const dx = point.x - interaction.start.x;
+    const dy = point.y - interaction.start.y;
     if (drawing?.type === "image") {
-      drawing.x = interaction.x + point.x - interaction.start.x;
-      drawing.y = interaction.y + point.y - interaction.start.y;
+      drawing.x = interaction.x + dx;
+      drawing.y = interaction.y + dy;
+      markProjectDirty();
+    } else if (drawing) {
+      drawing.points = interaction.points.map((drawingPoint) => ({
+        x: drawingPoint.x + dx,
+        y: drawingPoint.y + dy,
+      }));
       markProjectDirty();
     }
     return;
@@ -5040,6 +5139,14 @@ function onPointerDown(event) {
       state.stageSelectedDrawingId = drawing.id;
       updateSelectionLabel();
       elements.selectionLabel.textContent = drawing.closed ? "Selected: closed pen shape" : "Selected: pen drawing";
+      state.interaction = {
+        type: "stageDragDrawing",
+        drawingId: drawing.id,
+        start: point,
+        x: drawing.x,
+        y: drawing.y,
+        points: drawing.points?.map((drawingPoint) => ({ ...drawingPoint })) || [],
+      };
     } else {
       clearSelection();
       beginMarquee(point);
@@ -5114,6 +5221,23 @@ function onPointerMove(event) {
       drawing.points.push(point);
       markProjectDirty();
     }
+    return;
+  }
+
+  if (state.interaction.type === "stageDragDrawing") {
+    const drawing = state.stageDrawings.find((candidate) => candidate.id === state.interaction.drawingId);
+    const dx = point.x - state.interaction.start.x;
+    const dy = point.y - state.interaction.start.y;
+    if (drawing?.type === "image") {
+      drawing.x = state.interaction.x + dx;
+      drawing.y = state.interaction.y + dy;
+    } else if (drawing) {
+      drawing.points = state.interaction.points.map((drawingPoint) => ({
+        x: drawingPoint.x + dx,
+        y: drawingPoint.y + dy,
+      }));
+    }
+    markProjectDirty();
     return;
   }
 
@@ -5382,11 +5506,20 @@ function changeSelectedObjectColor(color) {
 }
 
 function copySelection() {
+  if (state.stageSelectedDrawingId != null) {
+    const drawing = state.stageDrawings.find((candidate) => candidate.id === state.stageSelectedDrawingId);
+    state.stageDrawingClipboard = drawing ? [cloneDrawingForClipboard(drawing)] : [];
+    state.clipboard = [];
+    elements.toolLabel.textContent = "Copied drawing. Press Ctrl+V to paste.";
+    return;
+  }
+
   const selected = getSelectedItems();
   if (selected.length === 0) {
     return;
   }
 
+  state.stageDrawingClipboard = [];
   state.clipboard = selected.map((item) => ({
     ...serializeItem(item),
   }));
@@ -5394,6 +5527,18 @@ function copySelection() {
 }
 
 function pasteClipboard() {
+  if (state.stageDrawingClipboard.length > 0 && state.clipboard.length === 0) {
+    const drawing = normalizeDrawing(state.stageDrawingClipboard[0]);
+    drawing.id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    offsetDrawing(drawing, 28, 28);
+    state.stageDrawings.push(drawing);
+    state.stageSelectedDrawingId = drawing.id;
+    state.selection.clear();
+    elements.selectionLabel.textContent = drawing.closed ? "Selected: closed pen shape" : "Selected: pen drawing";
+    markProjectDirty();
+    return;
+  }
+
   if (state.clipboard.length === 0) {
     return;
   }
@@ -5438,12 +5583,12 @@ function pasteClipboard() {
     item.h = template.h;
     item.textureId = template.textureId;
     item.imageData = template.imageData || null;
-  item.facing = template.facing ?? 1;
-  item.sizePct = template.sizePct ?? 100;
-  item.scaleX = template.scaleX ?? 1;
-  item.scaleY = template.scaleY ?? 1;
-  item.rotation = template.rotation ?? 0;
-  item.penAnimation = template.penAnimation ? normalizePenAnimation(template.penAnimation) : null;
+    item.facing = template.facing ?? 1;
+    item.sizePct = template.sizePct ?? 100;
+    item.scaleX = template.scaleX ?? 1;
+    item.scaleY = template.scaleY ?? 1;
+    item.rotation = template.rotation ?? 0;
+    item.penAnimation = template.penAnimation ? normalizePenAnimation(template.penAnimation) : null;
     item.color = template.color || null;
     if (template.groupId) {
       if (!pastedGroupIds.has(template.groupId)) {
@@ -5508,6 +5653,7 @@ function handleKeyDown(event) {
   if ((event.ctrlKey || event.metaKey) && key === "c") {
     event.preventDefault();
     if (state.characterBuilderOpen) {
+      copyCharacterBuilderSelection();
       return;
     }
     if (state.stageModuleOpen) {
@@ -5521,6 +5667,7 @@ function handleKeyDown(event) {
   if ((event.ctrlKey || event.metaKey) && key === "v") {
     event.preventDefault();
     if (state.characterBuilderOpen) {
+      pasteCharacterBuilderClipboard();
       return;
     }
     if (state.stageModuleOpen) {
