@@ -202,6 +202,16 @@ const COLLISION_TOGGLE_OPTIONS = [
   { value: "on", label: "On" },
   { value: "off", label: "Off" },
 ];
+const PHYSICS_LAYERS = [
+  { value: "default", label: "Default", color: "#8aa0ae" },
+  { value: "characters", label: "Characters", color: "#f06aa6" },
+  { value: "objects", label: "Objects", color: "#2f8f83" },
+  { value: "scenery", label: "Scenery", color: "#9c6644" },
+  { value: "trigger", label: "Trigger", color: "#ffd166" },
+  { value: "custom1", label: "Custom 1", color: "#5d76db" },
+  { value: "custom2", label: "Custom 2", color: "#8c6de6" },
+];
+const PHYSICS_LAYER_OPTIONS = PHYSICS_LAYERS.map((layer) => ({ value: layer.value, label: layer.label }));
 const SET_PEN_COLORS = ["#2f8f83", "#e76f51", "#f4a261", "#264653", "#ffd166", "#ef476f", "#ffffff", "#2c1d14"];
 const DRAWING_CLOSE_DISTANCE = 18;
 const MUSIC_MAKER_COLUMNS = 16;
@@ -759,6 +769,84 @@ const SCRIPT_BLOCK_DEFS = [
     params: [{ name: "enabled", label: "Collision", input: "select", options: COLLISION_TOGGLE_OPTIONS }],
   },
   {
+    type: "set_object_trigger_on",
+    category: "physics",
+    title: "Set Object Trigger On",
+    copy: "Turn this object into a trigger / sensor body.",
+    params: [],
+  },
+  {
+    type: "set_object_trigger_off",
+    category: "physics",
+    title: "Set Object Trigger Off",
+    copy: "Turn off trigger / sensor mode for this object.",
+    params: [],
+  },
+  {
+    type: "set_character_trigger_on",
+    category: "physics",
+    title: "Set Character Trigger On",
+    copy: "Turn this character into a trigger / sensor body.",
+    params: [],
+  },
+  {
+    type: "set_character_trigger_off",
+    category: "physics",
+    title: "Set Character Trigger Off",
+    copy: "Turn off trigger / sensor mode for this character.",
+    params: [],
+  },
+  {
+    type: "set_object_layer",
+    category: "physics",
+    title: "Set Object Layer",
+    copy: "Move this object onto a chosen collision layer.",
+    params: [{ name: "layer", label: "Layer", input: "select", options: PHYSICS_LAYER_OPTIONS }],
+  },
+  {
+    type: "set_character_layer",
+    category: "physics",
+    title: "Set Character Layer",
+    copy: "Move this character onto a chosen collision layer.",
+    params: [{ name: "layer", label: "Layer", input: "select", options: PHYSICS_LAYER_OPTIONS }],
+  },
+  {
+    type: "set_object_collision_mask",
+    category: "physics",
+    title: "Set Object Collision Mask",
+    copy: "Choose which layers this object collides with or detects.",
+    params: [{ name: "mask", label: "Mask", input: "layerMask" }],
+  },
+  {
+    type: "set_character_collision_mask",
+    category: "physics",
+    title: "Set Character Collision Mask",
+    copy: "Choose which layers this character collides with or detects.",
+    params: [{ name: "mask", label: "Mask", input: "layerMask" }],
+  },
+  {
+    type: "enable_collision_between_layers",
+    category: "physics",
+    title: "Enable Layer Collision",
+    copy: "Allow two global layers to collide and trigger each other.",
+    params: [
+      { name: "layerA", label: "Layer A", input: "select", options: PHYSICS_LAYER_OPTIONS },
+      { name: "layerB", label: "Layer B", input: "select", options: PHYSICS_LAYER_OPTIONS },
+    ],
+    sceneOnly: true,
+  },
+  {
+    type: "disable_collision_between_layers",
+    category: "physics",
+    title: "Disable Layer Collision",
+    copy: "Prevent two global layers from colliding or triggering each other.",
+    params: [
+      { name: "layerA", label: "Layer A", input: "select", options: PHYSICS_LAYER_OPTIONS },
+      { name: "layerB", label: "Layer B", input: "select", options: PHYSICS_LAYER_OPTIONS },
+    ],
+    sceneOnly: true,
+  },
+  {
     type: "stop_object_momentum",
     category: "physics",
     title: "Stop Object",
@@ -771,6 +859,32 @@ const SCRIPT_BLOCK_DEFS = [
     title: "Stop Character",
     copy: "Destroy this character's momentum.",
     params: [],
+  },
+  {
+    type: "when_actor_enters_trigger",
+    category: "physics",
+    title: "When Actor Enters Trigger",
+    copy: "Run when this actor enters a trigger, or when another actor enters this actor if it is a trigger.",
+    params: [],
+    allowsChildren: true,
+    trigger: true,
+  },
+  {
+    type: "when_actor_exits_trigger",
+    category: "physics",
+    title: "When Actor Exits Trigger",
+    copy: "Run when this actor leaves a trigger, or when another actor exits this actor if it is a trigger.",
+    params: [],
+    allowsChildren: true,
+    trigger: true,
+  },
+  {
+    type: "if_actor_overlapping_trigger",
+    category: "physics",
+    title: "If Overlapping Trigger",
+    copy: "Only run the blocks inside while this actor is touching at least one compatible trigger.",
+    params: [],
+    allowsChildren: true,
   },
   {
     type: "play_sound",
@@ -874,6 +988,10 @@ const ACTOR_SPECIFIC_PHYSICS_BLOCK_KINDS = new Map([
   ["make_object_static", "object"],
   ["make_object_dynamic", "object"],
   ["make_object_kinematic", "object"],
+  ["set_object_trigger_on", "object"],
+  ["set_object_trigger_off", "object"],
+  ["set_object_layer", "object"],
+  ["set_object_collision_mask", "object"],
   ["stop_object_momentum", "object"],
   ["enable_character_physics", "character"],
   ["disable_character_physics", "character"],
@@ -887,6 +1005,10 @@ const ACTOR_SPECIFIC_PHYSICS_BLOCK_KINDS = new Map([
   ["make_character_static", "character"],
   ["make_character_dynamic", "character"],
   ["make_character_kinematic", "character"],
+  ["set_character_trigger_on", "character"],
+  ["set_character_trigger_off", "character"],
+  ["set_character_layer", "character"],
+  ["set_character_collision_mask", "character"],
   ["stop_character_momentum", "character"],
 ]);
 const ACTOR_SPECIFIC_PHYSICS_BLOCK_TITLES = new Map([
@@ -914,6 +1036,14 @@ const ACTOR_SPECIFIC_PHYSICS_BLOCK_TITLES = new Map([
   ["make_character_dynamic", "Make Dynamic"],
   ["make_object_kinematic", "Make Kinematic"],
   ["make_character_kinematic", "Make Kinematic"],
+  ["set_object_trigger_on", "Trigger Mode On"],
+  ["set_character_trigger_on", "Trigger Mode On"],
+  ["set_object_trigger_off", "Trigger Mode Off"],
+  ["set_character_trigger_off", "Trigger Mode Off"],
+  ["set_object_layer", "Set Layer"],
+  ["set_character_layer", "Set Layer"],
+  ["set_object_collision_mask", "Set Collision Mask"],
+  ["set_character_collision_mask", "Set Collision Mask"],
   ["stop_object_momentum", "Stop Momentum"],
   ["stop_character_momentum", "Stop Momentum"],
 ]);
@@ -972,6 +1102,10 @@ const elements = {
   physicsSleeping: document.querySelector("#physicsSleeping"),
   physicsWorldBounds: document.querySelector("#physicsWorldBounds"),
   physicsDebugView: document.querySelector("#physicsDebugView"),
+  physicsTriggerDebugView: document.querySelector("#physicsTriggerDebugView"),
+  physicsLayerDebugView: document.querySelector("#physicsLayerDebugView"),
+  physicsOverlapDebugView: document.querySelector("#physicsOverlapDebugView"),
+  physicsLayerMatrix: document.querySelector("#physicsLayerMatrix"),
   importStageButton: document.querySelector("#importStageButton"),
   importCharacterInput: document.querySelector("#importCharacterInput"),
   importTextureInput: document.querySelector("#importTextureInput"),
@@ -1010,6 +1144,9 @@ const elements = {
   objectPhysicsLockX: document.querySelector("#objectPhysicsLockX"),
   objectPhysicsLockY: document.querySelector("#objectPhysicsLockY"),
   objectPhysicsCollision: document.querySelector("#objectPhysicsCollision"),
+  objectPhysicsTrigger: document.querySelector("#objectPhysicsTrigger"),
+  objectPhysicsLayer: document.querySelector("#objectPhysicsLayer"),
+  objectPhysicsMask: document.querySelector("#objectPhysicsMask"),
   objectPhysicsCanGrab: document.querySelector("#objectPhysicsCanGrab"),
   objectPhysicsStartAsleep: document.querySelector("#objectPhysicsStartAsleep"),
   objectPhysicsGravityScale: document.querySelector("#objectPhysicsGravityScale"),
@@ -1132,9 +1269,75 @@ function createDefaultPhysicsSettings() {
       sleeping: true,
       worldBounds: true,
       debugView: false,
+      triggerDebugView: false,
+      layerDebugView: false,
+      overlapDebugView: false,
+      layerRules: createDefaultPhysicsLayerRules(),
       maxObjects: 60,
     },
+    activeTriggerPairs: new Set(),
+    pendingTriggerEvents: [],
+    debugTriggerPairs: [],
+    debugCollisionPairs: [],
   };
+}
+
+function getDefaultPhysicsLayer(kind, triggerMode = false) {
+  if (triggerMode) {
+    return "trigger";
+  }
+  if (kind === "character") {
+    return "characters";
+  }
+  if (kind === "object") {
+    return "objects";
+  }
+  return "default";
+}
+
+function createDefaultPhysicsLayerRules() {
+  const rules = {};
+  for (let index = 0; index < PHYSICS_LAYERS.length; index += 1) {
+    for (let otherIndex = index; otherIndex < PHYSICS_LAYERS.length; otherIndex += 1) {
+      const key = [PHYSICS_LAYERS[index].value, PHYSICS_LAYERS[otherIndex].value].sort().join("|");
+      rules[key] = true;
+    }
+  }
+  return rules;
+}
+
+function normalizePhysicsLayer(layer, kind, triggerMode = false) {
+  return PHYSICS_LAYERS.some((entry) => entry.value === layer) ? layer : getDefaultPhysicsLayer(kind, triggerMode);
+}
+
+function normalizePhysicsCollisionMask(mask) {
+  const allLayers = PHYSICS_LAYERS.map((layer) => layer.value);
+  const uniqueMask = Array.isArray(mask)
+    ? Array.from(new Set(mask.filter((value) => allLayers.includes(value))))
+    : [];
+  return uniqueMask.length > 0 ? uniqueMask : [...allLayers];
+}
+
+function normalizePhysicsLayerRules(rules) {
+  const defaults = createDefaultPhysicsLayerRules();
+  const result = { ...defaults };
+  if (!rules || typeof rules !== "object") {
+    return result;
+  }
+  for (const key of Object.keys(defaults)) {
+    if (key in rules) {
+      result[key] = rules[key] !== false;
+    }
+  }
+  return result;
+}
+
+function getPhysicsLayerMeta(layer) {
+  return PHYSICS_LAYERS.find((entry) => entry.value === layer) || PHYSICS_LAYERS[0];
+}
+
+function getPhysicsLayerRuleKey(layerA, layerB) {
+  return [layerA, layerB].sort().join("|");
 }
 
 function normalizeGlobalPhysicsSettings(physics) {
@@ -1159,8 +1362,16 @@ function normalizeGlobalPhysicsSettings(physics) {
       sleeping: settings.sleeping !== false,
       worldBounds: settings.worldBounds !== false,
       debugView: Boolean(settings.debugView),
+      triggerDebugView: Boolean(settings.triggerDebugView),
+      layerDebugView: Boolean(settings.layerDebugView),
+      overlapDebugView: Boolean(settings.overlapDebugView),
+      layerRules: normalizePhysicsLayerRules(settings.layerRules),
       maxObjects: defaults.settings.maxObjects,
     },
+    activeTriggerPairs: new Set(),
+    pendingTriggerEvents: [],
+    debugTriggerPairs: [],
+    debugCollisionPairs: [],
   };
 }
 
@@ -1179,11 +1390,15 @@ function serializeGlobalPhysicsSettings(physics) {
       sleeping: physics.settings.sleeping,
       worldBounds: physics.settings.worldBounds,
       debugView: physics.settings.debugView,
+      triggerDebugView: physics.settings.triggerDebugView,
+      layerDebugView: physics.settings.layerDebugView,
+      overlapDebugView: physics.settings.overlapDebugView,
+      layerRules: { ...physics.settings.layerRules },
     },
   };
 }
 
-function createDefaultObjectPhysics() {
+function createDefaultObjectPhysics(kind = "object") {
   const settings = createDefaultPhysicsSettings().settings;
   return {
     enabled: true,
@@ -1199,6 +1414,9 @@ function createDefaultObjectPhysics() {
     lockX: false,
     lockY: false,
     collisionEnabled: true,
+    triggerMode: false,
+    layer: getDefaultPhysicsLayer(kind, false),
+    collisionMask: PHYSICS_LAYERS.map((layer) => layer.value),
     canGrab: true,
     startAsleep: false,
     gravityScale: 1,
@@ -1207,7 +1425,7 @@ function createDefaultObjectPhysics() {
 }
 
 function normalizeObjectPhysics(physics, kind) {
-  const defaults = createDefaultObjectPhysics();
+  const defaults = createDefaultObjectPhysics(kind);
   const source = physics || {};
   if (kind !== "object" && kind !== "character") {
     return {
@@ -1229,6 +1447,9 @@ function normalizeObjectPhysics(physics, kind) {
     lockX: Boolean(source.lockX),
     lockY: Boolean(source.lockY),
     collisionEnabled: source.collisionEnabled !== false,
+    triggerMode: Boolean(source.triggerMode),
+    layer: normalizePhysicsLayer(source.layer, kind, Boolean(source.triggerMode)),
+    collisionMask: normalizePhysicsCollisionMask(source.collisionMask),
     canGrab: source.canGrab !== false,
     startAsleep: Boolean(source.startAsleep),
     gravityScale: clamp(Number(source.gravityScale ?? defaults.gravityScale), 0, 4),
@@ -1251,6 +1472,9 @@ function serializeObjectPhysics(physics) {
     lockX: physics.lockX,
     lockY: physics.lockY,
     collisionEnabled: physics.collisionEnabled,
+    triggerMode: physics.triggerMode,
+    layer: physics.layer,
+    collisionMask: [...physics.collisionMask],
     canGrab: physics.canGrab,
     startAsleep: physics.startAsleep,
     gravityScale: physics.gravityScale,
@@ -1494,6 +1718,7 @@ function createItemRuntime() {
       controlledTimer: 0,
       previousX: 0,
       previousY: 0,
+      overlapIds: new Set(),
       initialized: false,
     },
   };
@@ -1891,6 +2116,10 @@ function createBlockFromType(type) {
       params[param.name] = getBlockParamOptions(param)[0]?.value ?? "";
       continue;
     }
+    if (param.input === "layerMask") {
+      params[param.name] = PHYSICS_LAYERS.map((layer) => layer.value);
+      continue;
+    }
     if (param.input === "color") {
       params[param.name] = "#fff1a8";
       continue;
@@ -1953,6 +2182,13 @@ function createBlockFromType(type) {
   }
   if (type === "toggle_collision") {
     params.enabled = "on";
+  }
+  if (["set_object_layer", "set_character_layer"].includes(type)) {
+    params.layer = params.layer ?? "default";
+  }
+  if (["enable_collision_between_layers", "disable_collision_between_layers"].includes(type)) {
+    params.layerA = params.layerA ?? "default";
+    params.layerB = params.layerB ?? "characters";
   }
   if (type === "teleport_xy") {
     params.x = Math.round(state.stageWidth * 0.5);
@@ -2034,11 +2270,16 @@ function resetPhysicsBody(item) {
   item.runtime.physics.controlledTimer = 0;
   item.runtime.physics.previousX = item.x;
   item.runtime.physics.previousY = item.y;
+  item.runtime.physics.overlapIds = new Set();
   item.runtime.physics.initialized = true;
 }
 
 function resetAllPhysicsRuntime() {
   state.physics.accumulator = 0;
+  state.physics.activeTriggerPairs = new Set();
+  state.physics.pendingTriggerEvents = [];
+  state.physics.debugTriggerPairs = [];
+  state.physics.debugCollisionPairs = [];
   for (const item of state.items) {
     resetPhysicsBody(item);
   }
@@ -2118,6 +2359,84 @@ function getPhysicsBounds(item) {
     top: shape.y - shape.halfH,
     bottom: shape.y + shape.halfH,
   };
+}
+
+function shouldActorsUseLayerRules(itemA, itemB) {
+  if (!isPhysicsObject(itemA) || !isPhysicsObject(itemB)) {
+    return false;
+  }
+  const layerA = normalizePhysicsLayer(itemA.physics.layer, itemA.kind, itemA.physics.triggerMode);
+  const layerB = normalizePhysicsLayer(itemB.physics.layer, itemB.kind, itemB.physics.triggerMode);
+  const maskA = normalizePhysicsCollisionMask(itemA.physics.collisionMask);
+  const maskB = normalizePhysicsCollisionMask(itemB.physics.collisionMask);
+  const ruleKey = getPhysicsLayerRuleKey(layerA, layerB);
+  return maskA.includes(layerB)
+    && maskB.includes(layerA)
+    && state.physics.settings.layerRules[ruleKey] !== false;
+}
+
+function makePhysicsPairKey(itemA, itemB) {
+  return [itemA.id, itemB.id].sort((left, right) => left - right).join(":");
+}
+
+function getPhysicsPairItems(pairKey) {
+  const [leftId, rightId] = pairKey.split(":").map((value) => Number(value));
+  const left = getItemById(leftId);
+  const right = getItemById(rightId);
+  return left && right ? [left, right] : null;
+}
+
+function clearActorTriggerOverlapId(actorId) {
+  for (const item of state.items) {
+    if (isPhysicsObject(item)) {
+      ensurePhysicsRuntime(item).overlapIds.delete(actorId);
+    }
+  }
+}
+
+function syncTriggerOverlapPairs(detectedPairs) {
+  const previousPairs = state.physics.activeTriggerPairs || new Set();
+  const nextPairs = new Set(detectedPairs);
+
+  for (const pairKey of previousPairs) {
+    if (!nextPairs.has(pairKey)) {
+      const items = getPhysicsPairItems(pairKey);
+      if (!items) {
+        const [leftId, rightId] = pairKey.split(":").map((value) => Number(value));
+        clearActorTriggerOverlapId(leftId);
+        clearActorTriggerOverlapId(rightId);
+        continue;
+      }
+      const [itemA, itemB] = items;
+      ensurePhysicsRuntime(itemA).overlapIds.delete(itemB.id);
+      ensurePhysicsRuntime(itemB).overlapIds.delete(itemA.id);
+      state.physics.pendingTriggerEvents.push({ type: "exit", actorId: itemA.id, otherActorId: itemB.id });
+      state.physics.pendingTriggerEvents.push({ type: "exit", actorId: itemB.id, otherActorId: itemA.id });
+    }
+  }
+
+  for (const pairKey of nextPairs) {
+    const items = getPhysicsPairItems(pairKey);
+    if (!items) {
+      continue;
+    }
+    const [itemA, itemB] = items;
+    ensurePhysicsRuntime(itemA).overlapIds.add(itemB.id);
+    ensurePhysicsRuntime(itemB).overlapIds.add(itemA.id);
+    if (!previousPairs.has(pairKey)) {
+      state.physics.pendingTriggerEvents.push({ type: "enter", actorId: itemA.id, otherActorId: itemB.id });
+      state.physics.pendingTriggerEvents.push({ type: "enter", actorId: itemB.id, otherActorId: itemA.id });
+    }
+  }
+
+  state.physics.activeTriggerPairs = nextPairs;
+}
+
+function actorIsOverlappingTrigger(actor) {
+  if (!actor || !isPhysicsObject(actor)) {
+    return false;
+  }
+  return ensurePhysicsRuntime(actor).overlapIds.size > 0;
 }
 
 function applyPhysicsTranslation(item, dx, dy) {
@@ -2266,13 +2585,13 @@ function getCollisionManifold(itemA, itemB) {
   };
 }
 
-function resolvePhysicsPair(itemA, itemB) {
-  if (!itemA.physics.collisionEnabled || !itemB.physics.collisionEnabled) {
+function resolvePhysicsPair(itemA, itemB, manifold = null) {
+  if (!itemA.physics.collisionEnabled || !itemB.physics.collisionEnabled || !shouldActorsUseLayerRules(itemA, itemB)) {
     return;
   }
 
-  const manifold = getCollisionManifold(itemA, itemB);
-  if (!manifold) {
+  const resolvedManifold = manifold || getCollisionManifold(itemA, itemB);
+  if (!resolvedManifold || itemA.physics.triggerMode || itemB.physics.triggerMode) {
     return;
   }
 
@@ -2283,29 +2602,29 @@ function resolvePhysicsPair(itemA, itemB) {
   const invMassSum = invMassA + invMassB;
 
   if (invMassSum > 0) {
-    const correction = Math.max(manifold.penetration - 0.4, 0) / invMassSum * 0.82;
-    applyPhysicsTranslation(itemA, -manifold.normal.x * correction * invMassA, -manifold.normal.y * correction * invMassA);
-    applyPhysicsTranslation(itemB, manifold.normal.x * correction * invMassB, manifold.normal.y * correction * invMassB);
+    const correction = Math.max(resolvedManifold.penetration - 0.4, 0) / invMassSum * 0.82;
+    applyPhysicsTranslation(itemA, -resolvedManifold.normal.x * correction * invMassA, -resolvedManifold.normal.y * correction * invMassA);
+    applyPhysicsTranslation(itemB, resolvedManifold.normal.x * correction * invMassB, resolvedManifold.normal.y * correction * invMassB);
   }
 
   const relativeVelocity = {
     x: bodyB.vx - bodyA.vx,
     y: bodyB.vy - bodyA.vy,
   };
-  const velocityAlongNormal = relativeVelocity.x * manifold.normal.x + relativeVelocity.y * manifold.normal.y;
+  const velocityAlongNormal = relativeVelocity.x * resolvedManifold.normal.x + relativeVelocity.y * resolvedManifold.normal.y;
   if (velocityAlongNormal > 0 || invMassSum === 0) {
     return;
   }
 
   const restitution = Math.max(itemA.physics.restitution, itemB.physics.restitution);
   const impulseMagnitude = -(1 + restitution) * velocityAlongNormal / invMassSum;
-  const impulseX = manifold.normal.x * impulseMagnitude;
-  const impulseY = manifold.normal.y * impulseMagnitude;
+  const impulseX = resolvedManifold.normal.x * impulseMagnitude;
+  const impulseY = resolvedManifold.normal.y * impulseMagnitude;
   applyPhysicsVelocity(itemA, -impulseX * invMassA, -impulseY * invMassA);
   applyPhysicsVelocity(itemB, impulseX * invMassB, impulseY * invMassB);
 
-  const tangentX = relativeVelocity.x - velocityAlongNormal * manifold.normal.x;
-  const tangentY = relativeVelocity.y - velocityAlongNormal * manifold.normal.y;
+  const tangentX = relativeVelocity.x - velocityAlongNormal * resolvedManifold.normal.x;
+  const tangentY = relativeVelocity.y - velocityAlongNormal * resolvedManifold.normal.y;
   const tangentLength = Math.hypot(tangentX, tangentY);
   if (tangentLength > 0.0001) {
     const tx = tangentX / tangentLength;
@@ -2320,10 +2639,10 @@ function resolvePhysicsPair(itemA, itemB) {
   }
 
   if (!itemA.physics.rotationLocked && invMassA > 0) {
-    bodyA.angularVelocity -= manifold.normal.x * relativeVelocity.y * 0.0009;
+    bodyA.angularVelocity -= resolvedManifold.normal.x * relativeVelocity.y * 0.0009;
   }
   if (!itemB.physics.rotationLocked && invMassB > 0) {
-    bodyB.angularVelocity += manifold.normal.x * relativeVelocity.y * 0.0009;
+    bodyB.angularVelocity += resolvedManifold.normal.x * relativeVelocity.y * 0.0009;
   }
 
   wakePhysicsItem(itemA);
@@ -2395,6 +2714,9 @@ function stepPhysics(deltaSeconds) {
   const maxObjects = state.physics.settings.maxObjects;
   const simulatedItems = physicsItems.slice(0, maxObjects);
   const gravity = getPhysicsGravityVector();
+  const detectedTriggerPairs = new Set();
+  const debugTriggerPairs = [];
+  const debugCollisionPairs = [];
 
   if (physicsItems.length > maxObjects) {
     state.physics.statusMessage = `Physics is simulating the first ${maxObjects} actors right now to keep the stage stable.`;
@@ -2446,7 +2768,27 @@ function stepPhysics(deltaSeconds) {
   for (let iteration = 0; iteration < state.physics.settings.solverIterations; iteration += 1) {
     for (let index = 0; index < colliders.length; index += 1) {
       for (let otherIndex = index + 1; otherIndex < colliders.length; otherIndex += 1) {
-        resolvePhysicsPair(colliders[index], colliders[otherIndex]);
+        const itemA = colliders[index];
+        const itemB = colliders[otherIndex];
+        if (!shouldActorsUseLayerRules(itemA, itemB)) {
+          continue;
+        }
+        const manifold = getCollisionManifold(itemA, itemB);
+        if (!manifold) {
+          continue;
+        }
+        if (itemA.physics.triggerMode || itemB.physics.triggerMode) {
+          const pairKey = makePhysicsPairKey(itemA, itemB);
+          detectedTriggerPairs.add(pairKey);
+          if (iteration === 0) {
+            debugTriggerPairs.push([itemA.id, itemB.id]);
+          }
+          continue;
+        }
+        resolvePhysicsPair(itemA, itemB, manifold);
+        if (iteration === 0) {
+          debugCollisionPairs.push([itemA.id, itemB.id]);
+        }
       }
     }
     if (state.physics.settings.worldBounds) {
@@ -2462,6 +2804,9 @@ function stepPhysics(deltaSeconds) {
     }
     updatePhysicsSleepState(item, deltaSeconds);
   }
+  state.physics.debugTriggerPairs = debugTriggerPairs;
+  state.physics.debugCollisionPairs = debugCollisionPairs;
+  syncTriggerOverlapPairs(detectedTriggerPairs);
 }
 
 function updatePhysics(deltaSeconds) {
@@ -2608,6 +2953,65 @@ function stopActorMomentum(actor) {
   body.angularVelocity = 0;
   body.controlledTimer = 0;
   markProjectDirty();
+}
+
+function setActorTriggerMode(actor, enabled) {
+  const target = getPhysicsScriptTarget(actor);
+  if (!target) {
+    return;
+  }
+  target.physics.triggerMode = Boolean(enabled);
+  if (target.physics.triggerMode && target.physics.layer === getDefaultPhysicsLayer(target.kind, false)) {
+    target.physics.layer = "trigger";
+  }
+  if (!target.physics.triggerMode && target.physics.layer === "trigger") {
+    target.physics.layer = getDefaultPhysicsLayer(target.kind, false);
+  }
+  resetPhysicsBody(target);
+  wakePhysicsItem(target);
+  markProjectDirty();
+}
+
+function setActorPhysicsLayer(actor, layer) {
+  const target = getPhysicsScriptTarget(actor);
+  if (!target) {
+    return;
+  }
+  target.physics.layer = normalizePhysicsLayer(layer, target.kind, target.physics.triggerMode);
+  wakePhysicsItem(target);
+  markProjectDirty();
+}
+
+function setActorCollisionMask(actor, mask) {
+  const target = getPhysicsScriptTarget(actor);
+  if (!target) {
+    return;
+  }
+  target.physics.collisionMask = normalizePhysicsCollisionMask(mask);
+  wakePhysicsItem(target);
+  markProjectDirty();
+}
+
+function setGlobalLayerCollisionRule(layerA, layerB, enabled) {
+  const normalizedA = normalizePhysicsLayer(layerA, "object", false);
+  const normalizedB = normalizePhysicsLayer(layerB, "object", false);
+  state.physics.settings.layerRules[getPhysicsLayerRuleKey(normalizedA, normalizedB)] = enabled !== false;
+  wakeMatchingPhysicsItems();
+  markProjectDirty();
+}
+
+function flushTriggerScriptEvents() {
+  if (!state.physics.pendingTriggerEvents.length) {
+    return;
+  }
+  const events = [...state.physics.pendingTriggerEvents];
+  state.physics.pendingTriggerEvents = [];
+  for (const event of events) {
+    triggerScripts(event.type === "enter" ? "trigger_enter" : "trigger_exit", {
+      actorId: event.actorId,
+      otherActorId: event.otherActorId,
+    });
+  }
 }
 
 function getSingleSelectedItem() {
@@ -3294,6 +3698,31 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
       label.textContent = param.label;
 
       let input;
+      if (param.input === "layerMask") {
+        input = document.createElement("div");
+        input.className = "physics-mask-list";
+        const currentMask = normalizePhysicsCollisionMask(block.params[param.name]);
+        for (const option of PHYSICS_LAYER_OPTIONS) {
+          const optionLabel = document.createElement("label");
+          optionLabel.className = "physics-mask-item";
+          optionLabel.textContent = option.label;
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = currentMask.includes(option.value);
+          checkbox.addEventListener("input", () => {
+            const nextMask = Array.from(input.querySelectorAll("input[type='checkbox']"))
+              .filter((candidate) => candidate.checked)
+              .map((candidate) => candidate.value);
+            updateBlockParam(block.id, param.name, nextMask);
+          });
+          checkbox.value = option.value;
+          optionLabel.append(checkbox);
+          input.append(optionLabel);
+        }
+        label.append(input);
+        paramGrid.append(label);
+        continue;
+      }
       if (param.input === "select" || param.input === "actorSubtype" || param.input === "setSelect" || param.input === "animationChunkSelect") {
         input = document.createElement("select");
         for (const option of getBlockParamOptions(param)) {
@@ -3902,6 +4331,24 @@ function createInstantRunner(action) {
   };
 }
 
+function createConditionalChildrenRunner(predicate, actor, block, run) {
+  let childRunner = null;
+  return {
+    done: false,
+    update(deltaSeconds) {
+      if (!predicate()) {
+        this.done = true;
+        return;
+      }
+      if (!childRunner) {
+        childRunner = createSequenceRunner(actor, block.children || [], run);
+      }
+      childRunner.update(deltaSeconds);
+      this.done = true;
+    },
+  };
+}
+
 function hexToRgb(hexColor) {
   const normalized = String(hexColor || "#ffffff").replace("#", "");
   const value = Number.parseInt(normalized.length === 3
@@ -4136,6 +4583,16 @@ function createRunnerForBlock(actor, block, run) {
           : "down";
         wakeMatchingPhysicsItems((item) => item.physics.gravityAffected);
         markProjectDirty();
+        renderPhysicsControls();
+      });
+    case "enable_collision_between_layers":
+      return createInstantRunner(() => {
+        setGlobalLayerCollisionRule(block.params.layerA, block.params.layerB, true);
+        renderPhysicsControls();
+      });
+    case "disable_collision_between_layers":
+      return createInstantRunner(() => {
+        setGlobalLayerCollisionRule(block.params.layerA, block.params.layerB, false);
         renderPhysicsControls();
       });
     case "set_scene_lighting":
@@ -4417,6 +4874,40 @@ function createRunnerForBlock(actor, block, run) {
           markProjectDirty();
         }
       });
+    case "set_object_trigger_on":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorTriggerMode(actor, true);
+      });
+    case "set_object_trigger_off":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorTriggerMode(actor, false);
+      });
+    case "set_character_trigger_on":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorTriggerMode(actor, true);
+      });
+    case "set_character_trigger_off":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorTriggerMode(actor, false);
+      });
+    case "set_object_layer":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorPhysicsLayer(actor, block.params.layer);
+      });
+    case "set_character_layer":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorPhysicsLayer(actor, block.params.layer);
+      });
+    case "set_object_collision_mask":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorCollisionMask(actor, block.params.mask);
+      });
+    case "set_character_collision_mask":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorCollisionMask(actor, block.params.mask);
+      });
+    case "if_actor_overlapping_trigger":
+      return createConditionalChildrenRunner(() => actorIsOverlappingTrigger(actor), actor, block, run);
     case "stop_object_momentum":
       return createInstantRunner(() => {
         if (actorMatchesKind(actor, "object")) stopActorMomentum(actor);
@@ -4501,6 +4992,12 @@ function triggerScripts(eventName, options = {}) {
         if (normalizeScriptKey(rootBlock.params.key || "") === key) {
           targets.forEach((target) => startScriptRun(target, rootBlock, "actor"));
         }
+      }
+      if (eventName === "trigger_enter" && rootBlock.type === "when_actor_enters_trigger") {
+        targets.forEach((target) => startScriptRun(target, rootBlock, "actor"));
+      }
+      if (eventName === "trigger_exit" && rootBlock.type === "when_actor_exits_trigger") {
+        targets.forEach((target) => startScriptRun(target, rootBlock, "actor"));
       }
     }
   }
@@ -4880,7 +5377,7 @@ function createCharacterItem(characterId, x, y) {
     h: 136,
     textureId: null,
     physics: {
-      ...createDefaultObjectPhysics(),
+      ...createDefaultObjectPhysics("character"),
       friction: state.physics.settings.defaultFriction,
       restitution: state.physics.settings.defaultRestitution,
       linearDrag: state.physics.settings.airDrag,
@@ -4901,7 +5398,7 @@ function createObjectItem(objectId, x, y) {
     h: 92,
     textureId: null,
     physics: {
-      ...createDefaultObjectPhysics(),
+      ...createDefaultObjectPhysics("object"),
       friction: state.physics.settings.defaultFriction,
       restitution: state.physics.settings.defaultRestitution,
       linearDrag: state.physics.settings.airDrag,
@@ -7248,6 +7745,10 @@ function prepareStageForRecording() {
   clearAllScriptRunners();
   stopAllAudioNodes();
   state.physics.accumulator = 0;
+  state.physics.activeTriggerPairs = new Set();
+  state.physics.pendingTriggerEvents = [];
+  state.physics.debugTriggerPairs = [];
+  state.physics.debugCollisionPairs = [];
   for (const item of state.items) {
     if (!isPhysicsObject(item) || !item.physics.enabled) {
       continue;
@@ -7518,9 +8019,18 @@ function drawPhysicsBadge(item) {
     return;
   }
   const bounds = getItemBounds(item);
-  const label = item.physics.bodyType === "static" ? "S" : item.physics.bodyType === "kinematic" ? "K" : "D";
+  const layerMeta = getPhysicsLayerMeta(item.physics.layer);
+  const label = item.physics.triggerMode ? "T" : item.physics.bodyType === "static" ? "S" : item.physics.bodyType === "kinematic" ? "K" : "D";
   ctx.save();
-  ctx.fillStyle = item.physics.bodyType === "static" ? "#7d7d7d" : item.physics.bodyType === "kinematic" ? "#5d76db" : state.physics.gravityEnabled && item.physics.gravityAffected ? "#e56c3f" : "#2f8f83";
+  ctx.fillStyle = item.physics.triggerMode
+    ? "#ffd166"
+    : item.physics.bodyType === "static"
+      ? "#7d7d7d"
+      : item.physics.bodyType === "kinematic"
+        ? "#5d76db"
+        : state.physics.gravityEnabled && item.physics.gravityAffected
+          ? "#e56c3f"
+          : "#2f8f83";
   ctx.strokeStyle = "#fffdfa";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -7532,6 +8042,8 @@ function drawPhysicsBadge(item) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(label, bounds.right - 8, bounds.top + 8.5);
+  ctx.fillStyle = layerMeta.color;
+  ctx.fillRect(bounds.left + 4, bounds.top + 3, 20, 4);
   ctx.restore();
 }
 
@@ -7547,13 +8059,61 @@ function drawPhysicsDebugOverlay() {
       continue;
     }
     const shape = getPhysicsShape(item);
-    ctx.strokeStyle = item.physics.collisionEnabled ? "rgba(47, 143, 131, 0.8)" : "rgba(169, 47, 47, 0.8)";
+    const layerMeta = getPhysicsLayerMeta(item.physics.layer);
+    ctx.strokeStyle = state.physics.settings.layerDebugView
+      ? layerMeta.color
+      : item.physics.triggerMode
+        ? "rgba(255, 209, 102, 0.9)"
+        : item.physics.collisionEnabled
+          ? "rgba(47, 143, 131, 0.8)"
+          : "rgba(169, 47, 47, 0.8)";
+    if (item.physics.triggerMode && state.physics.settings.triggerDebugView) {
+      ctx.fillStyle = "rgba(255, 209, 102, 0.16)";
+    } else if (state.physics.settings.layerDebugView) {
+      ctx.fillStyle = `${layerMeta.color}22`;
+    } else {
+      ctx.fillStyle = "transparent";
+    }
     if (shape.type === "circle") {
       ctx.beginPath();
       ctx.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2);
+      if (ctx.fillStyle !== "transparent") {
+        ctx.fill();
+      }
       ctx.stroke();
     } else {
+      if (ctx.fillStyle !== "transparent") {
+        ctx.fillRect(shape.x - shape.halfW, shape.y - shape.halfH, shape.halfW * 2, shape.halfH * 2);
+      }
       ctx.strokeRect(shape.x - shape.halfW, shape.y - shape.halfH, shape.halfW * 2, shape.halfH * 2);
+    }
+  }
+  if (state.physics.settings.overlapDebugView) {
+    ctx.setLineDash([]);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "rgba(47, 143, 131, 0.55)";
+    for (const [leftId, rightId] of state.physics.debugCollisionPairs) {
+      const left = getItemById(leftId);
+      const right = getItemById(rightId);
+      if (!left || !right) {
+        continue;
+      }
+      ctx.beginPath();
+      ctx.moveTo(left.x, left.y);
+      ctx.lineTo(right.x, right.y);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(255, 209, 102, 0.85)";
+    for (const [leftId, rightId] of state.physics.debugTriggerPairs) {
+      const left = getItemById(leftId);
+      const right = getItemById(rightId);
+      if (!left || !right) {
+        continue;
+      }
+      ctx.beginPath();
+      ctx.moveTo(left.x, left.y);
+      ctx.lineTo(right.x, right.y);
+      ctx.stroke();
     }
   }
   ctx.restore();
@@ -8228,7 +8788,12 @@ function drawStage(now, options = {}) {
   } = options;
   currentRenderFlags = {
     showPhysicsBadges: showEditorOverlays,
-    showPhysicsDebug: showEditorOverlays && state.physics.settings.debugView,
+    showPhysicsDebug: showEditorOverlays && (
+      state.physics.settings.debugView
+      || state.physics.settings.triggerDebugView
+      || state.physics.settings.layerDebugView
+      || state.physics.settings.overlapDebugView
+    ),
   };
 
   ctx.clearRect(0, 0, state.stageWidth, state.stageHeight);
@@ -8379,6 +8944,7 @@ function animate(now) {
     updateScripts(deltaSeconds);
     if (!state.scriptsModuleOpen && !state.stageModuleOpen && !state.characterBuilderOpen) {
       updatePhysics(deltaSeconds);
+      flushTriggerScriptEvents();
     }
     refreshPhysicsStatusLabel();
     renderStageViews(now);
@@ -8737,6 +9303,65 @@ function refreshPhysicsStatusLabel() {
     : "Physics is off. Turn it on to enable collisions, pushing, and gravity for stage actors.");
 }
 
+function renderPhysicsMaskEditor(item) {
+  elements.objectPhysicsLayer.innerHTML = "";
+  for (const option of PHYSICS_LAYER_OPTIONS) {
+    const optionElement = document.createElement("option");
+    optionElement.value = option.value;
+    optionElement.textContent = option.label;
+    elements.objectPhysicsLayer.append(optionElement);
+  }
+  elements.objectPhysicsLayer.value = item.physics.layer;
+
+  elements.objectPhysicsMask.innerHTML = "";
+  const currentMask = normalizePhysicsCollisionMask(item.physics.collisionMask);
+  for (const option of PHYSICS_LAYERS) {
+    const label = document.createElement("label");
+    label.className = "physics-mask-item";
+    label.textContent = option.label;
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = option.value;
+    checkbox.checked = currentMask.includes(option.value);
+    checkbox.addEventListener("input", () => {
+      const nextMask = Array.from(elements.objectPhysicsMask.querySelectorAll("input[type='checkbox']"))
+        .filter((candidate) => candidate.checked)
+        .map((candidate) => candidate.value);
+      updatePhysicsEditorItem((physics) => {
+        physics.collisionMask = normalizePhysicsCollisionMask(nextMask);
+      });
+    });
+    label.append(checkbox);
+    elements.objectPhysicsMask.append(label);
+  }
+}
+
+function renderPhysicsLayerMatrix() {
+  elements.physicsLayerMatrix.innerHTML = "";
+  for (let index = 0; index < PHYSICS_LAYERS.length; index += 1) {
+    for (let otherIndex = index; otherIndex < PHYSICS_LAYERS.length; otherIndex += 1) {
+      const left = PHYSICS_LAYERS[index];
+      const right = PHYSICS_LAYERS[otherIndex];
+      const key = getPhysicsLayerRuleKey(left.value, right.value);
+      const row = document.createElement("label");
+      row.className = "physics-layer-rule";
+      const title = document.createElement("span");
+      title.className = "physics-layer-chip";
+      title.innerHTML = `<span class="physics-layer-swatch" style="background:${left.color}"></span>${left.label} x <span class="physics-layer-swatch" style="background:${right.color}"></span>${right.label}`;
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = state.physics.settings.layerRules[key] !== false;
+      checkbox.addEventListener("input", () => {
+        state.physics.settings.layerRules[key] = checkbox.checked;
+        wakeMatchingPhysicsItems();
+        markProjectDirty();
+      });
+      row.append(title, checkbox);
+      elements.physicsLayerMatrix.append(row);
+    }
+  }
+}
+
 function renderPhysicsControls() {
   elements.physicsToggleButton.textContent = `Physics: ${state.physics.enabled ? "On" : "Off"}`;
   elements.gravityToggleButton.textContent = `Gravity: ${state.physics.gravityEnabled ? "On" : "Off"}`;
@@ -8754,6 +9379,10 @@ function renderPhysicsControls() {
   elements.physicsSleeping.checked = state.physics.settings.sleeping;
   elements.physicsWorldBounds.checked = state.physics.settings.worldBounds;
   elements.physicsDebugView.checked = state.physics.settings.debugView;
+  elements.physicsTriggerDebugView.checked = state.physics.settings.triggerDebugView;
+  elements.physicsLayerDebugView.checked = state.physics.settings.layerDebugView;
+  elements.physicsOverlapDebugView.checked = state.physics.settings.overlapDebugView;
+  renderPhysicsLayerMatrix();
   refreshPhysicsStatusLabel();
 
   const item = getPhysicsEditorItem();
@@ -8776,14 +9405,19 @@ function renderPhysicsControls() {
   elements.objectPhysicsLockX.checked = item.physics.lockX;
   elements.objectPhysicsLockY.checked = item.physics.lockY;
   elements.objectPhysicsCollision.checked = item.physics.collisionEnabled;
+  elements.objectPhysicsTrigger.checked = item.physics.triggerMode;
   elements.objectPhysicsCanGrab.checked = item.physics.canGrab;
   elements.objectPhysicsStartAsleep.checked = item.physics.startAsleep;
   elements.objectPhysicsGravityScale.value = String(item.physics.gravityScale);
-  elements.objectPhysicsSummary.textContent = item.physics.bodyType === "static"
-    ? "Static bodies hold position like walls or floors. Resizing updates their collision shape immediately."
-    : item.physics.bodyType === "kinematic"
-      ? "Kinematic bodies follow code, dragging, and Pen Animation directly while still pushing dynamic actors."
-      : `${item.kind === "character" ? "Dynamic characters" : "Dynamic objects"} collide, push, fall, and keep their resized collision shape during recording.`;
+  renderPhysicsMaskEditor(item);
+  const layerMeta = getPhysicsLayerMeta(item.physics.layer);
+  elements.objectPhysicsSummary.textContent = item.physics.triggerMode
+    ? `${layerMeta.label} trigger: detects overlap without pushing actors. Layer masks and trigger events still work during recording.`
+    : item.physics.bodyType === "static"
+      ? `Static ${item.kind} on ${layerMeta.label}: holds position like a wall or floor and keeps its resized collision shape.`
+      : item.physics.bodyType === "kinematic"
+        ? `Kinematic ${item.kind} on ${layerMeta.label}: follows code, dragging, and Pen Animation while still pushing dynamic actors.`
+        : `${item.kind === "character" ? "Dynamic characters" : "Dynamic objects"} on ${layerMeta.label} collide, push, fall, and keep their resized collision shape during recording.`;
   elements.objectPhysicsPanel.classList.remove("hidden");
 }
 
@@ -8830,6 +9464,9 @@ function updateGlobalPhysicsSettingsFromInputs() {
   state.physics.settings.sleeping = elements.physicsSleeping.checked;
   state.physics.settings.worldBounds = elements.physicsWorldBounds.checked;
   state.physics.settings.debugView = elements.physicsDebugView.checked;
+  state.physics.settings.triggerDebugView = elements.physicsTriggerDebugView.checked;
+  state.physics.settings.layerDebugView = elements.physicsLayerDebugView.checked;
+  state.physics.settings.overlapDebugView = elements.physicsOverlapDebugView.checked;
   if (state.physics.enabled) {
     for (const item of state.items) {
       if (isPhysicsObject(item) && item.physics.enabled) {
@@ -8859,6 +9496,14 @@ function updatePhysicsEditorItem(update) {
   update(item.physics);
   if (item.physics.bodyType === "static") {
     item.physics.gravityAffected = false;
+  }
+  item.physics.layer = normalizePhysicsLayer(item.physics.layer, item.kind, item.physics.triggerMode);
+  item.physics.collisionMask = normalizePhysicsCollisionMask(item.physics.collisionMask);
+  if (item.physics.triggerMode && item.physics.layer === getDefaultPhysicsLayer(item.kind, false)) {
+    item.physics.layer = "trigger";
+  }
+  if (!item.physics.triggerMode && item.physics.layer === "trigger") {
+    item.physics.layer = getDefaultPhysicsLayer(item.kind, false);
   }
   if (item.physics.rotationLocked) {
     item.runtime.physics.angularVelocity = 0;
@@ -9500,6 +10145,9 @@ function bindEvents() {
     elements.physicsSleeping,
     elements.physicsWorldBounds,
     elements.physicsDebugView,
+    elements.physicsTriggerDebugView,
+    elements.physicsLayerDebugView,
+    elements.physicsOverlapDebugView,
   ].forEach((input) => input.addEventListener("input", updateGlobalPhysicsSettingsFromInputs));
   elements.objectPhysicsEnabled.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
     physics.enabled = elements.objectPhysicsEnabled.checked;
@@ -9539,6 +10187,15 @@ function bindEvents() {
   }));
   elements.objectPhysicsCollision.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
     physics.collisionEnabled = elements.objectPhysicsCollision.checked;
+  }));
+  elements.objectPhysicsTrigger.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.triggerMode = elements.objectPhysicsTrigger.checked;
+    if (physics.triggerMode && physics.layer === getDefaultPhysicsLayer(getPhysicsEditorItem()?.kind, false)) {
+      physics.layer = "trigger";
+    }
+  }));
+  elements.objectPhysicsLayer.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.layer = elements.objectPhysicsLayer.value;
   }));
   elements.objectPhysicsCanGrab.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
     physics.canGrab = elements.objectPhysicsCanGrab.checked;

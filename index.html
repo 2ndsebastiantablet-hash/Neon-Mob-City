@@ -84,9 +84,17 @@
               <label class="set-control-label">Lock X movement <input id="objectPhysicsLockX" type="checkbox"></label>
               <label class="set-control-label">Lock Y movement <input id="objectPhysicsLockY" type="checkbox"></label>
               <label class="set-control-label">Collision enabled <input id="objectPhysicsCollision" type="checkbox" checked></label>
+              <label class="set-control-label" title="Sensor bodies detect overlap but do not push or block.">Trigger / sensor mode <input id="objectPhysicsTrigger" type="checkbox"></label>
+              <label class="set-control-label">Collision layer
+                <select id="objectPhysicsLayer"></select>
+              </label>
               <label class="set-control-label">Manual grab <input id="objectPhysicsCanGrab" type="checkbox" checked></label>
               <label class="set-control-label">Start asleep <input id="objectPhysicsStartAsleep" type="checkbox"></label>
               <label class="set-control-label">Gravity scale <input id="objectPhysicsGravityScale" type="number" min="0" max="4" step="0.1" value="1"></label>
+            </div>
+            <div class="set-control-card compact-card">
+              <strong>Allowed Collision Mask</strong>
+              <div id="objectPhysicsMask" class="physics-mask-list"></div>
             </div>
             <p id="objectPhysicsSummary" class="stage-status subtle">Actor collision shapes update automatically when stage actors are resized.</p>
           </aside>
@@ -166,6 +174,13 @@
                 <label class="set-control-label" title="Allows resting objects to go inactive for better performance.">Enable sleeping <input id="physicsSleeping" type="checkbox" checked></label>
                 <label class="set-control-label" title="Keep physics objects inside the stage edges.">World bounds / edge collisions <input id="physicsWorldBounds" type="checkbox" checked></label>
                 <label class="set-control-label" title="Show collision shapes while editing the stage.">Debug collision view <input id="physicsDebugView" type="checkbox"></label>
+                <label class="set-control-label" title="Show trigger sensor zones while editing the stage.">Debug trigger zones <input id="physicsTriggerDebugView" type="checkbox"></label>
+                <label class="set-control-label" title="Tint actors by their collision layer for easier authoring.">Layer debug colors <input id="physicsLayerDebugView" type="checkbox"></label>
+                <label class="set-control-label" title="Highlight overlapping trigger pairs while editing the stage.">Overlap highlight view <input id="physicsOverlapDebugView" type="checkbox"></label>
+                <div class="set-control-card compact-card full-span">
+                  <strong>Layer Collision Rules</strong>
+                  <div id="physicsLayerMatrix" class="physics-layer-matrix"></div>
+                </div>
               </div>
               <div id="objectList" class="tool-grid object-grid"></div>
             </section>
