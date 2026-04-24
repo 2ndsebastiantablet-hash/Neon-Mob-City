@@ -2016,6 +2016,22 @@ function resetAllPhysicsRuntime() {
   }
 }
 
+function wakeMatchingPhysicsItems(predicate = () => true) {
+  for (const item of state.items) {
+    if (isPhysicsObject(item) && item.physics?.enabled && predicate(item)) {
+      wakePhysicsItem(item);
+    }
+  }
+}
+
+function resyncPhysicsBodyAfterResize(item) {
+  if (!state.physics.enabled || !isPhysicsObject(item) || !item.physics?.enabled) {
+    return;
+  }
+  resetPhysicsBody(item);
+  wakePhysicsItem(item);
+}
+
 function getPhysicsMass(item) {
   if (!isPhysicsObject(item)) {
     return Infinity;
@@ -3091,14 +3107,12 @@ function createDropLine(target, label, extraClass = "") {
 
 function renderScriptPalette() {
   elements.scriptPalette.innerHTML = "";
-  const blocks = SCRIPT_BLOCK_DEFS.filter((block) => block.category === state.activeScriptCategory);
+  const blocks = SCRIPT_BLOCK_DEFS.filter((block) => block.category === state.activeScriptCategory && isBlockAvailableForCurrentTarget(block));
   for (const block of blocks) {
-    const canUseBlock = isBlockAvailableForCurrentTarget(block);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "script-palette-button";
     button.draggable = true;
-    button.disabled = !canUseBlock;
     button.textContent = block.title;
     button.addEventListener("click", () => addBlockToSelectedActor(block.type));
     button.addEventListener("contextmenu", (event) => {
@@ -3106,10 +3120,6 @@ function renderScriptPalette() {
       showBlockInfo(block, event.clientX, event.clientY);
     });
     button.addEventListener("dragstart", (event) => {
-      if (!canUseBlock) {
-        event.preventDefault();
-        return;
-      }
       const payload = { source: "palette", blockType: block.type };
       setScriptDragState(payload);
       event.dataTransfer?.setData("application/json", JSON.stringify(payload));
@@ -4049,7 +4059,9 @@ function createRunnerForBlock(actor, block, run) {
     case "physics_on":
       return createInstantRunner(() => {
         state.physics.enabled = true;
-        state.physics.statusMessage = "Physics on. Place or drag stage objects to test collisions.";
+        state.physics.accumulator = 0;
+        state.physics.statusMessage = "Physics on. Place or drag stage actors to test collisions.";
+        wakeMatchingPhysicsItems();
         markProjectDirty();
         renderPhysicsControls();
       });
@@ -4064,6 +4076,7 @@ function createRunnerForBlock(actor, block, run) {
     case "gravity_on":
       return createInstantRunner(() => {
         state.physics.gravityEnabled = true;
+        wakeMatchingPhysicsItems((item) => item.physics.gravityAffected);
         markProjectDirty();
         renderPhysicsControls();
       });
@@ -4076,6 +4089,7 @@ function createRunnerForBlock(actor, block, run) {
     case "set_gravity_strength":
       return createInstantRunner(() => {
         state.physics.settings.gravityStrength = clamp(Number(block.params.strength || 0), 0, 3000);
+        wakeMatchingPhysicsItems((item) => item.physics.gravityAffected);
         markProjectDirty();
         renderPhysicsControls();
       });
@@ -4084,6 +4098,7 @@ function createRunnerForBlock(actor, block, run) {
         state.physics.settings.gravityDirection = PHYSICS_DIRECTION_OPTIONS.some((option) => option.value === block.params.direction)
           ? block.params.direction
           : "down";
+        wakeMatchingPhysicsItems((item) => item.physics.gravityAffected);
         markProjectDirty();
         renderPhysicsControls();
       });
@@ -5683,9 +5698,7 @@ function applyResizeFromHandle(item, handleId, point, startBounds) {
   item.scaleX = clamp(width / Math.max(1, item.w * baseScale), 0.15, 8);
   item.scaleY = clamp(height / Math.max(1, item.h * baseScale), 0.15, 8);
   clampItemToStage(item);
-  if (state.physics.enabled && isPhysicsObject(item)) {
-    wakePhysicsItem(item);
-  }
+  resyncPhysicsBodyAfterResize(item);
   markProjectDirty();
 }
 
@@ -5722,9 +5735,7 @@ function applySelectionResizeFromHandle(handleId, point, startBounds, snapshots)
     item.scaleX = clamp(snapshot.scaleX * scaleX, 0.15, 8);
     item.scaleY = clamp(snapshot.scaleY * scaleY, 0.15, 8);
     clampItemToStage(item);
-    if (state.physics.enabled && isPhysicsObject(item)) {
-      wakePhysicsItem(item);
-    }
+    resyncPhysicsBodyAfterResize(item);
   }
   markProjectDirty();
 }
@@ -8937,7 +8948,7 @@ function renderSetMiniCodePanel() {
   state.scriptEditorMode = "set";
   elements.setMiniCodeTitle.textContent = `${getActorDisplayName(actor)} in ${getSetItemById(actor.id)?.set.name || "Set"}`;
   elements.setMiniCodePalette.innerHTML = "";
-  for (const block of SCRIPT_BLOCK_DEFS.filter((definition) => !definition.sceneOnly)) {
+  for (const block of SCRIPT_BLOCK_DEFS.filter((definition) => !definition.sceneOnly && isBlockAvailableForCurrentTarget(definition))) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "script-palette-button";
