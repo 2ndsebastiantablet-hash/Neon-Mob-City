@@ -861,6 +861,34 @@ const SCRIPT_BLOCK_DEFS = [
   },
 ];
 const scriptBlockMap = new Map(SCRIPT_BLOCK_DEFS.map((block) => [block.type, block]));
+const ACTOR_SPECIFIC_PHYSICS_BLOCK_KINDS = new Map([
+  ["enable_object_physics", "object"],
+  ["disable_object_physics", "object"],
+  ["apply_force_object", "object"],
+  ["apply_impulse_object", "object"],
+  ["set_object_velocity", "object"],
+  ["set_object_mass", "object"],
+  ["set_object_density", "object"],
+  ["freeze_object", "object"],
+  ["unfreeze_object", "object"],
+  ["make_object_static", "object"],
+  ["make_object_dynamic", "object"],
+  ["make_object_kinematic", "object"],
+  ["stop_object_momentum", "object"],
+  ["enable_character_physics", "character"],
+  ["disable_character_physics", "character"],
+  ["apply_force_character", "character"],
+  ["apply_impulse_character", "character"],
+  ["set_character_velocity", "character"],
+  ["set_character_mass", "character"],
+  ["set_character_density", "character"],
+  ["freeze_character", "character"],
+  ["unfreeze_character", "character"],
+  ["make_character_static", "character"],
+  ["make_character_dynamic", "character"],
+  ["make_character_kinematic", "character"],
+  ["stop_character_momentum", "character"],
+]);
 
 const stageCanvas = document.querySelector("#stageCanvas");
 const stageFrame = stageCanvas.parentElement;
@@ -2620,6 +2648,14 @@ function getScriptTargetName() {
   return actor ? getActorDisplayName(actor) : "No Actor";
 }
 
+function getScriptTargetActorKind() {
+  if (isSceneScriptTarget()) {
+    return null;
+  }
+  const actor = getScriptTargetItem();
+  return actor?.kind || null;
+}
+
 function isBlockAvailableForCurrentTarget(block) {
   if (!block) {
     return false;
@@ -2629,6 +2665,12 @@ function isBlockAvailableForCurrentTarget(block) {
       return false;
     }
     return Boolean(block.sceneOnly) || block.category === "timing" || block.category === "sound" || block.category === "control";
+  }
+
+  const targetKind = getScriptTargetActorKind();
+  const requiredKind = ACTOR_SPECIFIC_PHYSICS_BLOCK_KINDS.get(block.type);
+  if (requiredKind && targetKind && requiredKind !== targetKind) {
+    return false;
   }
 
   return !block.sceneOnly;
