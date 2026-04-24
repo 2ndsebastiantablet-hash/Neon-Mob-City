@@ -54,10 +54,41 @@
             <button id="actorContextCodeButton" type="button">Code</button>
             <button id="actorContextPenButton" type="button">Pen Animation</button>
             <button id="actorContextEditCharacterButton" type="button">Edit Character</button>
+            <button id="actorContextPhysicsButton" type="button">Advanced Physics</button>
             <button id="actorContextGroupButton" type="button">Group</button>
             <button id="actorContextUngroupButton" type="button">Ungroup</button>
             <label class="set-control-label">Object color <input id="actorContextColor" type="color" value="#f4a261"></label>
           </div>
+          <aside id="objectPhysicsPanel" class="object-physics-panel hidden" aria-label="Object physics editor">
+            <div class="texture-editor-header">
+              <strong id="objectPhysicsTitle">Object Physics</strong>
+              <button id="closeObjectPhysicsButton" type="button" class="ghost-button">Close</button>
+            </div>
+            <div class="object-physics-grid">
+              <label class="set-control-label">Physics enabled <input id="objectPhysicsEnabled" type="checkbox" checked></label>
+              <label class="set-control-label">Gravity affected <input id="objectPhysicsGravity" type="checkbox" checked></label>
+              <label class="set-control-label">Body mode
+                <select id="objectPhysicsBodyType">
+                  <option value="dynamic">Dynamic</option>
+                  <option value="static">Static</option>
+                </select>
+              </label>
+              <label class="set-control-label">Mass <input id="objectPhysicsMass" type="number" min="0.1" max="100" step="0.1" value="1"></label>
+              <label class="set-control-label">Density <input id="objectPhysicsDensity" type="number" min="0.1" max="10" step="0.1" value="1"></label>
+              <label class="set-control-label">Friction <input id="objectPhysicsFriction" type="number" min="0" max="1" step="0.05" value="0.55"></label>
+              <label class="set-control-label">Bounce <input id="objectPhysicsBounce" type="number" min="0" max="1" step="0.05" value="0.18"></label>
+              <label class="set-control-label">Linear drag <input id="objectPhysicsLinearDrag" type="number" min="0" max="6" step="0.05" value="0.08"></label>
+              <label class="set-control-label">Angular drag <input id="objectPhysicsAngularDrag" type="number" min="0" max="12" step="0.1" value="0.6"></label>
+              <label class="set-control-label">Rotation locked <input id="objectPhysicsLockRotation" type="checkbox"></label>
+              <label class="set-control-label">Lock X movement <input id="objectPhysicsLockX" type="checkbox"></label>
+              <label class="set-control-label">Lock Y movement <input id="objectPhysicsLockY" type="checkbox"></label>
+              <label class="set-control-label">Collision enabled <input id="objectPhysicsCollision" type="checkbox" checked></label>
+              <label class="set-control-label">Manual grab <input id="objectPhysicsCanGrab" type="checkbox" checked></label>
+              <label class="set-control-label">Start asleep <input id="objectPhysicsStartAsleep" type="checkbox"></label>
+              <label class="set-control-label">Gravity scale <input id="objectPhysicsGravityScale" type="number" min="0" max="4" step="0.1" value="1"></label>
+            </div>
+            <p id="objectPhysicsSummary" class="stage-status subtle">Rectangle and circle collisions update with object resizing.</p>
+          </aside>
           <div id="penAnimationPanel" class="pen-animation-panel hidden">
             <div class="texture-editor-header">
               <strong id="penAnimationTitle">Pen Animation</strong>
@@ -110,6 +141,31 @@
 
             <section id="objectsPanel" class="tool-panel hidden" aria-label="Objects">
               <button id="importObjectButton" type="button" class="secondary-button full-width import-button">Import Object Image</button>
+              <div class="set-control-card">
+                <button id="physicsToggleButton" type="button" class="secondary-button full-width">Physics: Off</button>
+                <button id="gravityToggleButton" type="button" class="ghost-button full-width">Gravity: On</button>
+                <button id="physicsSettingsButton" type="button" class="ghost-button full-width">Advanced Physics Settings</button>
+                <p id="physicsStatusLabel">Physics is off. Turn it on to enable collisions, pushing, and gravity for stage objects.</p>
+              </div>
+              <div id="physicsSettingsPanel" class="set-control-card hidden">
+                <label class="set-control-label" title="How strongly physics-enabled objects are pulled.">Gravity strength <input id="physicsGravityStrength" type="range" min="0" max="3000" step="25" value="1200"></label>
+                <label class="set-control-label" title="Choose which direction gravity points.">Gravity direction
+                  <select id="physicsGravityDirection">
+                    <option value="down">Down</option>
+                    <option value="up">Up</option>
+                    <option value="left">Left</option>
+                    <option value="right">Right</option>
+                  </select>
+                </label>
+                <label class="set-control-label" title="Global drag that slows moving objects over time.">Air resistance / drag <input id="physicsAirDrag" type="number" min="0" max="4" step="0.05" value="0.08"></label>
+                <label class="set-control-label" title="Default rebound level for new or reset objects.">Default bounce <input id="physicsBounceDefault" type="number" min="0" max="1" step="0.05" value="0.18"></label>
+                <label class="set-control-label" title="Default sliding resistance for new or reset objects.">Default friction <input id="physicsFrictionDefault" type="number" min="0" max="1" step="0.05" value="0.55"></label>
+                <label class="set-control-label" title="Speed multiplier for the whole simulation.">Physics time scale <input id="physicsTimeScale" type="number" min="0.25" max="2" step="0.05" value="1"></label>
+                <label class="set-control-label" title="More solver passes improve collision stability but cost more performance.">Collision precision <input id="physicsSolverIterations" type="number" min="1" max="8" step="1" value="3"></label>
+                <label class="set-control-label" title="Allows resting objects to go inactive for better performance.">Enable sleeping <input id="physicsSleeping" type="checkbox" checked></label>
+                <label class="set-control-label" title="Keep physics objects inside the stage edges.">World bounds / edge collisions <input id="physicsWorldBounds" type="checkbox" checked></label>
+                <label class="set-control-label" title="Show collision shapes while editing the stage.">Debug collision view <input id="physicsDebugView" type="checkbox"></label>
+              </div>
               <div id="objectList" class="tool-grid object-grid"></div>
             </section>
 

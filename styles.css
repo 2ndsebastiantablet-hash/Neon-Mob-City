@@ -817,6 +817,11 @@ button:disabled {
   line-height: 1.4;
 }
 
+#physicsStatusLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .set-control-label {
   display: grid;
   gap: 0.35rem;
@@ -883,7 +888,8 @@ button:disabled {
 
 .actor-context-menu,
 .pen-animation-panel,
-.texture-editor-panel {
+.texture-editor-panel,
+.object-physics-panel {
   position: absolute;
   z-index: 5;
   display: grid;
@@ -907,6 +913,29 @@ button:disabled {
   left: 1rem;
   bottom: 4.4rem;
   width: min(26rem, calc(100% - 2rem));
+}
+
+.object-physics-panel {
+  top: 1rem;
+  right: 1rem;
+  width: min(23rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  overflow: auto;
+}
+
+.object-physics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.object-physics-grid .set-control-label {
+  min-width: 0;
+}
+
+.object-physics-grid input[type="checkbox"] {
+  width: auto;
+  justify-self: start;
 }
 
 .pen-animation-actions {

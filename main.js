@@ -177,6 +177,11 @@ const STAGE_GRID_SIZE = 48;
 const SCENE_TARGET_ID = "scene";
 const CHARACTER_BUILDER_WIDTH = 420;
 const CHARACTER_BUILDER_HEIGHT = 520;
+const PHYSICS_FIXED_TIMESTEP = 1 / 60;
+const PHYSICS_MAX_STEPS_PER_FRAME = 5;
+const PHYSICS_SLEEP_SPEED = 18;
+const PHYSICS_SLEEP_ANGULAR_SPEED = 0.35;
+const PHYSICS_SLEEP_DELAY = 0.75;
 const SOUND_EFFECT_OPTIONS = [
   { value: "pop", label: "Pop" },
   { value: "click", label: "Click" },
@@ -616,6 +621,21 @@ const elements = {
   importTextureButton: document.querySelector("#importTextureButton"),
   editTextureButton: document.querySelector("#editTextureButton"),
   importObjectButton: document.querySelector("#importObjectButton"),
+  physicsToggleButton: document.querySelector("#physicsToggleButton"),
+  gravityToggleButton: document.querySelector("#gravityToggleButton"),
+  physicsSettingsButton: document.querySelector("#physicsSettingsButton"),
+  physicsStatusLabel: document.querySelector("#physicsStatusLabel"),
+  physicsSettingsPanel: document.querySelector("#physicsSettingsPanel"),
+  physicsGravityStrength: document.querySelector("#physicsGravityStrength"),
+  physicsGravityDirection: document.querySelector("#physicsGravityDirection"),
+  physicsAirDrag: document.querySelector("#physicsAirDrag"),
+  physicsBounceDefault: document.querySelector("#physicsBounceDefault"),
+  physicsFrictionDefault: document.querySelector("#physicsFrictionDefault"),
+  physicsTimeScale: document.querySelector("#physicsTimeScale"),
+  physicsSolverIterations: document.querySelector("#physicsSolverIterations"),
+  physicsSleeping: document.querySelector("#physicsSleeping"),
+  physicsWorldBounds: document.querySelector("#physicsWorldBounds"),
+  physicsDebugView: document.querySelector("#physicsDebugView"),
   importStageButton: document.querySelector("#importStageButton"),
   importCharacterInput: document.querySelector("#importCharacterInput"),
   importTextureInput: document.querySelector("#importTextureInput"),
@@ -634,9 +654,30 @@ const elements = {
   actorContextCodeButton: document.querySelector("#actorContextCodeButton"),
   actorContextPenButton: document.querySelector("#actorContextPenButton"),
   actorContextEditCharacterButton: document.querySelector("#actorContextEditCharacterButton"),
+  actorContextPhysicsButton: document.querySelector("#actorContextPhysicsButton"),
   actorContextGroupButton: document.querySelector("#actorContextGroupButton"),
   actorContextUngroupButton: document.querySelector("#actorContextUngroupButton"),
   actorContextColor: document.querySelector("#actorContextColor"),
+  objectPhysicsPanel: document.querySelector("#objectPhysicsPanel"),
+  objectPhysicsTitle: document.querySelector("#objectPhysicsTitle"),
+  closeObjectPhysicsButton: document.querySelector("#closeObjectPhysicsButton"),
+  objectPhysicsEnabled: document.querySelector("#objectPhysicsEnabled"),
+  objectPhysicsGravity: document.querySelector("#objectPhysicsGravity"),
+  objectPhysicsBodyType: document.querySelector("#objectPhysicsBodyType"),
+  objectPhysicsMass: document.querySelector("#objectPhysicsMass"),
+  objectPhysicsDensity: document.querySelector("#objectPhysicsDensity"),
+  objectPhysicsFriction: document.querySelector("#objectPhysicsFriction"),
+  objectPhysicsBounce: document.querySelector("#objectPhysicsBounce"),
+  objectPhysicsLinearDrag: document.querySelector("#objectPhysicsLinearDrag"),
+  objectPhysicsAngularDrag: document.querySelector("#objectPhysicsAngularDrag"),
+  objectPhysicsLockRotation: document.querySelector("#objectPhysicsLockRotation"),
+  objectPhysicsLockX: document.querySelector("#objectPhysicsLockX"),
+  objectPhysicsLockY: document.querySelector("#objectPhysicsLockY"),
+  objectPhysicsCollision: document.querySelector("#objectPhysicsCollision"),
+  objectPhysicsCanGrab: document.querySelector("#objectPhysicsCanGrab"),
+  objectPhysicsStartAsleep: document.querySelector("#objectPhysicsStartAsleep"),
+  objectPhysicsGravityScale: document.querySelector("#objectPhysicsGravityScale"),
+  objectPhysicsSummary: document.querySelector("#objectPhysicsSummary"),
   penAnimationPanel: document.querySelector("#penAnimationPanel"),
   penAnimationTitle: document.querySelector("#penAnimationTitle"),
   penAnimationDuration: document.querySelector("#penAnimationDuration"),
@@ -731,6 +772,152 @@ const setCtx = setCanvas.getContext("2d");
 const textureEditorCtx = elements.textureEditorCanvas.getContext("2d");
 const characterBuilderCanvas = elements.characterBuilderCanvas;
 const characterBuilderCtx = characterBuilderCanvas.getContext("2d");
+let currentRenderFlags = {
+  showPhysicsBadges: true,
+  showPhysicsDebug: false,
+};
+
+function createDefaultPhysicsSettings() {
+  return {
+    enabled: false,
+    gravityEnabled: true,
+    showGlobalSettings: false,
+    objectEditorItemId: null,
+    statusMessage: "",
+    accumulator: 0,
+    settings: {
+      gravityStrength: 1200,
+      gravityDirection: "down",
+      airDrag: 0.08,
+      defaultRestitution: 0.18,
+      defaultFriction: 0.55,
+      timeScale: 1,
+      solverIterations: 3,
+      sleeping: true,
+      worldBounds: true,
+      debugView: false,
+      maxObjects: 60,
+    },
+  };
+}
+
+function normalizeGlobalPhysicsSettings(physics) {
+  const defaults = createDefaultPhysicsSettings();
+  const settings = physics?.settings || {};
+  return {
+    ...defaults,
+    enabled: Boolean(physics?.enabled),
+    gravityEnabled: physics?.gravityEnabled !== false,
+    showGlobalSettings: Boolean(physics?.showGlobalSettings),
+    objectEditorItemId: physics?.objectEditorItemId ?? null,
+    statusMessage: typeof physics?.statusMessage === "string" ? physics.statusMessage : "",
+    accumulator: 0,
+    settings: {
+      gravityStrength: clamp(Number(settings.gravityStrength ?? defaults.settings.gravityStrength), 0, 3000),
+      gravityDirection: ["down", "up", "left", "right"].includes(settings.gravityDirection) ? settings.gravityDirection : "down",
+      airDrag: clamp(Number(settings.airDrag ?? defaults.settings.airDrag), 0, 4),
+      defaultRestitution: clamp(Number(settings.defaultRestitution ?? defaults.settings.defaultRestitution), 0, 1),
+      defaultFriction: clamp(Number(settings.defaultFriction ?? defaults.settings.defaultFriction), 0, 1),
+      timeScale: clamp(Number(settings.timeScale ?? defaults.settings.timeScale), 0.25, 2),
+      solverIterations: clamp(Math.round(Number(settings.solverIterations ?? defaults.settings.solverIterations)), 1, 8),
+      sleeping: settings.sleeping !== false,
+      worldBounds: settings.worldBounds !== false,
+      debugView: Boolean(settings.debugView),
+      maxObjects: defaults.settings.maxObjects,
+    },
+  };
+}
+
+function serializeGlobalPhysicsSettings(physics) {
+  return {
+    enabled: physics.enabled,
+    gravityEnabled: physics.gravityEnabled,
+    settings: {
+      gravityStrength: physics.settings.gravityStrength,
+      gravityDirection: physics.settings.gravityDirection,
+      airDrag: physics.settings.airDrag,
+      defaultRestitution: physics.settings.defaultRestitution,
+      defaultFriction: physics.settings.defaultFriction,
+      timeScale: physics.settings.timeScale,
+      solverIterations: physics.settings.solverIterations,
+      sleeping: physics.settings.sleeping,
+      worldBounds: physics.settings.worldBounds,
+      debugView: physics.settings.debugView,
+    },
+  };
+}
+
+function createDefaultObjectPhysics() {
+  const settings = createDefaultPhysicsSettings().settings;
+  return {
+    enabled: true,
+    gravityAffected: true,
+    bodyType: "dynamic",
+    mass: 1,
+    density: 1,
+    friction: settings.defaultFriction,
+    restitution: settings.defaultRestitution,
+    linearDrag: settings.airDrag,
+    angularDrag: 0.6,
+    rotationLocked: false,
+    lockX: false,
+    lockY: false,
+    collisionEnabled: true,
+    canGrab: true,
+    startAsleep: false,
+    gravityScale: 1,
+  };
+}
+
+function normalizeObjectPhysics(physics, kind) {
+  const defaults = createDefaultObjectPhysics();
+  const source = physics || {};
+  if (kind !== "object") {
+    return {
+      ...defaults,
+      enabled: false,
+    };
+  }
+  return {
+    enabled: source.enabled !== false,
+    gravityAffected: source.gravityAffected !== false,
+    bodyType: source.bodyType === "static" ? "static" : "dynamic",
+    mass: clamp(Number(source.mass ?? defaults.mass), 0.1, 100),
+    density: clamp(Number(source.density ?? defaults.density), 0.1, 10),
+    friction: clamp(Number(source.friction ?? defaults.friction), 0, 1),
+    restitution: clamp(Number(source.restitution ?? defaults.restitution), 0, 1),
+    linearDrag: clamp(Number(source.linearDrag ?? defaults.linearDrag), 0, 6),
+    angularDrag: clamp(Number(source.angularDrag ?? defaults.angularDrag), 0, 12),
+    rotationLocked: Boolean(source.rotationLocked),
+    lockX: Boolean(source.lockX),
+    lockY: Boolean(source.lockY),
+    collisionEnabled: source.collisionEnabled !== false,
+    canGrab: source.canGrab !== false,
+    startAsleep: Boolean(source.startAsleep),
+    gravityScale: clamp(Number(source.gravityScale ?? defaults.gravityScale), 0, 4),
+  };
+}
+
+function serializeObjectPhysics(physics) {
+  return {
+    enabled: physics.enabled,
+    gravityAffected: physics.gravityAffected,
+    bodyType: physics.bodyType,
+    mass: physics.mass,
+    density: physics.density,
+    friction: physics.friction,
+    restitution: physics.restitution,
+    linearDrag: physics.linearDrag,
+    angularDrag: physics.angularDrag,
+    rotationLocked: physics.rotationLocked,
+    lockX: physics.lockX,
+    lockY: physics.lockY,
+    collisionEnabled: physics.collisionEnabled,
+    canGrab: physics.canGrab,
+    startAsleep: physics.startAsleep,
+    gravityScale: physics.gravityScale,
+  };
+}
 
 const state = {
   screen: "menu",
@@ -798,6 +985,7 @@ const state = {
     lightingColor: "#fff7d6",
     lightingStrength: 0,
   },
+  physics: createDefaultPhysicsSettings(),
   selection: new Set(),
   stageDrawings: [],
   stageSelectedDrawingId: null,
@@ -957,6 +1145,17 @@ function createItemRuntime() {
       scaleX: 1,
       scaleY: 1,
     },
+    physics: {
+      vx: 0,
+      vy: 0,
+      angularVelocity: 0,
+      asleep: false,
+      sleepTimer: 0,
+      dragging: false,
+      previousX: 0,
+      previousY: 0,
+      initialized: false,
+    },
   };
 }
 
@@ -1029,6 +1228,9 @@ function serializePenAnimation(animation) {
 }
 
 function normalizeItem(item) {
+  const physics = normalizeObjectPhysics(item.physics, item.kind);
+  const runtime = createItemRuntime();
+  runtime.physics.asleep = physics.startAsleep;
   return {
     ...item,
     facing: item.facing === -1 ? -1 : 1,
@@ -1042,9 +1244,10 @@ function normalizeItem(item) {
     groupScriptHostId: item.groupScriptHostId || null,
     rotation: typeof item.rotation === "number" ? item.rotation : 0,
     imageData: item.imageData || null,
+    physics,
     penAnimation: item.penAnimation ? normalizePenAnimation(item.penAnimation) : null,
     scripts: Array.isArray(item.scripts) ? item.scripts.map(deserializeBlock) : [],
-    runtime: createItemRuntime(),
+    runtime,
   };
 }
 
@@ -1107,6 +1310,7 @@ function serializeItem(item) {
     groupId: item.groupId || null,
     groupScriptHostId: item.groupScriptHostId || null,
     rotation: item.rotation || 0,
+    physics: serializeObjectPhysics(item.physics || normalizeObjectPhysics(null, item.kind)),
     penAnimation: item.penAnimation ? serializePenAnimation(item.penAnimation) : null,
     scripts: item.scripts.map(serializeBlock),
   };
@@ -1246,6 +1450,7 @@ function saveProjectState() {
       stageDrawings: state.stageDrawings.map(serializeDrawing),
       sceneScripts: state.sceneScripts.map(serializeBlock),
       scene: { ...state.scene },
+      physics: serializeGlobalPhysicsSettings(state.physics),
       nextId: state.nextId,
       globalVolume: state.globalVolume,
     };
@@ -1301,6 +1506,9 @@ function loadProjectState() {
         lightingColor: payload.scene.lightingColor || "#fff7d6",
         lightingStrength: clamp(Number(payload.scene.lightingStrength || 0), 0, 1),
       };
+    }
+    if (payload.physics) {
+      state.physics = normalizeGlobalPhysicsSettings(payload.physics);
     }
     if (typeof payload.nextId === "number") {
       state.nextId = payload.nextId;
@@ -1406,6 +1614,484 @@ function getItemSize(item) {
     w: item.w * scale * (item.scaleX || 1),
     h: item.h * scale * (item.scaleY || 1),
   };
+}
+
+function isPhysicsObject(item) {
+  return item?.kind === "object";
+}
+
+function isPhysicsCircle(item) {
+  return item?.subtype === "circle";
+}
+
+function getPhysicsGravityVector() {
+  const strength = state.physics.gravityEnabled ? state.physics.settings.gravityStrength : 0;
+  switch (state.physics.settings.gravityDirection) {
+    case "up":
+      return { x: 0, y: -strength };
+    case "left":
+      return { x: -strength, y: 0 };
+    case "right":
+      return { x: strength, y: 0 };
+    case "down":
+    default:
+      return { x: 0, y: strength };
+  }
+}
+
+function ensurePhysicsRuntime(item) {
+  const body = item.runtime.physics;
+  if (!body.initialized) {
+    body.previousX = item.x;
+    body.previousY = item.y;
+    body.asleep = Boolean(item.physics?.startAsleep);
+    body.initialized = true;
+  }
+  return body;
+}
+
+function wakePhysicsItem(item) {
+  if (!isPhysicsObject(item)) {
+    return;
+  }
+  const body = ensurePhysicsRuntime(item);
+  body.asleep = false;
+  body.sleepTimer = 0;
+}
+
+function resetPhysicsBody(item) {
+  if (!item?.runtime?.physics) {
+    return;
+  }
+  item.runtime.physics.vx = 0;
+  item.runtime.physics.vy = 0;
+  item.runtime.physics.angularVelocity = 0;
+  item.runtime.physics.sleepTimer = 0;
+  item.runtime.physics.asleep = Boolean(item.physics?.startAsleep);
+  item.runtime.physics.dragging = false;
+  item.runtime.physics.previousX = item.x;
+  item.runtime.physics.previousY = item.y;
+  item.runtime.physics.initialized = true;
+}
+
+function resetAllPhysicsRuntime() {
+  state.physics.accumulator = 0;
+  for (const item of state.items) {
+    resetPhysicsBody(item);
+  }
+}
+
+function getPhysicsMass(item) {
+  if (!isPhysicsObject(item)) {
+    return Infinity;
+  }
+  if (item.physics.bodyType === "static") {
+    return Infinity;
+  }
+  const size = getItemSize(item);
+  const sizeFactor = Math.max(0.25, (size.w * size.h) / (92 * 92));
+  return Math.max(0.05, item.physics.mass * item.physics.density * sizeFactor);
+}
+
+function getPhysicsInverseMass(item) {
+  if (!isPhysicsObject(item)) {
+    return 0;
+  }
+  if (item.physics.bodyType === "static") {
+    return 0;
+  }
+  return 1 / getPhysicsMass(item);
+}
+
+function getPhysicsShape(item) {
+  const size = getItemSize(item);
+  if (isPhysicsCircle(item)) {
+    return {
+      type: "circle",
+      x: item.x,
+      y: item.y,
+      radius: Math.min(size.w, size.h) * 0.5,
+    };
+  }
+  return {
+    type: "box",
+    x: item.x,
+    y: item.y,
+    halfW: size.w * 0.5,
+    halfH: size.h * 0.5,
+  };
+}
+
+function getPhysicsBounds(item) {
+  const shape = getPhysicsShape(item);
+  if (shape.type === "circle") {
+    return {
+      left: shape.x - shape.radius,
+      right: shape.x + shape.radius,
+      top: shape.y - shape.radius,
+      bottom: shape.y + shape.radius,
+    };
+  }
+  return {
+    left: shape.x - shape.halfW,
+    right: shape.x + shape.halfW,
+    top: shape.y - shape.halfH,
+    bottom: shape.y + shape.halfH,
+  };
+}
+
+function applyPhysicsTranslation(item, dx, dy) {
+  if (!isPhysicsObject(item)) {
+    return;
+  }
+  if (!item.physics.lockX) {
+    item.x += dx;
+  }
+  if (!item.physics.lockY) {
+    item.y += dy;
+  }
+}
+
+function applyPhysicsVelocity(item, dx, dy) {
+  if (!isPhysicsObject(item)) {
+    return;
+  }
+  const body = ensurePhysicsRuntime(item);
+  if (!item.physics.lockX) {
+    body.vx += dx;
+  }
+  if (!item.physics.lockY) {
+    body.vy += dy;
+  }
+}
+
+function setPhysicsMotionFromDelta(item, dx, dy, deltaSeconds) {
+  if (!isPhysicsObject(item) || !deltaSeconds) {
+    return;
+  }
+  const body = ensurePhysicsRuntime(item);
+  body.vx = item.physics.lockX ? 0 : dx / deltaSeconds;
+  body.vy = item.physics.lockY ? 0 : dy / deltaSeconds;
+  body.dragging = true;
+  wakePhysicsItem(item);
+}
+
+function canGrabItemManually(item) {
+  return !isPhysicsObject(item) || !state.physics.enabled || item.physics.canGrab;
+}
+
+function getBoxBoxCollision(shapeA, shapeB) {
+  const dx = shapeB.x - shapeA.x;
+  const overlapX = shapeA.halfW + shapeB.halfW - Math.abs(dx);
+  if (overlapX <= 0) {
+    return null;
+  }
+  const dy = shapeB.y - shapeA.y;
+  const overlapY = shapeA.halfH + shapeB.halfH - Math.abs(dy);
+  if (overlapY <= 0) {
+    return null;
+  }
+  if (overlapX < overlapY) {
+    return {
+      normal: { x: dx >= 0 ? 1 : -1, y: 0 },
+      penetration: overlapX,
+    };
+  }
+  return {
+    normal: { x: 0, y: dy >= 0 ? 1 : -1 },
+    penetration: overlapY,
+  };
+}
+
+function getCircleCircleCollision(shapeA, shapeB) {
+  const dx = shapeB.x - shapeA.x;
+  const dy = shapeB.y - shapeA.y;
+  const distance = Math.hypot(dx, dy);
+  const radius = shapeA.radius + shapeB.radius;
+  if (distance >= radius) {
+    return null;
+  }
+  if (distance < 0.0001) {
+    return {
+      normal: { x: 1, y: 0 },
+      penetration: radius,
+    };
+  }
+  return {
+    normal: { x: dx / distance, y: dy / distance },
+    penetration: radius - distance,
+  };
+}
+
+function getCircleBoxCollision(circle, box) {
+  const closestX = clamp(circle.x, box.x - box.halfW, box.x + box.halfW);
+  const closestY = clamp(circle.y, box.y - box.halfH, box.y + box.halfH);
+  let dx = circle.x - closestX;
+  let dy = circle.y - closestY;
+  let distance = Math.hypot(dx, dy);
+
+  if (distance < 0.0001) {
+    const offsetX = circle.x - box.x;
+    const offsetY = circle.y - box.y;
+    const diffX = box.halfW - Math.abs(offsetX);
+    const diffY = box.halfH - Math.abs(offsetY);
+    if (diffX < diffY) {
+      dx = offsetX >= 0 ? 1 : -1;
+      dy = 0;
+      distance = 1;
+      return {
+        normal: { x: dx, y: 0 },
+        penetration: circle.radius + diffX,
+      };
+    }
+    dx = 0;
+    dy = offsetY >= 0 ? 1 : -1;
+    distance = 1;
+    return {
+      normal: { x: 0, y: dy },
+      penetration: circle.radius + diffY,
+    };
+  }
+
+  if (distance >= circle.radius) {
+    return null;
+  }
+
+  return {
+    normal: { x: dx / distance, y: dy / distance },
+    penetration: circle.radius - distance,
+  };
+}
+
+function getCollisionManifold(itemA, itemB) {
+  const shapeA = getPhysicsShape(itemA);
+  const shapeB = getPhysicsShape(itemB);
+  if (shapeA.type === "circle" && shapeB.type === "circle") {
+    return getCircleCircleCollision(shapeA, shapeB);
+  }
+  if (shapeA.type === "box" && shapeB.type === "box") {
+    return getBoxBoxCollision(shapeA, shapeB);
+  }
+  if (shapeA.type === "circle" && shapeB.type === "box") {
+    return getCircleBoxCollision(shapeA, shapeB);
+  }
+  const manifold = getCircleBoxCollision(shapeB, shapeA);
+  if (!manifold) {
+    return null;
+  }
+  return {
+    normal: { x: -manifold.normal.x, y: -manifold.normal.y },
+    penetration: manifold.penetration,
+  };
+}
+
+function resolvePhysicsPair(itemA, itemB) {
+  if (!itemA.physics.collisionEnabled || !itemB.physics.collisionEnabled) {
+    return;
+  }
+
+  const manifold = getCollisionManifold(itemA, itemB);
+  if (!manifold) {
+    return;
+  }
+
+  const bodyA = ensurePhysicsRuntime(itemA);
+  const bodyB = ensurePhysicsRuntime(itemB);
+  const invMassA = getPhysicsInverseMass(itemA);
+  const invMassB = getPhysicsInverseMass(itemB);
+  const invMassSum = invMassA + invMassB;
+
+  if (invMassSum > 0) {
+    const correction = Math.max(manifold.penetration - 0.4, 0) / invMassSum * 0.82;
+    applyPhysicsTranslation(itemA, -manifold.normal.x * correction * invMassA, -manifold.normal.y * correction * invMassA);
+    applyPhysicsTranslation(itemB, manifold.normal.x * correction * invMassB, manifold.normal.y * correction * invMassB);
+  }
+
+  const relativeVelocity = {
+    x: bodyB.vx - bodyA.vx,
+    y: bodyB.vy - bodyA.vy,
+  };
+  const velocityAlongNormal = relativeVelocity.x * manifold.normal.x + relativeVelocity.y * manifold.normal.y;
+  if (velocityAlongNormal > 0 || invMassSum === 0) {
+    return;
+  }
+
+  const restitution = Math.max(itemA.physics.restitution, itemB.physics.restitution);
+  const impulseMagnitude = -(1 + restitution) * velocityAlongNormal / invMassSum;
+  const impulseX = manifold.normal.x * impulseMagnitude;
+  const impulseY = manifold.normal.y * impulseMagnitude;
+  applyPhysicsVelocity(itemA, -impulseX * invMassA, -impulseY * invMassA);
+  applyPhysicsVelocity(itemB, impulseX * invMassB, impulseY * invMassB);
+
+  const tangentX = relativeVelocity.x - velocityAlongNormal * manifold.normal.x;
+  const tangentY = relativeVelocity.y - velocityAlongNormal * manifold.normal.y;
+  const tangentLength = Math.hypot(tangentX, tangentY);
+  if (tangentLength > 0.0001) {
+    const tx = tangentX / tangentLength;
+    const ty = tangentY / tangentLength;
+    const tangentSpeed = relativeVelocity.x * tx + relativeVelocity.y * ty;
+    let frictionImpulse = -tangentSpeed / invMassSum;
+    const friction = Math.sqrt(itemA.physics.friction * itemB.physics.friction);
+    const maxFriction = impulseMagnitude * friction;
+    frictionImpulse = clamp(frictionImpulse, -maxFriction, maxFriction);
+    applyPhysicsVelocity(itemA, -tx * frictionImpulse * invMassA, -ty * frictionImpulse * invMassA);
+    applyPhysicsVelocity(itemB, tx * frictionImpulse * invMassB, ty * frictionImpulse * invMassB);
+  }
+
+  if (!itemA.physics.rotationLocked && invMassA > 0) {
+    bodyA.angularVelocity -= manifold.normal.x * relativeVelocity.y * 0.0009;
+  }
+  if (!itemB.physics.rotationLocked && invMassB > 0) {
+    bodyB.angularVelocity += manifold.normal.x * relativeVelocity.y * 0.0009;
+  }
+
+  wakePhysicsItem(itemA);
+  wakePhysicsItem(itemB);
+}
+
+function resolveWorldBounds(item) {
+  if (!item.physics.collisionEnabled || !state.physics.settings.worldBounds) {
+    return;
+  }
+  const body = ensurePhysicsRuntime(item);
+  const bounds = getPhysicsBounds(item);
+  const restitution = item.physics.restitution;
+  const friction = 1 - item.physics.friction * 0.35;
+
+  if (!item.physics.lockX && bounds.left < 0) {
+    item.x += -bounds.left;
+    body.vx = Math.abs(body.vx) * restitution;
+    body.vy *= friction;
+    wakePhysicsItem(item);
+  }
+  if (!item.physics.lockX && bounds.right > state.stageWidth) {
+    item.x -= bounds.right - state.stageWidth;
+    body.vx = -Math.abs(body.vx) * restitution;
+    body.vy *= friction;
+    wakePhysicsItem(item);
+  }
+  if (!item.physics.lockY && bounds.top < 0) {
+    item.y += -bounds.top;
+    body.vy = Math.abs(body.vy) * restitution;
+    body.vx *= friction;
+    wakePhysicsItem(item);
+  }
+  if (!item.physics.lockY && bounds.bottom > state.stageHeight) {
+    item.y -= bounds.bottom - state.stageHeight;
+    body.vy = -Math.abs(body.vy) * restitution;
+    body.vx *= friction;
+    wakePhysicsItem(item);
+  }
+}
+
+function updatePhysicsSleepState(item, deltaSeconds) {
+  if (!state.physics.settings.sleeping || item.physics.bodyType === "static") {
+    return;
+  }
+  const body = ensurePhysicsRuntime(item);
+  const speed = Math.hypot(body.vx, body.vy);
+  if (speed < PHYSICS_SLEEP_SPEED && Math.abs(body.angularVelocity) < PHYSICS_SLEEP_ANGULAR_SPEED) {
+    body.sleepTimer += deltaSeconds;
+    if (body.sleepTimer >= PHYSICS_SLEEP_DELAY) {
+      body.asleep = true;
+      body.vx = 0;
+      body.vy = 0;
+      body.angularVelocity = 0;
+    }
+  } else {
+    body.sleepTimer = 0;
+    body.asleep = false;
+  }
+}
+
+function stepPhysics(deltaSeconds) {
+  const physicsItems = state.items.filter((item) => isPhysicsObject(item) && item.physics.enabled);
+  const maxObjects = state.physics.settings.maxObjects;
+  const simulatedItems = physicsItems.slice(0, maxObjects);
+  const gravity = getPhysicsGravityVector();
+
+  if (physicsItems.length > maxObjects) {
+    state.physics.statusMessage = `Physics is simulating the first ${maxObjects} objects right now to keep the stage stable.`;
+  } else {
+    state.physics.statusMessage = state.physics.enabled
+      ? `Physics on. ${simulatedItems.length} object${simulatedItems.length === 1 ? "" : "s"} active.`
+      : "Physics is off. Turn it on to enable collisions, pushing, and gravity for stage objects.";
+  }
+
+  for (const item of simulatedItems) {
+    const body = ensurePhysicsRuntime(item);
+    body.previousX = item.x;
+    body.previousY = item.y;
+    if (item.physics.bodyType === "static") {
+      body.vx = 0;
+      body.vy = 0;
+      body.angularVelocity = 0;
+      body.asleep = false;
+      continue;
+    }
+    if (body.dragging || body.asleep) {
+      continue;
+    }
+
+    if (state.physics.gravityEnabled && item.physics.gravityAffected) {
+      body.vx += gravity.x * item.physics.gravityScale * deltaSeconds;
+      body.vy += gravity.y * item.physics.gravityScale * deltaSeconds;
+    }
+
+    const linearDamping = Math.max(0, 1 - (state.physics.settings.airDrag + item.physics.linearDrag) * deltaSeconds);
+    const angularDamping = Math.max(0, 1 - item.physics.angularDrag * deltaSeconds);
+    body.vx = item.physics.lockX ? 0 : body.vx * linearDamping;
+    body.vy = item.physics.lockY ? 0 : body.vy * linearDamping;
+    body.angularVelocity = item.physics.rotationLocked ? 0 : body.angularVelocity * angularDamping;
+
+    if (!item.physics.lockX) {
+      item.x += body.vx * deltaSeconds;
+    }
+    if (!item.physics.lockY) {
+      item.y += body.vy * deltaSeconds;
+    }
+    if (!item.physics.rotationLocked) {
+      item.rotation += body.angularVelocity * deltaSeconds;
+    }
+  }
+
+  const colliders = simulatedItems.filter((item) => item.physics.collisionEnabled);
+  for (let iteration = 0; iteration < state.physics.settings.solverIterations; iteration += 1) {
+    for (let index = 0; index < colliders.length; index += 1) {
+      for (let otherIndex = index + 1; otherIndex < colliders.length; otherIndex += 1) {
+        resolvePhysicsPair(colliders[index], colliders[otherIndex]);
+      }
+    }
+    if (state.physics.settings.worldBounds) {
+      for (const item of colliders) {
+        resolveWorldBounds(item);
+      }
+    }
+  }
+
+  for (const item of simulatedItems) {
+    if (ensurePhysicsRuntime(item).dragging) {
+      continue;
+    }
+    updatePhysicsSleepState(item, deltaSeconds);
+  }
+}
+
+function updatePhysics(deltaSeconds) {
+  if (!state.physics.enabled) {
+    state.physics.accumulator = 0;
+    state.physics.statusMessage = "";
+    return;
+  }
+
+  const scaledDelta = Math.min(0.05, deltaSeconds) * state.physics.settings.timeScale;
+  state.physics.accumulator = Math.min(0.12, state.physics.accumulator + scaledDelta);
+  let steps = 0;
+  while (state.physics.accumulator >= PHYSICS_FIXED_TIMESTEP && steps < PHYSICS_MAX_STEPS_PER_FRAME) {
+    stepPhysics(PHYSICS_FIXED_TIMESTEP);
+    state.physics.accumulator -= PHYSICS_FIXED_TIMESTEP;
+    steps += 1;
+  }
 }
 
 function getSingleSelectedItem() {
@@ -3223,21 +3909,27 @@ function setSelection(ids) {
   if (ids.length === 1) {
     state.scriptTargetId = ids[0];
   }
+  if (!ids.includes(state.physics.objectEditorItemId)) {
+    state.physics.objectEditorItemId = null;
+  }
   state.selectedScriptBlockId = null;
   state.selectedScriptBlockIds.clear();
   updateSelectionLabel();
   renderScriptEditor();
   renderScriptPalette();
+  renderPhysicsControls();
 }
 
 function clearSelection() {
   state.selection.clear();
   state.stageSelectedDrawingId = null;
+  state.physics.objectEditorItemId = null;
   state.selectedScriptBlockId = null;
   state.selectedScriptBlockIds.clear();
   updateSelectionLabel();
   renderScriptEditor();
   renderScriptPalette();
+  renderPhysicsControls();
 }
 
 function clearActiveTool() {
@@ -3357,6 +4049,7 @@ function setActivePanel(panelName) {
   for (const [name, panel] of Object.entries(elements.panels)) {
     panel.classList.toggle("hidden", name !== panelName);
   }
+  renderPhysicsControls();
 }
 
 function updateSelectionLabel() {
@@ -3472,6 +4165,12 @@ function createObjectItem(objectId, x, y) {
     w: 92,
     h: 92,
     textureId: null,
+    physics: {
+      ...createDefaultObjectPhysics(),
+      friction: state.physics.settings.defaultFriction,
+      restitution: state.physics.settings.defaultRestitution,
+      linearDrag: state.physics.settings.airDrag,
+    },
   });
 }
 
@@ -4298,6 +4997,9 @@ function applyResizeFromHandle(item, handleId, point, startBounds) {
   item.scaleX = clamp(width / Math.max(1, item.w * baseScale), 0.15, 8);
   item.scaleY = clamp(height / Math.max(1, item.h * baseScale), 0.15, 8);
   clampItemToStage(item);
+  if (state.physics.enabled && item.kind === "object") {
+    wakePhysicsItem(item);
+  }
   markProjectDirty();
 }
 
@@ -4334,6 +5036,9 @@ function applySelectionResizeFromHandle(handleId, point, startBounds, snapshots)
     item.scaleX = clamp(snapshot.scaleX * scaleX, 0.15, 8);
     item.scaleY = clamp(snapshot.scaleY * scaleY, 0.15, 8);
     clampItemToStage(item);
+    if (state.physics.enabled && item.kind === "object") {
+      wakePhysicsItem(item);
+    }
   }
   markProjectDirty();
 }
@@ -4995,9 +5700,23 @@ function hitTest(x, y) {
 }
 
 function startDragSelection(point) {
+  const selectedItems = getSelectedItems();
+  if (state.physics.enabled) {
+    const blockedItem = selectedItems.find((item) => isPhysicsObject(item) && !item.physics.canGrab);
+    if (blockedItem) {
+      elements.toolLabel.textContent = "Manual grab is turned off for that object.";
+      return;
+    }
+  }
+
   const snapshot = new Map();
-  for (const item of getSelectedItems()) {
+  for (const item of selectedItems) {
     snapshot.set(item.id, { x: item.x, y: item.y });
+    if (state.physics.enabled && isPhysicsObject(item) && item.physics.enabled) {
+      const body = ensurePhysicsRuntime(item);
+      body.dragging = true;
+      wakePhysicsItem(item);
+    }
   }
 
   state.interaction = {
@@ -5172,9 +5891,16 @@ function onPointerMove(event) {
       }
 
       const snapshot = state.interaction.snapshot.get(item.id);
-      item.x = snapshot.x + dx;
-      item.y = snapshot.y + dy;
+      const nextX = snapshot.x + dx;
+      const nextY = snapshot.y + dy;
+      const moveX = nextX - item.x;
+      const moveY = nextY - item.y;
+      item.x = nextX;
+      item.y = nextY;
       clampItemToStage(item);
+      if (state.physics.enabled && item.kind === "object" && item.physics.enabled) {
+        setPhysicsMotionFromDelta(item, moveX, moveY, 1 / 60);
+      }
     }
     return;
   }
@@ -5188,6 +5914,9 @@ function onPointerMove(event) {
     const item = getItemById(state.interaction.itemId);
     if (item) {
       applyResizeFromHandle(item, state.interaction.handleId, point, state.interaction.startBounds);
+      if (state.physics.enabled && item.kind === "object") {
+        wakePhysicsItem(item);
+      }
     }
     return;
   }
@@ -5196,6 +5925,9 @@ function onPointerMove(event) {
     const item = getItemById(state.interaction.itemId);
     if (item) {
       applyRotationFromPoint(item, state.interaction, point);
+      if (state.physics.enabled && item.kind === "object") {
+        wakePhysicsItem(item);
+      }
     }
     return;
   }
@@ -5284,6 +6016,11 @@ function onPointerUp(event) {
     }
   }
 
+  for (const item of state.items) {
+    if (item.kind === "object") {
+      ensurePhysicsRuntime(item).dragging = false;
+    }
+  }
   state.interaction = null;
   state.dragPaintedIds = new Set();
   if (event?.pointerId != null) {
@@ -5302,6 +6039,7 @@ function showActorContextMenu(actor, event) {
   elements.actorContextCodeButton.classList.toggle("hidden", !canCodeSelection);
   elements.actorContextPenButton.classList.toggle("hidden", selectedItems.length !== 1 || actor.kind !== "character");
   elements.actorContextEditCharacterButton.classList.toggle("hidden", selectedItems.length !== 1 || !characterDef?.builderData);
+  elements.actorContextPhysicsButton.classList.toggle("hidden", !(state.physics.enabled && selectedItems.length === 1 && actor.kind === "object"));
   elements.actorContextGroupButton.classList.toggle("hidden", selectedItems.length < 2);
   elements.actorContextUngroupButton.classList.toggle("hidden", !selectedItems.some((item) => item.groupId));
   elements.actorContextColor.parentElement.classList.toggle("hidden", !selectedObject);
@@ -5310,7 +6048,7 @@ function showActorContextMenu(actor, event) {
   }
   const panelRect = elements.actorContextMenu.parentElement.getBoundingClientRect();
   elements.actorContextMenu.style.left = `${clamp(event.clientX - panelRect.left, 12, panelRect.width - 150)}px`;
-  elements.actorContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - 92)}px`;
+  elements.actorContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - 188)}px`;
   elements.actorContextMenu.classList.remove("hidden");
 }
 
@@ -5590,6 +6328,8 @@ function pasteClipboard() {
     item.rotation = template.rotation ?? 0;
     item.penAnimation = template.penAnimation ? normalizePenAnimation(template.penAnimation) : null;
     item.color = template.color || null;
+    item.physics = normalizeObjectPhysics(template.physics, template.kind);
+    resetPhysicsBody(item);
     if (template.groupId) {
       if (!pastedGroupIds.has(template.groupId)) {
         pastedGroupIds.set(template.groupId, `group-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
@@ -5629,7 +6369,11 @@ function deleteSelection() {
     return;
   }
 
+  const deletingPhysicsEditorItem = state.selection.has(state.physics.objectEditorItemId);
   state.items = state.items.filter((item) => !state.selection.has(item.id));
+  if (deletingPhysicsEditorItem) {
+    state.physics.objectEditorItemId = null;
+  }
   clearSelection();
   elements.toolLabel.textContent = "Selection deleted.";
   markProjectDirty();
@@ -5761,6 +6505,9 @@ function moveSelectionByKeys(deltaSeconds) {
     item.x += dx;
     item.y += dy;
     clampItemToStage(item);
+    if (state.physics.enabled && item.kind === "object" && item.physics.enabled) {
+      setPhysicsMotionFromDelta(item, dx, dy, deltaSeconds);
+    }
   }
   markProjectDirty();
 }
@@ -6019,6 +6766,51 @@ function resolveFill(item, fallbackColor) {
   return buildPattern(item.textureId) || fallbackColor;
 }
 
+function drawPhysicsBadge(item) {
+  if (!currentRenderFlags.showPhysicsBadges || !state.physics.enabled || item.kind !== "object" || !item.physics.enabled) {
+    return;
+  }
+  const bounds = getItemBounds(item);
+  ctx.save();
+  ctx.fillStyle = state.physics.gravityEnabled && item.physics.gravityAffected ? "#e56c3f" : "#2f8f83";
+  ctx.strokeStyle = "#fffdfa";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(bounds.right - 8, bounds.top + 8, 11, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#fffdfa";
+  ctx.font = "900 10px Trebuchet MS";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("P", bounds.right - 8, bounds.top + 8.5);
+  ctx.restore();
+}
+
+function drawPhysicsDebugOverlay() {
+  if (!state.physics.enabled || !currentRenderFlags.showPhysicsDebug) {
+    return;
+  }
+  ctx.save();
+  ctx.setLineDash([8, 6]);
+  ctx.lineWidth = 2;
+  for (const item of state.items) {
+    if (!isPhysicsObject(item) || !item.physics.enabled) {
+      continue;
+    }
+    const shape = getPhysicsShape(item);
+    ctx.strokeStyle = item.physics.collisionEnabled ? "rgba(47, 143, 131, 0.8)" : "rgba(169, 47, 47, 0.8)";
+    if (shape.type === "circle") {
+      ctx.beginPath();
+      ctx.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.strokeRect(shape.x - shape.halfW, shape.y - shape.halfH, shape.halfW * 2, shape.halfH * 2);
+    }
+  }
+  ctx.restore();
+}
+
 function drawImportedImageItem(item, imageData, fallbackColor) {
   const image = getImportedImage(imageData);
   const size = getItemSize(item);
@@ -6041,6 +6833,7 @@ function drawImportedImageItem(item, imageData, fallbackColor) {
     ctx.fillRect(-size.w * 0.5, -size.h * 0.5, size.w, size.h);
   }
   ctx.restore();
+  drawPhysicsBadge(item);
 }
 
 function drawShadow(item) {
@@ -6227,6 +7020,7 @@ function drawCharacter(item) {
   }
 
   ctx.restore();
+  drawPhysicsBadge(item);
 }
 
 function drawObject(item) {
@@ -6682,6 +7476,10 @@ function drawStage(now, options = {}) {
     showRecordingOverlay = true,
     showSetContent = true,
   } = options;
+  currentRenderFlags = {
+    showPhysicsBadges: showEditorOverlays,
+    showPhysicsDebug: showEditorOverlays && state.physics.settings.debugView,
+  };
 
   ctx.clearRect(0, 0, state.stageWidth, state.stageHeight);
 
@@ -6732,6 +7530,8 @@ function drawStage(now, options = {}) {
       drawObject(item);
     }
   }
+
+  drawPhysicsDebugOverlay();
 
   drawSceneLighting();
 
@@ -6827,6 +7627,10 @@ function animate(now) {
   if (state.screen === "studio") {
     moveSelectionByKeys(deltaSeconds);
     updateScripts(deltaSeconds);
+    if (!state.scriptsModuleOpen && !state.stageModuleOpen && !state.characterBuilderOpen) {
+      updatePhysics(deltaSeconds);
+    }
+    refreshPhysicsStatusLabel();
     renderStageViews(now);
   }
 
@@ -6981,6 +7785,7 @@ function startRecording() {
 
   clearAllScriptRunners();
   stopAllAudioNodes();
+  state.physics.accumulator = 0;
   renderStageViews(performance.now());
   const stream = recordingCanvas.captureStream(30);
   const mimeType = getRecordingMimeType();
@@ -7047,6 +7852,11 @@ async function stopRecording() {
     item.runtime.flip = null;
     item.runtime.jump = null;
   }
+  for (const item of state.items) {
+    if (item.kind === "object") {
+      item.runtime.physics.dragging = false;
+    }
+  }
   if (recorder.state !== "inactive") {
     recorder.stop();
   }
@@ -7089,6 +7899,7 @@ function clearStage() {
   hideActorContextMenu();
   clearAllScriptRunners();
   stopAllAudioNodes();
+  resetAllPhysicsRuntime();
   clearSelection();
   markProjectDirty();
   saveProjectState();
@@ -7159,6 +7970,155 @@ function populateToolLists() {
       }),
     );
   }
+}
+
+function getPhysicsEditorItem() {
+  const item = getItemById(state.physics.objectEditorItemId);
+  return item && item.kind === "object" ? item : null;
+}
+
+function closeObjectPhysicsEditor() {
+  state.physics.objectEditorItemId = null;
+  elements.objectPhysicsPanel.classList.add("hidden");
+}
+
+function refreshPhysicsStatusLabel() {
+  elements.physicsStatusLabel.textContent = state.physics.statusMessage || (state.physics.enabled
+    ? "Physics on. Place or drag stage objects to test collisions."
+    : "Physics is off. Turn it on to enable collisions, pushing, and gravity for stage objects.");
+}
+
+function renderPhysicsControls() {
+  elements.physicsToggleButton.textContent = `Physics: ${state.physics.enabled ? "On" : "Off"}`;
+  elements.gravityToggleButton.textContent = `Gravity: ${state.physics.gravityEnabled ? "On" : "Off"}`;
+  elements.physicsToggleButton.className = `${state.physics.enabled ? "primary" : "secondary"}-button full-width`;
+  elements.gravityToggleButton.className = `${state.physics.gravityEnabled ? "secondary" : "ghost"}-button full-width`;
+  elements.physicsSettingsPanel.classList.toggle("hidden", !state.physics.showGlobalSettings);
+
+  elements.physicsGravityStrength.value = String(state.physics.settings.gravityStrength);
+  elements.physicsGravityDirection.value = state.physics.settings.gravityDirection;
+  elements.physicsAirDrag.value = String(state.physics.settings.airDrag);
+  elements.physicsBounceDefault.value = String(state.physics.settings.defaultRestitution);
+  elements.physicsFrictionDefault.value = String(state.physics.settings.defaultFriction);
+  elements.physicsTimeScale.value = String(state.physics.settings.timeScale);
+  elements.physicsSolverIterations.value = String(state.physics.settings.solverIterations);
+  elements.physicsSleeping.checked = state.physics.settings.sleeping;
+  elements.physicsWorldBounds.checked = state.physics.settings.worldBounds;
+  elements.physicsDebugView.checked = state.physics.settings.debugView;
+  refreshPhysicsStatusLabel();
+
+  const item = getPhysicsEditorItem();
+  if (!state.physics.enabled || !item) {
+    closeObjectPhysicsEditor();
+    return;
+  }
+
+  elements.objectPhysicsTitle.textContent = `${getActorDisplayName(item)} Physics`;
+  elements.objectPhysicsEnabled.checked = item.physics.enabled;
+  elements.objectPhysicsGravity.checked = item.physics.gravityAffected;
+  elements.objectPhysicsBodyType.value = item.physics.bodyType;
+  elements.objectPhysicsMass.value = String(item.physics.mass);
+  elements.objectPhysicsDensity.value = String(item.physics.density);
+  elements.objectPhysicsFriction.value = String(item.physics.friction);
+  elements.objectPhysicsBounce.value = String(item.physics.restitution);
+  elements.objectPhysicsLinearDrag.value = String(item.physics.linearDrag);
+  elements.objectPhysicsAngularDrag.value = String(item.physics.angularDrag);
+  elements.objectPhysicsLockRotation.checked = item.physics.rotationLocked;
+  elements.objectPhysicsLockX.checked = item.physics.lockX;
+  elements.objectPhysicsLockY.checked = item.physics.lockY;
+  elements.objectPhysicsCollision.checked = item.physics.collisionEnabled;
+  elements.objectPhysicsCanGrab.checked = item.physics.canGrab;
+  elements.objectPhysicsStartAsleep.checked = item.physics.startAsleep;
+  elements.objectPhysicsGravityScale.value = String(item.physics.gravityScale);
+  elements.objectPhysicsSummary.textContent = item.physics.bodyType === "static"
+    ? "Static bodies hold position like walls or floors. Resizing updates their collision shape immediately."
+    : "Dynamic bodies collide, push, fall, and keep their resized collision shape during recording.";
+  elements.objectPhysicsPanel.classList.remove("hidden");
+}
+
+function togglePhysicsEnabled() {
+  state.physics.enabled = !state.physics.enabled;
+  state.physics.accumulator = 0;
+  if (!state.physics.enabled) {
+    state.physics.statusMessage = "";
+    resetAllPhysicsRuntime();
+    closeObjectPhysicsEditor();
+  } else {
+    state.physics.statusMessage = "Physics on. Place or drag stage objects to test collisions.";
+    for (const item of state.items) {
+      if (isPhysicsObject(item) && item.physics.enabled) {
+        wakePhysicsItem(item);
+      }
+    }
+  }
+  markProjectDirty();
+  renderPhysicsControls();
+}
+
+function toggleGravityEnabled() {
+  state.physics.gravityEnabled = !state.physics.gravityEnabled;
+  if (state.physics.gravityEnabled) {
+    for (const item of state.items) {
+      if (isPhysicsObject(item) && item.physics.enabled && item.physics.gravityAffected) {
+        wakePhysicsItem(item);
+      }
+    }
+  }
+  markProjectDirty();
+  renderPhysicsControls();
+}
+
+function updateGlobalPhysicsSettingsFromInputs() {
+  state.physics.settings.gravityStrength = clamp(Number(elements.physicsGravityStrength.value || 0), 0, 3000);
+  state.physics.settings.gravityDirection = elements.physicsGravityDirection.value;
+  state.physics.settings.airDrag = clamp(Number(elements.physicsAirDrag.value || 0), 0, 4);
+  state.physics.settings.defaultRestitution = clamp(Number(elements.physicsBounceDefault.value || 0), 0, 1);
+  state.physics.settings.defaultFriction = clamp(Number(elements.physicsFrictionDefault.value || 0), 0, 1);
+  state.physics.settings.timeScale = clamp(Number(elements.physicsTimeScale.value || 1), 0.25, 2);
+  state.physics.settings.solverIterations = clamp(Math.round(Number(elements.physicsSolverIterations.value || 3)), 1, 8);
+  state.physics.settings.sleeping = elements.physicsSleeping.checked;
+  state.physics.settings.worldBounds = elements.physicsWorldBounds.checked;
+  state.physics.settings.debugView = elements.physicsDebugView.checked;
+  if (state.physics.enabled) {
+    for (const item of state.items) {
+      if (isPhysicsObject(item) && item.physics.enabled) {
+        wakePhysicsItem(item);
+      }
+    }
+  }
+  markProjectDirty();
+  renderPhysicsControls();
+}
+
+function openContextPhysicsEditor() {
+  const actor = getItemById(state.contextActorId);
+  if (!actor || actor.kind !== "object" || !state.physics.enabled) {
+    return;
+  }
+  state.physics.objectEditorItemId = actor.id;
+  hideActorContextMenu();
+  renderPhysicsControls();
+}
+
+function updatePhysicsEditorItem(update) {
+  const item = getPhysicsEditorItem();
+  if (!item) {
+    return;
+  }
+  update(item.physics);
+  if (item.physics.bodyType === "static") {
+    item.physics.gravityAffected = false;
+  }
+  if (item.physics.rotationLocked) {
+    item.runtime.physics.angularVelocity = 0;
+  }
+  if (item.physics.startAsleep) {
+    resetPhysicsBody(item);
+  } else {
+    wakePhysicsItem(item);
+  }
+  markProjectDirty();
+  renderPhysicsControls();
 }
 
 function buildSetToolCard(definition, options) {
@@ -7767,9 +8727,77 @@ function bindEvents() {
   elements.actorContextCodeButton.addEventListener("click", openContextActorCode);
   elements.actorContextPenButton.addEventListener("click", openPenAnimationEditor);
   elements.actorContextEditCharacterButton.addEventListener("click", openContextCharacterBuilder);
+  elements.actorContextPhysicsButton.addEventListener("click", openContextPhysicsEditor);
   elements.actorContextGroupButton.addEventListener("click", groupSelection);
   elements.actorContextUngroupButton.addEventListener("click", ungroupSelection);
   elements.actorContextColor.addEventListener("input", () => changeSelectedObjectColor(elements.actorContextColor.value));
+  elements.closeObjectPhysicsButton.addEventListener("click", closeObjectPhysicsEditor);
+  elements.physicsToggleButton.addEventListener("click", togglePhysicsEnabled);
+  elements.gravityToggleButton.addEventListener("click", toggleGravityEnabled);
+  elements.physicsSettingsButton.addEventListener("click", () => {
+    state.physics.showGlobalSettings = !state.physics.showGlobalSettings;
+    renderPhysicsControls();
+  });
+  [
+    elements.physicsGravityStrength,
+    elements.physicsGravityDirection,
+    elements.physicsAirDrag,
+    elements.physicsBounceDefault,
+    elements.physicsFrictionDefault,
+    elements.physicsTimeScale,
+    elements.physicsSolverIterations,
+    elements.physicsSleeping,
+    elements.physicsWorldBounds,
+    elements.physicsDebugView,
+  ].forEach((input) => input.addEventListener("input", updateGlobalPhysicsSettingsFromInputs));
+  elements.objectPhysicsEnabled.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.enabled = elements.objectPhysicsEnabled.checked;
+  }));
+  elements.objectPhysicsGravity.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.gravityAffected = elements.objectPhysicsGravity.checked;
+  }));
+  elements.objectPhysicsBodyType.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.bodyType = elements.objectPhysicsBodyType.value === "static" ? "static" : "dynamic";
+  }));
+  elements.objectPhysicsMass.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.mass = clamp(Number(elements.objectPhysicsMass.value || 1), 0.1, 100);
+  }));
+  elements.objectPhysicsDensity.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.density = clamp(Number(elements.objectPhysicsDensity.value || 1), 0.1, 10);
+  }));
+  elements.objectPhysicsFriction.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.friction = clamp(Number(elements.objectPhysicsFriction.value || 0), 0, 1);
+  }));
+  elements.objectPhysicsBounce.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.restitution = clamp(Number(elements.objectPhysicsBounce.value || 0), 0, 1);
+  }));
+  elements.objectPhysicsLinearDrag.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.linearDrag = clamp(Number(elements.objectPhysicsLinearDrag.value || 0), 0, 6);
+  }));
+  elements.objectPhysicsAngularDrag.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.angularDrag = clamp(Number(elements.objectPhysicsAngularDrag.value || 0), 0, 12);
+  }));
+  elements.objectPhysicsLockRotation.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.rotationLocked = elements.objectPhysicsLockRotation.checked;
+  }));
+  elements.objectPhysicsLockX.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.lockX = elements.objectPhysicsLockX.checked;
+  }));
+  elements.objectPhysicsLockY.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.lockY = elements.objectPhysicsLockY.checked;
+  }));
+  elements.objectPhysicsCollision.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.collisionEnabled = elements.objectPhysicsCollision.checked;
+  }));
+  elements.objectPhysicsCanGrab.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.canGrab = elements.objectPhysicsCanGrab.checked;
+  }));
+  elements.objectPhysicsStartAsleep.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.startAsleep = elements.objectPhysicsStartAsleep.checked;
+  }));
+  elements.objectPhysicsGravityScale.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
+    physics.gravityScale = clamp(Number(elements.objectPhysicsGravityScale.value || 1), 0, 4);
+  }));
   elements.penLineToolButton.addEventListener("click", () => setPenAnimationTool("line"));
   elements.penFreehandToolButton.addEventListener("click", () => setPenAnimationTool("freehand"));
   elements.previewPenAnimationButton.addEventListener("click", previewPenAnimation);
@@ -7929,6 +8957,7 @@ async function init() {
   renderScriptPalette();
   bindEvents();
   setActivePanel("characters");
+  renderPhysicsControls();
   updateSelectionLabel();
   updateToolLabel();
   renderScriptEditor();
