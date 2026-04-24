@@ -192,6 +192,16 @@ const MUSIC_OPTIONS = [
   { value: "marquee", label: "Marquee Loop" },
   { value: "dream", label: "Dream Pad" },
 ];
+const PHYSICS_DIRECTION_OPTIONS = [
+  { value: "down", label: "Down" },
+  { value: "up", label: "Up" },
+  { value: "left", label: "Left" },
+  { value: "right", label: "Right" },
+];
+const COLLISION_TOGGLE_OPTIONS = [
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
+];
 const SET_PEN_COLORS = ["#2f8f83", "#e76f51", "#f4a261", "#264653", "#ffd166", "#ef476f", "#ffffff", "#2c1d14"];
 const DRAWING_CLOSE_DISTANCE = 18;
 const MUSIC_MAKER_COLUMNS = 16;
@@ -217,6 +227,7 @@ const SCRIPT_GROUPS = [
   { id: "motion", name: "Motion" },
   { id: "animation", name: "Animation" },
   { id: "timing", name: "Timing" },
+  { id: "physics", name: "Physics" },
   { id: "sound", name: "Sound" },
   { id: "control", name: "Control" },
 ];
@@ -491,6 +502,275 @@ const SCRIPT_BLOCK_DEFS = [
     copy: "Run all child blocks in order.",
     params: [],
     allowsChildren: true,
+  },
+  {
+    type: "physics_on",
+    category: "physics",
+    title: "Turn Physics On",
+    copy: "Enable stage physics.",
+    params: [],
+    sceneOnly: true,
+  },
+  {
+    type: "physics_off",
+    category: "physics",
+    title: "Turn Physics Off",
+    copy: "Disable stage physics.",
+    params: [],
+    sceneOnly: true,
+  },
+  {
+    type: "gravity_on",
+    category: "physics",
+    title: "Turn Gravity On",
+    copy: "Enable global gravity.",
+    params: [],
+    sceneOnly: true,
+  },
+  {
+    type: "gravity_off",
+    category: "physics",
+    title: "Turn Gravity Off",
+    copy: "Disable global gravity.",
+    params: [],
+    sceneOnly: true,
+  },
+  {
+    type: "set_gravity_strength",
+    category: "physics",
+    title: "Set Gravity Strength",
+    copy: "Set the global gravity strength.",
+    params: [{ name: "strength", label: "Strength", input: "number", min: 0, max: 3000, step: 25 }],
+    sceneOnly: true,
+  },
+  {
+    type: "set_gravity_direction",
+    category: "physics",
+    title: "Set Gravity Direction",
+    copy: "Point gravity in a new direction.",
+    params: [{ name: "direction", label: "Direction", input: "select", options: PHYSICS_DIRECTION_OPTIONS }],
+    sceneOnly: true,
+  },
+  {
+    type: "enable_object_physics",
+    category: "physics",
+    title: "Enable Physics For Object",
+    copy: "Enable physics on this object.",
+    params: [],
+  },
+  {
+    type: "disable_object_physics",
+    category: "physics",
+    title: "Disable Physics For Object",
+    copy: "Disable physics on this object.",
+    params: [],
+  },
+  {
+    type: "enable_character_physics",
+    category: "physics",
+    title: "Enable Physics For Character",
+    copy: "Enable physics on this character.",
+    params: [],
+  },
+  {
+    type: "disable_character_physics",
+    category: "physics",
+    title: "Disable Physics For Character",
+    copy: "Disable physics on this character.",
+    params: [],
+  },
+  {
+    type: "apply_force_object",
+    category: "physics",
+    title: "Apply Force To Object",
+    copy: "Push this object using a continuous force.",
+    params: [
+      { name: "x", label: "Force X", input: "number", min: -4000, max: 4000, step: 25 },
+      { name: "y", label: "Force Y", input: "number", min: -4000, max: 4000, step: 25 },
+    ],
+  },
+  {
+    type: "apply_force_character",
+    category: "physics",
+    title: "Apply Force To Character",
+    copy: "Push this character using a continuous force.",
+    params: [
+      { name: "x", label: "Force X", input: "number", min: -4000, max: 4000, step: 25 },
+      { name: "y", label: "Force Y", input: "number", min: -4000, max: 4000, step: 25 },
+    ],
+  },
+  {
+    type: "apply_impulse_object",
+    category: "physics",
+    title: "Apply Impulse To Object",
+    copy: "Give this object a sudden burst of momentum.",
+    params: [
+      { name: "x", label: "Impulse X", input: "number", min: -4000, max: 4000, step: 25 },
+      { name: "y", label: "Impulse Y", input: "number", min: -4000, max: 4000, step: 25 },
+    ],
+  },
+  {
+    type: "apply_impulse_character",
+    category: "physics",
+    title: "Apply Impulse To Character",
+    copy: "Give this character a sudden burst of momentum.",
+    params: [
+      { name: "x", label: "Impulse X", input: "number", min: -4000, max: 4000, step: 25 },
+      { name: "y", label: "Impulse Y", input: "number", min: -4000, max: 4000, step: 25 },
+    ],
+  },
+  {
+    type: "set_object_velocity",
+    category: "physics",
+    title: "Set Object Velocity",
+    copy: "Set this object's exact velocity.",
+    params: [
+      { name: "x", label: "Vel X", input: "number", min: -2500, max: 2500, step: 10 },
+      { name: "y", label: "Vel Y", input: "number", min: -2500, max: 2500, step: 10 },
+    ],
+  },
+  {
+    type: "set_character_velocity",
+    category: "physics",
+    title: "Set Character Velocity",
+    copy: "Set this character's exact velocity.",
+    params: [
+      { name: "x", label: "Vel X", input: "number", min: -2500, max: 2500, step: 10 },
+      { name: "y", label: "Vel Y", input: "number", min: -2500, max: 2500, step: 10 },
+    ],
+  },
+  {
+    type: "set_object_mass",
+    category: "physics",
+    title: "Set Object Mass",
+    copy: "Set this object's mass.",
+    params: [{ name: "mass", label: "Mass", input: "number", min: 0.1, max: 100, step: 0.1 }],
+  },
+  {
+    type: "set_character_mass",
+    category: "physics",
+    title: "Set Character Mass",
+    copy: "Set this character's mass.",
+    params: [{ name: "mass", label: "Mass", input: "number", min: 0.1, max: 100, step: 0.1 }],
+  },
+  {
+    type: "set_object_density",
+    category: "physics",
+    title: "Set Object Density",
+    copy: "Set this object's density.",
+    params: [{ name: "density", label: "Density", input: "number", min: 0.1, max: 10, step: 0.1 }],
+  },
+  {
+    type: "set_character_density",
+    category: "physics",
+    title: "Set Character Density",
+    copy: "Set this character's density.",
+    params: [{ name: "density", label: "Density", input: "number", min: 0.1, max: 10, step: 0.1 }],
+  },
+  {
+    type: "set_friction",
+    category: "physics",
+    title: "Set Friction",
+    copy: "Set the actor friction level.",
+    params: [{ name: "amount", label: "Friction", input: "number", min: 0, max: 1, step: 0.05 }],
+  },
+  {
+    type: "set_bounciness",
+    category: "physics",
+    title: "Set Bounciness",
+    copy: "Set the actor bounce level.",
+    params: [{ name: "amount", label: "Bounce", input: "number", min: 0, max: 1, step: 0.05 }],
+  },
+  {
+    type: "freeze_object",
+    category: "physics",
+    title: "Freeze Object",
+    copy: "Freeze this object in place.",
+    params: [],
+  },
+  {
+    type: "freeze_character",
+    category: "physics",
+    title: "Freeze Character",
+    copy: "Freeze this character in place.",
+    params: [],
+  },
+  {
+    type: "unfreeze_object",
+    category: "physics",
+    title: "Unfreeze Object",
+    copy: "Let this object move again.",
+    params: [],
+  },
+  {
+    type: "unfreeze_character",
+    category: "physics",
+    title: "Unfreeze Character",
+    copy: "Let this character move again.",
+    params: [],
+  },
+  {
+    type: "make_object_static",
+    category: "physics",
+    title: "Make Object Static",
+    copy: "Turn this object into a static body.",
+    params: [],
+  },
+  {
+    type: "make_object_dynamic",
+    category: "physics",
+    title: "Make Object Dynamic",
+    copy: "Turn this object into a dynamic body.",
+    params: [],
+  },
+  {
+    type: "make_object_kinematic",
+    category: "physics",
+    title: "Make Object Kinematic",
+    copy: "Turn this object into a kinematic body.",
+    params: [],
+  },
+  {
+    type: "make_character_static",
+    category: "physics",
+    title: "Make Character Static",
+    copy: "Turn this character into a static body.",
+    params: [],
+  },
+  {
+    type: "make_character_dynamic",
+    category: "physics",
+    title: "Make Character Dynamic",
+    copy: "Turn this character into a dynamic body.",
+    params: [],
+  },
+  {
+    type: "make_character_kinematic",
+    category: "physics",
+    title: "Make Character Kinematic",
+    copy: "Turn this character into a kinematic body.",
+    params: [],
+  },
+  {
+    type: "toggle_collision",
+    category: "physics",
+    title: "Collision On / Off",
+    copy: "Toggle collisions for this actor.",
+    params: [{ name: "enabled", label: "Collision", input: "select", options: COLLISION_TOGGLE_OPTIONS }],
+  },
+  {
+    type: "stop_object_momentum",
+    category: "physics",
+    title: "Stop Object",
+    copy: "Destroy this object's momentum.",
+    params: [],
+  },
+  {
+    type: "stop_character_momentum",
+    category: "physics",
+    title: "Stop Character",
+    copy: "Destroy this character's momentum.",
+    params: [],
   },
   {
     type: "play_sound",
@@ -866,13 +1146,14 @@ function createDefaultObjectPhysics() {
     canGrab: true,
     startAsleep: false,
     gravityScale: 1,
+    frozen: false,
   };
 }
 
 function normalizeObjectPhysics(physics, kind) {
   const defaults = createDefaultObjectPhysics();
   const source = physics || {};
-  if (kind !== "object") {
+  if (kind !== "object" && kind !== "character") {
     return {
       ...defaults,
       enabled: false,
@@ -881,7 +1162,7 @@ function normalizeObjectPhysics(physics, kind) {
   return {
     enabled: source.enabled !== false,
     gravityAffected: source.gravityAffected !== false,
-    bodyType: source.bodyType === "static" ? "static" : "dynamic",
+    bodyType: ["static", "dynamic", "kinematic"].includes(source.bodyType) ? source.bodyType : "dynamic",
     mass: clamp(Number(source.mass ?? defaults.mass), 0.1, 100),
     density: clamp(Number(source.density ?? defaults.density), 0.1, 10),
     friction: clamp(Number(source.friction ?? defaults.friction), 0, 1),
@@ -895,6 +1176,7 @@ function normalizeObjectPhysics(physics, kind) {
     canGrab: source.canGrab !== false,
     startAsleep: Boolean(source.startAsleep),
     gravityScale: clamp(Number(source.gravityScale ?? defaults.gravityScale), 0, 4),
+    frozen: Boolean(source.frozen),
   };
 }
 
@@ -916,6 +1198,7 @@ function serializeObjectPhysics(physics) {
     canGrab: physics.canGrab,
     startAsleep: physics.startAsleep,
     gravityScale: physics.gravityScale,
+    frozen: physics.frozen,
   };
 }
 
@@ -1152,6 +1435,7 @@ function createItemRuntime() {
       asleep: false,
       sleepTimer: 0,
       dragging: false,
+      controlledTimer: 0,
       previousX: 0,
       previousY: 0,
       initialized: false,
@@ -1577,6 +1861,12 @@ function createBlockFromType(type) {
   if (type === "set_volume") {
     params.volume = 70;
   }
+  if (type === "set_gravity_strength") {
+    params.strength = 1200;
+  }
+  if (type === "set_gravity_direction") {
+    params.direction = "down";
+  }
   if (type === "set_scene_lighting" || type === "fade_scene_lighting" || type === "change_light_color_brightness") {
     params.strength = 35;
     params.color = "#ffd36f";
@@ -1591,6 +1881,22 @@ function createBlockFromType(type) {
   }
   if (type === "move_left_blocks" || type === "move_up_blocks" || type === "move_down_blocks" || type === "jump_blocks") {
     params.blocks = 2;
+  }
+  if (["set_friction", "set_bounciness"].includes(type)) {
+    params.amount = type === "set_friction" ? 0.55 : 0.18;
+  }
+  if (["set_object_mass", "set_character_mass"].includes(type)) {
+    params.mass = 1;
+  }
+  if (["set_object_density", "set_character_density"].includes(type)) {
+    params.density = 1;
+  }
+  if (["set_object_velocity", "set_character_velocity", "apply_force_object", "apply_force_character", "apply_impulse_object", "apply_impulse_character"].includes(type)) {
+    params.x = 0;
+    params.y = 0;
+  }
+  if (type === "toggle_collision") {
+    params.enabled = "on";
   }
   if (type === "teleport_xy") {
     params.x = Math.round(state.stageWidth * 0.5);
@@ -1617,7 +1923,7 @@ function getItemSize(item) {
 }
 
 function isPhysicsObject(item) {
-  return item?.kind === "object";
+  return item?.kind === "object" || item?.kind === "character";
 }
 
 function isPhysicsCircle(item) {
@@ -1669,6 +1975,7 @@ function resetPhysicsBody(item) {
   item.runtime.physics.sleepTimer = 0;
   item.runtime.physics.asleep = Boolean(item.physics?.startAsleep);
   item.runtime.physics.dragging = false;
+  item.runtime.physics.controlledTimer = 0;
   item.runtime.physics.previousX = item.x;
   item.runtime.physics.previousY = item.y;
   item.runtime.physics.initialized = true;
@@ -1697,7 +2004,8 @@ function getPhysicsInverseMass(item) {
   if (!isPhysicsObject(item)) {
     return 0;
   }
-  if (item.physics.bodyType === "static") {
+  const body = ensurePhysicsRuntime(item);
+  if (item.physics.bodyType === "static" || item.physics.bodyType === "kinematic" || item.physics.frozen || body.dragging || body.controlledTimer > 0) {
     return 0;
   }
   return 1 / getPhysicsMass(item);
@@ -1765,14 +2073,15 @@ function applyPhysicsVelocity(item, dx, dy) {
   }
 }
 
-function setPhysicsMotionFromDelta(item, dx, dy, deltaSeconds) {
+function setPhysicsMotionFromDelta(item, dx, dy, deltaSeconds, options = {}) {
   if (!isPhysicsObject(item) || !deltaSeconds) {
     return;
   }
   const body = ensurePhysicsRuntime(item);
   body.vx = item.physics.lockX ? 0 : dx / deltaSeconds;
   body.vy = item.physics.lockY ? 0 : dy / deltaSeconds;
-  body.dragging = true;
+  body.controlledTimer = Math.max(body.controlledTimer, options.controlled === false ? 0 : Math.max(0.05, deltaSeconds * 2));
+  body.dragging = Boolean(options.dragging);
   wakePhysicsItem(item);
 }
 
@@ -1985,10 +2294,15 @@ function resolveWorldBounds(item) {
 }
 
 function updatePhysicsSleepState(item, deltaSeconds) {
-  if (!state.physics.settings.sleeping || item.physics.bodyType === "static") {
+  if (!state.physics.settings.sleeping || item.physics.bodyType !== "dynamic" || item.physics.frozen) {
     return;
   }
   const body = ensurePhysicsRuntime(item);
+  if (body.dragging || body.controlledTimer > 0) {
+    body.sleepTimer = 0;
+    body.asleep = false;
+    return;
+  }
   const speed = Math.hypot(body.vx, body.vy);
   if (speed < PHYSICS_SLEEP_SPEED && Math.abs(body.angularVelocity) < PHYSICS_SLEEP_ANGULAR_SPEED) {
     body.sleepTimer += deltaSeconds;
@@ -2011,29 +2325,30 @@ function stepPhysics(deltaSeconds) {
   const gravity = getPhysicsGravityVector();
 
   if (physicsItems.length > maxObjects) {
-    state.physics.statusMessage = `Physics is simulating the first ${maxObjects} objects right now to keep the stage stable.`;
+    state.physics.statusMessage = `Physics is simulating the first ${maxObjects} actors right now to keep the stage stable.`;
   } else {
     state.physics.statusMessage = state.physics.enabled
-      ? `Physics on. ${simulatedItems.length} object${simulatedItems.length === 1 ? "" : "s"} active.`
-      : "Physics is off. Turn it on to enable collisions, pushing, and gravity for stage objects.";
+      ? `Physics on. ${simulatedItems.length} actor${simulatedItems.length === 1 ? "" : "s"} active.`
+      : "Physics is off. Turn it on to enable collisions, pushing, and gravity for stage actors.";
   }
 
   for (const item of simulatedItems) {
     const body = ensurePhysicsRuntime(item);
     body.previousX = item.x;
     body.previousY = item.y;
-    if (item.physics.bodyType === "static") {
+    body.controlledTimer = Math.max(0, body.controlledTimer - deltaSeconds);
+    if (item.physics.bodyType === "static" || item.physics.frozen) {
       body.vx = 0;
       body.vy = 0;
       body.angularVelocity = 0;
       body.asleep = false;
       continue;
     }
-    if (body.dragging || body.asleep) {
+    if (body.dragging || body.controlledTimer > 0 || body.asleep) {
       continue;
     }
 
-    if (state.physics.gravityEnabled && item.physics.gravityAffected) {
+    if (item.physics.bodyType !== "kinematic" && state.physics.gravityEnabled && item.physics.gravityAffected) {
       body.vx += gravity.x * item.physics.gravityScale * deltaSeconds;
       body.vy += gravity.y * item.physics.gravityScale * deltaSeconds;
     }
@@ -2092,6 +2407,135 @@ function updatePhysics(deltaSeconds) {
     state.physics.accumulator -= PHYSICS_FIXED_TIMESTEP;
     steps += 1;
   }
+}
+
+function moveActorDirectly(actor, nextX, nextY, deltaSeconds = 1 / 60) {
+  if (!actor) {
+    return;
+  }
+  const dx = nextX - actor.x;
+  const dy = nextY - actor.y;
+  actor.x = nextX;
+  actor.y = nextY;
+  clampItemToStage(actor);
+  if (state.physics.enabled && actor.physics?.enabled) {
+    setPhysicsMotionFromDelta(actor, dx, dy, Math.max(1 / 120, deltaSeconds), { controlled: true });
+  }
+  markProjectDirty();
+}
+
+function teleportActorTo(actor, x, y) {
+  if (!actor) {
+    return;
+  }
+  moveActorDirectly(actor, Number(x || actor.x), Number(y || actor.y), 1 / 60);
+  if (actor.physics?.enabled) {
+    const body = ensurePhysicsRuntime(actor);
+    body.vx = 0;
+    body.vy = 0;
+    body.angularVelocity = 0;
+  }
+}
+
+function getPhysicsScriptTarget(actor, expectedKind = null) {
+  if (!actor) {
+    return null;
+  }
+  if (!isPhysicsObject(actor)) {
+    return null;
+  }
+  if (expectedKind && actor.kind !== expectedKind) {
+    return null;
+  }
+  return actor;
+}
+
+function setActorPhysicsEnabled(actor, enabled) {
+  const target = getPhysicsScriptTarget(actor);
+  if (!target) {
+    return;
+  }
+  target.physics.enabled = enabled;
+  if (!enabled) {
+    resetPhysicsBody(target);
+  } else {
+    wakePhysicsItem(target);
+  }
+  markProjectDirty();
+}
+
+function setActorBodyType(actor, bodyType) {
+  const target = getPhysicsScriptTarget(actor);
+  if (!target) {
+    return;
+  }
+  target.physics.bodyType = ["static", "dynamic", "kinematic"].includes(bodyType) ? bodyType : "dynamic";
+  target.physics.gravityAffected = target.physics.bodyType === "static" ? false : target.physics.gravityAffected;
+  target.physics.frozen = false;
+  resetPhysicsBody(target);
+  wakePhysicsItem(target);
+  markProjectDirty();
+}
+
+function setActorFrozen(actor, frozen) {
+  const target = getPhysicsScriptTarget(actor);
+  if (!target) {
+    return;
+  }
+  target.physics.frozen = Boolean(frozen);
+  if (frozen) {
+    resetPhysicsBody(target);
+  } else {
+    wakePhysicsItem(target);
+  }
+  markProjectDirty();
+}
+
+function setActorMomentum(actor, vx, vy) {
+  const target = getPhysicsScriptTarget(actor);
+  if (!target || !target.physics.enabled) {
+    return;
+  }
+  const body = ensurePhysicsRuntime(target);
+  body.vx = target.physics.lockX ? 0 : Number(vx || 0);
+  body.vy = target.physics.lockY ? 0 : Number(vy || 0);
+  body.controlledTimer = 0;
+  wakePhysicsItem(target);
+  markProjectDirty();
+}
+
+function applyPhysicsVector(actor, x, y, mode = "force") {
+  const target = getPhysicsScriptTarget(actor);
+  if (!target || !target.physics.enabled || target.physics.bodyType === "static" || target.physics.bodyType === "kinematic" || target.physics.frozen) {
+    return;
+  }
+  const body = ensurePhysicsRuntime(target);
+  const invMass = getPhysicsInverseMass(target);
+  if (invMass === 0) {
+    return;
+  }
+  const scale = mode === "impulse" ? 1 : PHYSICS_FIXED_TIMESTEP;
+  if (!target.physics.lockX) {
+    body.vx += Number(x || 0) * invMass * scale;
+  }
+  if (!target.physics.lockY) {
+    body.vy += Number(y || 0) * invMass * scale;
+  }
+  wakePhysicsItem(target);
+  markProjectDirty();
+}
+
+function stopActorMomentum(actor) {
+  const target = getPhysicsScriptTarget(actor);
+  if (!target) {
+    return;
+  }
+  const body = ensurePhysicsRuntime(target);
+  body.vx = 0;
+  body.vy = 0;
+  body.angularVelocity = 0;
+  body.controlledTimer = 0;
+  markProjectDirty();
 }
 
 function getSingleSelectedItem() {
@@ -2184,7 +2628,7 @@ function isBlockAvailableForCurrentTarget(block) {
     if (block.type === "when_clicked") {
       return false;
     }
-    return block.category === "scene" || block.category === "timing" || block.category === "sound" || block.category === "control";
+    return Boolean(block.sceneOnly) || block.category === "timing" || block.category === "sound" || block.category === "control";
   }
 
   return !block.sceneOnly;
@@ -2860,7 +3304,8 @@ function renderScriptActorList() {
 
     const meta = document.createElement("span");
     meta.className = "script-actor-meta";
-    meta.textContent = `${item.groupId ? "group" : item.kind} | ${scriptCount} stack${scriptCount === 1 ? "" : "s"}`;
+    const physicsMeta = item.physics?.enabled ? ` | ${item.physics.bodyType}` : "";
+    meta.textContent = `${item.groupId ? "group" : item.kind}${physicsMeta} | ${scriptCount} stack${scriptCount === 1 ? "" : "s"}`;
 
     button.append(title, meta);
     button.addEventListener("click", () => {
@@ -3203,12 +3648,20 @@ function clearAllScriptRunners() {
     item.runtime.animation = null;
     item.runtime.flip = null;
     item.runtime.jump = null;
+    if (item.runtime.physics) {
+      item.runtime.physics.dragging = false;
+      item.runtime.physics.controlledTimer = 0;
+    }
     clearItemRuntimeVisuals(item);
   }
   for (const item of getAllSetItems()) {
     item.runtime.animation = null;
     item.runtime.flip = null;
     item.runtime.jump = null;
+    if (item.runtime.physics) {
+      item.runtime.physics.dragging = false;
+      item.runtime.physics.controlledTimer = 0;
+    }
     clearItemRuntimeVisuals(item);
   }
 }
@@ -3259,16 +3712,18 @@ function createWaitRunner(seconds) {
 
 function createTimedMoveRunner(actor, dx, dy, duration) {
   const total = Math.max(0.05, duration);
+  const startX = actor.x;
+  const startY = actor.y;
   let remaining = total;
+  let elapsed = 0;
   return {
     done: false,
     update(deltaSeconds) {
       const step = Math.min(deltaSeconds, remaining);
-      actor.x += (dx / total) * step;
-      actor.y += (dy / total) * step;
-      clampItemToStage(actor);
+      elapsed += step;
+      const progress = clamp(elapsed / total, 0, 1);
+      moveActorDirectly(actor, startX + dx * progress, startY + dy * progress, step);
       remaining -= step;
-      markProjectDirty();
       if (remaining <= 0) {
         this.done = true;
       }
@@ -3309,19 +3764,20 @@ function createPenAnimationRunner(actor, animation, options = {}) {
         const segmentLength = lengths[index];
         if (walked + segmentLength >= targetDistance) {
           const progress = segmentLength === 0 ? 1 : (targetDistance - walked) / segmentLength;
-          actor.x = points[index].x + (points[index + 1].x - points[index].x) * progress;
-          actor.y = points[index].y + (points[index + 1].y - points[index].y) * progress;
-          clampItemToStage(actor);
+          moveActorDirectly(
+            actor,
+            points[index].x + (points[index + 1].x - points[index].x) * progress,
+            points[index].y + (points[index + 1].y - points[index].y) * progress,
+            deltaSeconds,
+          );
           break;
         }
         walked += segmentLength;
       }
       if (elapsed >= duration) {
-        actor.x = points[points.length - 1].x;
-        actor.y = points[points.length - 1].y;
+        moveActorDirectly(actor, points[points.length - 1].x, points[points.length - 1].y, deltaSeconds);
         if (options.restorePosition) {
-          actor.x = options.restorePosition.x;
-          actor.y = options.restorePosition.y;
+          teleportActorTo(actor, options.restorePosition.x, options.restorePosition.y);
         }
         this.done = true;
       }
@@ -3542,8 +3998,53 @@ function createParallelRunner(actor, block, run) {
   };
 }
 
+function actorMatchesKind(actor, kind) {
+  return actor && actor.kind === kind;
+}
+
 function createRunnerForBlock(actor, block, run) {
   switch (block.type) {
+    case "physics_on":
+      return createInstantRunner(() => {
+        state.physics.enabled = true;
+        state.physics.statusMessage = "Physics on. Place or drag stage objects to test collisions.";
+        markProjectDirty();
+        renderPhysicsControls();
+      });
+    case "physics_off":
+      return createInstantRunner(() => {
+        state.physics.enabled = false;
+        state.physics.statusMessage = "";
+        resetAllPhysicsRuntime();
+        markProjectDirty();
+        renderPhysicsControls();
+      });
+    case "gravity_on":
+      return createInstantRunner(() => {
+        state.physics.gravityEnabled = true;
+        markProjectDirty();
+        renderPhysicsControls();
+      });
+    case "gravity_off":
+      return createInstantRunner(() => {
+        state.physics.gravityEnabled = false;
+        markProjectDirty();
+        renderPhysicsControls();
+      });
+    case "set_gravity_strength":
+      return createInstantRunner(() => {
+        state.physics.settings.gravityStrength = clamp(Number(block.params.strength || 0), 0, 3000);
+        markProjectDirty();
+        renderPhysicsControls();
+      });
+    case "set_gravity_direction":
+      return createInstantRunner(() => {
+        state.physics.settings.gravityDirection = PHYSICS_DIRECTION_OPTIONS.some((option) => option.value === block.params.direction)
+          ? block.params.direction
+          : "down";
+        markProjectDirty();
+        renderPhysicsControls();
+      });
     case "set_scene_lighting":
       return createInstantRunner(() => setSceneLighting(block.params.color, block.params.strength));
     case "fade_scene_lighting":
@@ -3580,12 +4081,7 @@ function createRunnerForBlock(actor, block, run) {
     }
     case "teleport_xy":
       if (!actor) return createInstantRunner(() => {});
-      return createInstantRunner(() => {
-        actor.x = Number(block.params.x || actor.x);
-        actor.y = Number(block.params.y || actor.y);
-        clampItemToStage(actor);
-        markProjectDirty();
-      });
+      return createInstantRunner(() => teleportActorTo(actor, block.params.x, block.params.y));
     case "face_left":
       if (!actor) return createInstantRunner(() => {});
       return createInstantRunner(() => {
@@ -3611,12 +4107,7 @@ function createRunnerForBlock(actor, block, run) {
     }
     case "return_to_spawn":
       if (!actor) return createInstantRunner(() => {});
-      return createInstantRunner(() => {
-        actor.x = Number(actor.spawnX ?? actor.x);
-        actor.y = Number(actor.spawnY ?? actor.y);
-        clampItemToStage(actor);
-        markProjectDirty();
-      });
+      return createInstantRunner(() => teleportActorTo(actor, actor.spawnX ?? actor.x, actor.spawnY ?? actor.y));
     case "play_animation_chunk": {
       const chunk = state.animationChunks.find((candidate) => candidate.id === block.params.chunkId);
       if (!chunk) return createInstantRunner(() => {});
@@ -3657,6 +4148,9 @@ function createRunnerForBlock(actor, block, run) {
       return createInstantRunner(() => {
         actor.sizePct = clamp(Number(block.params.percent || 100), 20, 300);
         clampItemToStage(actor);
+        if (actor.physics?.enabled) {
+          wakePhysicsItem(actor);
+        }
         markProjectDirty();
       });
     case "rotate_by_degrees":
@@ -3696,6 +4190,150 @@ function createRunnerForBlock(actor, block, run) {
       return createParallelRunner(actor, block, run);
     case "sequence":
       return createSequenceRunner(actor, block.children, run);
+    case "enable_object_physics":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorPhysicsEnabled(actor, true);
+      });
+    case "disable_object_physics":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorPhysicsEnabled(actor, false);
+      });
+    case "enable_character_physics":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorPhysicsEnabled(actor, true);
+      });
+    case "disable_character_physics":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorPhysicsEnabled(actor, false);
+      });
+    case "apply_force_object":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) applyPhysicsVector(actor, block.params.x, block.params.y, "force");
+      });
+    case "apply_force_character":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) applyPhysicsVector(actor, block.params.x, block.params.y, "force");
+      });
+    case "apply_impulse_object":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) applyPhysicsVector(actor, block.params.x, block.params.y, "impulse");
+      });
+    case "apply_impulse_character":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) applyPhysicsVector(actor, block.params.x, block.params.y, "impulse");
+      });
+    case "set_object_velocity":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorMomentum(actor, block.params.x, block.params.y);
+      });
+    case "set_character_velocity":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorMomentum(actor, block.params.x, block.params.y);
+      });
+    case "set_object_mass":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) {
+          actor.physics.mass = clamp(Number(block.params.mass || 1), 0.1, 100);
+          wakePhysicsItem(actor);
+          markProjectDirty();
+        }
+      });
+    case "set_character_mass":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) {
+          actor.physics.mass = clamp(Number(block.params.mass || 1), 0.1, 100);
+          wakePhysicsItem(actor);
+          markProjectDirty();
+        }
+      });
+    case "set_object_density":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) {
+          actor.physics.density = clamp(Number(block.params.density || 1), 0.1, 10);
+          wakePhysicsItem(actor);
+          markProjectDirty();
+        }
+      });
+    case "set_character_density":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) {
+          actor.physics.density = clamp(Number(block.params.density || 1), 0.1, 10);
+          wakePhysicsItem(actor);
+          markProjectDirty();
+        }
+      });
+    case "set_friction":
+      return createInstantRunner(() => {
+        if (getPhysicsScriptTarget(actor)) {
+          actor.physics.friction = clamp(Number(block.params.amount || 0), 0, 1);
+          wakePhysicsItem(actor);
+          markProjectDirty();
+        }
+      });
+    case "set_bounciness":
+      return createInstantRunner(() => {
+        if (getPhysicsScriptTarget(actor)) {
+          actor.physics.restitution = clamp(Number(block.params.amount || 0), 0, 1);
+          wakePhysicsItem(actor);
+          markProjectDirty();
+        }
+      });
+    case "freeze_object":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorFrozen(actor, true);
+      });
+    case "freeze_character":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorFrozen(actor, true);
+      });
+    case "unfreeze_object":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorFrozen(actor, false);
+      });
+    case "unfreeze_character":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorFrozen(actor, false);
+      });
+    case "make_object_static":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorBodyType(actor, "static");
+      });
+    case "make_object_dynamic":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorBodyType(actor, "dynamic");
+      });
+    case "make_object_kinematic":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) setActorBodyType(actor, "kinematic");
+      });
+    case "make_character_static":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorBodyType(actor, "static");
+      });
+    case "make_character_dynamic":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorBodyType(actor, "dynamic");
+      });
+    case "make_character_kinematic":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) setActorBodyType(actor, "kinematic");
+      });
+    case "toggle_collision":
+      return createInstantRunner(() => {
+        if (getPhysicsScriptTarget(actor)) {
+          actor.physics.collisionEnabled = block.params.enabled !== "off";
+          wakePhysicsItem(actor);
+          markProjectDirty();
+        }
+      });
+    case "stop_object_momentum":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "object")) stopActorMomentum(actor);
+      });
+    case "stop_character_momentum":
+      return createInstantRunner(() => {
+        if (actorMatchesKind(actor, "character")) stopActorMomentum(actor);
+      });
     case "play_sound":
       return createInstantRunner(() => playPlaceholderTone("sound", block.params.soundId));
     case "play_music":
@@ -4150,6 +4788,12 @@ function createCharacterItem(characterId, x, y) {
     w: 82,
     h: 136,
     textureId: null,
+    physics: {
+      ...createDefaultObjectPhysics(),
+      friction: state.physics.settings.defaultFriction,
+      restitution: state.physics.settings.defaultRestitution,
+      linearDrag: state.physics.settings.airDrag,
+    },
   });
 }
 
@@ -4997,7 +5641,7 @@ function applyResizeFromHandle(item, handleId, point, startBounds) {
   item.scaleX = clamp(width / Math.max(1, item.w * baseScale), 0.15, 8);
   item.scaleY = clamp(height / Math.max(1, item.h * baseScale), 0.15, 8);
   clampItemToStage(item);
-  if (state.physics.enabled && item.kind === "object") {
+  if (state.physics.enabled && isPhysicsObject(item)) {
     wakePhysicsItem(item);
   }
   markProjectDirty();
@@ -5036,7 +5680,7 @@ function applySelectionResizeFromHandle(handleId, point, startBounds, snapshots)
     item.scaleX = clamp(snapshot.scaleX * scaleX, 0.15, 8);
     item.scaleY = clamp(snapshot.scaleY * scaleY, 0.15, 8);
     clampItemToStage(item);
-    if (state.physics.enabled && item.kind === "object") {
+    if (state.physics.enabled && isPhysicsObject(item)) {
       wakePhysicsItem(item);
     }
   }
@@ -5898,8 +6542,8 @@ function onPointerMove(event) {
       item.x = nextX;
       item.y = nextY;
       clampItemToStage(item);
-      if (state.physics.enabled && item.kind === "object" && item.physics.enabled) {
-        setPhysicsMotionFromDelta(item, moveX, moveY, 1 / 60);
+      if (state.physics.enabled && isPhysicsObject(item) && item.physics.enabled) {
+        setPhysicsMotionFromDelta(item, moveX, moveY, 1 / 60, { dragging: true });
       }
     }
     return;
@@ -5914,7 +6558,7 @@ function onPointerMove(event) {
     const item = getItemById(state.interaction.itemId);
     if (item) {
       applyResizeFromHandle(item, state.interaction.handleId, point, state.interaction.startBounds);
-      if (state.physics.enabled && item.kind === "object") {
+      if (state.physics.enabled && isPhysicsObject(item)) {
         wakePhysicsItem(item);
       }
     }
@@ -5925,7 +6569,7 @@ function onPointerMove(event) {
     const item = getItemById(state.interaction.itemId);
     if (item) {
       applyRotationFromPoint(item, state.interaction, point);
-      if (state.physics.enabled && item.kind === "object") {
+      if (state.physics.enabled && isPhysicsObject(item)) {
         wakePhysicsItem(item);
       }
     }
@@ -6017,7 +6661,7 @@ function onPointerUp(event) {
   }
 
   for (const item of state.items) {
-    if (item.kind === "object") {
+    if (isPhysicsObject(item)) {
       ensurePhysicsRuntime(item).dragging = false;
     }
   }
@@ -6039,7 +6683,7 @@ function showActorContextMenu(actor, event) {
   elements.actorContextCodeButton.classList.toggle("hidden", !canCodeSelection);
   elements.actorContextPenButton.classList.toggle("hidden", selectedItems.length !== 1 || actor.kind !== "character");
   elements.actorContextEditCharacterButton.classList.toggle("hidden", selectedItems.length !== 1 || !characterDef?.builderData);
-  elements.actorContextPhysicsButton.classList.toggle("hidden", !(state.physics.enabled && selectedItems.length === 1 && actor.kind === "object"));
+  elements.actorContextPhysicsButton.classList.toggle("hidden", !(state.physics.enabled && selectedItems.length === 1 && isPhysicsObject(actor)));
   elements.actorContextGroupButton.classList.toggle("hidden", selectedItems.length < 2);
   elements.actorContextUngroupButton.classList.toggle("hidden", !selectedItems.some((item) => item.groupId));
   elements.actorContextColor.parentElement.classList.toggle("hidden", !selectedObject);
@@ -6505,7 +7149,7 @@ function moveSelectionByKeys(deltaSeconds) {
     item.x += dx;
     item.y += dy;
     clampItemToStage(item);
-    if (state.physics.enabled && item.kind === "object" && item.physics.enabled) {
+    if (state.physics.enabled && isPhysicsObject(item) && item.physics.enabled) {
       setPhysicsMotionFromDelta(item, dx, dy, deltaSeconds);
     }
   }
@@ -6767,12 +7411,13 @@ function resolveFill(item, fallbackColor) {
 }
 
 function drawPhysicsBadge(item) {
-  if (!currentRenderFlags.showPhysicsBadges || !state.physics.enabled || item.kind !== "object" || !item.physics.enabled) {
+  if (!currentRenderFlags.showPhysicsBadges || !state.physics.enabled || !isPhysicsObject(item) || !item.physics.enabled) {
     return;
   }
   const bounds = getItemBounds(item);
+  const label = item.physics.bodyType === "static" ? "S" : item.physics.bodyType === "kinematic" ? "K" : "D";
   ctx.save();
-  ctx.fillStyle = state.physics.gravityEnabled && item.physics.gravityAffected ? "#e56c3f" : "#2f8f83";
+  ctx.fillStyle = item.physics.bodyType === "static" ? "#7d7d7d" : item.physics.bodyType === "kinematic" ? "#5d76db" : state.physics.gravityEnabled && item.physics.gravityAffected ? "#e56c3f" : "#2f8f83";
   ctx.strokeStyle = "#fffdfa";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -6783,7 +7428,7 @@ function drawPhysicsBadge(item) {
   ctx.font = "900 10px Trebuchet MS";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("P", bounds.right - 8, bounds.top + 8.5);
+  ctx.fillText(label, bounds.right - 8, bounds.top + 8.5);
   ctx.restore();
 }
 
@@ -6899,6 +7544,7 @@ function drawCharacter(item) {
     ctx.lineWidth = 3;
     ctx.stroke();
     ctx.restore();
+    drawPhysicsBadge(item);
     return;
   }
 
@@ -7123,6 +7769,7 @@ function drawObject(item) {
   }
 
   ctx.restore();
+  drawPhysicsBadge(item);
 }
 
 function drawSelectionOutline(item) {
@@ -7853,7 +8500,7 @@ async function stopRecording() {
     item.runtime.jump = null;
   }
   for (const item of state.items) {
-    if (item.kind === "object") {
+    if (isPhysicsObject(item)) {
       item.runtime.physics.dragging = false;
     }
   }
@@ -7974,7 +8621,7 @@ function populateToolLists() {
 
 function getPhysicsEditorItem() {
   const item = getItemById(state.physics.objectEditorItemId);
-  return item && item.kind === "object" ? item : null;
+  return item && isPhysicsObject(item) ? item : null;
 }
 
 function closeObjectPhysicsEditor() {
@@ -7984,8 +8631,8 @@ function closeObjectPhysicsEditor() {
 
 function refreshPhysicsStatusLabel() {
   elements.physicsStatusLabel.textContent = state.physics.statusMessage || (state.physics.enabled
-    ? "Physics on. Place or drag stage objects to test collisions."
-    : "Physics is off. Turn it on to enable collisions, pushing, and gravity for stage objects.");
+    ? "Physics on. Place or drag stage actors to test collisions."
+    : "Physics is off. Turn it on to enable collisions, pushing, and gravity for stage actors.");
 }
 
 function renderPhysicsControls() {
@@ -8032,7 +8679,9 @@ function renderPhysicsControls() {
   elements.objectPhysicsGravityScale.value = String(item.physics.gravityScale);
   elements.objectPhysicsSummary.textContent = item.physics.bodyType === "static"
     ? "Static bodies hold position like walls or floors. Resizing updates their collision shape immediately."
-    : "Dynamic bodies collide, push, fall, and keep their resized collision shape during recording.";
+    : item.physics.bodyType === "kinematic"
+      ? "Kinematic bodies follow code, dragging, and Pen Animation directly while still pushing dynamic actors."
+      : `${item.kind === "character" ? "Dynamic characters" : "Dynamic objects"} collide, push, fall, and keep their resized collision shape during recording.`;
   elements.objectPhysicsPanel.classList.remove("hidden");
 }
 
@@ -8044,7 +8693,7 @@ function togglePhysicsEnabled() {
     resetAllPhysicsRuntime();
     closeObjectPhysicsEditor();
   } else {
-    state.physics.statusMessage = "Physics on. Place or drag stage objects to test collisions.";
+    state.physics.statusMessage = "Physics on. Place or drag stage actors to test collisions.";
     for (const item of state.items) {
       if (isPhysicsObject(item) && item.physics.enabled) {
         wakePhysicsItem(item);
@@ -8092,7 +8741,7 @@ function updateGlobalPhysicsSettingsFromInputs() {
 
 function openContextPhysicsEditor() {
   const actor = getItemById(state.contextActorId);
-  if (!actor || actor.kind !== "object" || !state.physics.enabled) {
+  if (!actor || !isPhysicsObject(actor) || !state.physics.enabled) {
     return;
   }
   state.physics.objectEditorItemId = actor.id;
@@ -8757,7 +9406,7 @@ function bindEvents() {
     physics.gravityAffected = elements.objectPhysicsGravity.checked;
   }));
   elements.objectPhysicsBodyType.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
-    physics.bodyType = elements.objectPhysicsBodyType.value === "static" ? "static" : "dynamic";
+    physics.bodyType = ["static", "dynamic", "kinematic"].includes(elements.objectPhysicsBodyType.value) ? elements.objectPhysicsBodyType.value : "dynamic";
   }));
   elements.objectPhysicsMass.addEventListener("input", () => updatePhysicsEditorItem((physics) => {
     physics.mass = clamp(Number(elements.objectPhysicsMass.value || 1), 0.1, 100);

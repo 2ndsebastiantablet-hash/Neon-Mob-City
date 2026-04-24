@@ -70,6 +70,7 @@
               <label class="set-control-label">Body mode
                 <select id="objectPhysicsBodyType">
                   <option value="dynamic">Dynamic</option>
+                  <option value="kinematic">Kinematic</option>
                   <option value="static">Static</option>
                 </select>
               </label>
@@ -87,7 +88,7 @@
               <label class="set-control-label">Start asleep <input id="objectPhysicsStartAsleep" type="checkbox"></label>
               <label class="set-control-label">Gravity scale <input id="objectPhysicsGravityScale" type="number" min="0" max="4" step="0.1" value="1"></label>
             </div>
-            <p id="objectPhysicsSummary" class="stage-status subtle">Rectangle and circle collisions update with object resizing.</p>
+            <p id="objectPhysicsSummary" class="stage-status subtle">Actor collision shapes update automatically when stage actors are resized.</p>
           </aside>
           <div id="penAnimationPanel" class="pen-animation-panel hidden">
             <div class="texture-editor-header">
@@ -145,7 +146,7 @@
                 <button id="physicsToggleButton" type="button" class="secondary-button full-width">Physics: Off</button>
                 <button id="gravityToggleButton" type="button" class="ghost-button full-width">Gravity: On</button>
                 <button id="physicsSettingsButton" type="button" class="ghost-button full-width">Advanced Physics Settings</button>
-                <p id="physicsStatusLabel">Physics is off. Turn it on to enable collisions, pushing, and gravity for stage objects.</p>
+                <p id="physicsStatusLabel">Physics is off. Turn it on to enable collisions, pushing, and gravity for stage actors.</p>
               </div>
               <div id="physicsSettingsPanel" class="set-control-card hidden">
                 <label class="set-control-label" title="How strongly physics-enabled objects are pulled.">Gravity strength <input id="physicsGravityStrength" type="range" min="0" max="3000" step="25" value="1200"></label>
