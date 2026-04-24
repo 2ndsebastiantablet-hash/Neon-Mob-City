@@ -889,6 +889,34 @@ const ACTOR_SPECIFIC_PHYSICS_BLOCK_KINDS = new Map([
   ["make_character_kinematic", "character"],
   ["stop_character_momentum", "character"],
 ]);
+const ACTOR_SPECIFIC_PHYSICS_BLOCK_TITLES = new Map([
+  ["enable_object_physics", "Enable Physics"],
+  ["disable_object_physics", "Disable Physics"],
+  ["enable_character_physics", "Enable Physics"],
+  ["disable_character_physics", "Disable Physics"],
+  ["apply_force_object", "Apply Force"],
+  ["apply_force_character", "Apply Force"],
+  ["apply_impulse_object", "Apply Impulse"],
+  ["apply_impulse_character", "Apply Impulse"],
+  ["set_object_velocity", "Set Velocity"],
+  ["set_character_velocity", "Set Velocity"],
+  ["set_object_mass", "Set Mass"],
+  ["set_character_mass", "Set Mass"],
+  ["set_object_density", "Set Density"],
+  ["set_character_density", "Set Density"],
+  ["freeze_object", "Freeze"],
+  ["freeze_character", "Freeze"],
+  ["unfreeze_object", "Unfreeze"],
+  ["unfreeze_character", "Unfreeze"],
+  ["make_object_static", "Make Static"],
+  ["make_character_static", "Make Static"],
+  ["make_object_dynamic", "Make Dynamic"],
+  ["make_character_dynamic", "Make Dynamic"],
+  ["make_object_kinematic", "Make Kinematic"],
+  ["make_character_kinematic", "Make Kinematic"],
+  ["stop_object_momentum", "Stop Momentum"],
+  ["stop_character_momentum", "Stop Momentum"],
+]);
 
 const stageCanvas = document.querySelector("#stageCanvas");
 const stageFrame = stageCanvas.parentElement;
@@ -2672,6 +2700,14 @@ function getScriptTargetActorKind() {
   return actor?.kind || null;
 }
 
+function getScriptBlockDisplayTitle(blockOrDefinition) {
+  const type = blockOrDefinition?.type || null;
+  if (!type) {
+    return "";
+  }
+  return ACTOR_SPECIFIC_PHYSICS_BLOCK_TITLES.get(type) || blockOrDefinition.title || "";
+}
+
 function isBlockAvailableForCurrentTarget(block) {
   if (!block) {
     return false;
@@ -3113,7 +3149,7 @@ function renderScriptPalette() {
     button.type = "button";
     button.className = "script-palette-button";
     button.draggable = true;
-    button.textContent = block.title;
+    button.textContent = getScriptBlockDisplayTitle(block);
     button.addEventListener("click", () => addBlockToSelectedActor(block.type));
     button.addEventListener("contextmenu", (event) => {
       event.preventDefault();
@@ -3154,7 +3190,7 @@ function renderScriptPalette() {
 }
 
 function showBlockInfo(definition, clientX, clientY) {
-  elements.scriptBlockInfo.innerHTML = `<h5>${definition.title}</h5><p>${definition.copy}</p>`;
+  elements.scriptBlockInfo.innerHTML = `<h5>${getScriptBlockDisplayTitle(definition)}</h5><p>${definition.copy}</p>`;
   elements.scriptBlockInfo.classList.remove("hidden");
   const rect = elements.scriptBlockInfo.getBoundingClientRect();
   const x = clamp(clientX + 12, 12, window.innerWidth - rect.width - 12);
@@ -3241,7 +3277,7 @@ function renderScriptBlock(block, container, actor, isRootLevel = false) {
   const titleWrap = document.createElement("div");
   const title = document.createElement("h5");
   title.className = "script-block-title";
-  title.textContent = definition.title;
+  title.textContent = getScriptBlockDisplayTitle(definition);
 
   titleWrap.append(title);
 
@@ -4205,9 +4241,7 @@ function createRunnerForBlock(actor, block, run) {
       return createInstantRunner(() => {
         actor.sizePct = clamp(Number(block.params.percent || 100), 20, 300);
         clampItemToStage(actor);
-        if (actor.physics?.enabled) {
-          wakePhysicsItem(actor);
-        }
+        resyncPhysicsBodyAfterResize(actor);
         markProjectDirty();
       });
     case "rotate_by_degrees":
@@ -6590,13 +6624,13 @@ function onPointerMove(event) {
       const snapshot = state.interaction.snapshot.get(item.id);
       const nextX = snapshot.x + dx;
       const nextY = snapshot.y + dy;
-      const moveX = nextX - item.x;
-      const moveY = nextY - item.y;
-      item.x = nextX;
-      item.y = nextY;
-      clampItemToStage(item);
       if (state.physics.enabled && isPhysicsObject(item) && item.physics.enabled) {
-        setPhysicsMotionFromDelta(item, moveX, moveY, 1 / 60, { dragging: true });
+        moveActorDirectly(item, nextX, nextY, 1 / 60);
+        ensurePhysicsRuntime(item).dragging = true;
+      } else {
+        item.x = nextX;
+        item.y = nextY;
+        clampItemToStage(item);
       }
     }
     return;
@@ -7199,14 +7233,30 @@ function moveSelectionByKeys(deltaSeconds) {
     if (!state.selection.has(item.id)) {
       continue;
     }
-    item.x += dx;
-    item.y += dy;
-    clampItemToStage(item);
     if (state.physics.enabled && isPhysicsObject(item) && item.physics.enabled) {
-      setPhysicsMotionFromDelta(item, dx, dy, deltaSeconds);
+      moveActorDirectly(item, item.x + dx, item.y + dy, deltaSeconds);
+    } else {
+      item.x += dx;
+      item.y += dy;
+      clampItemToStage(item);
     }
   }
   markProjectDirty();
+}
+
+function prepareStageForRecording() {
+  clearAllScriptRunners();
+  stopAllAudioNodes();
+  state.physics.accumulator = 0;
+  for (const item of state.items) {
+    if (!isPhysicsObject(item) || !item.physics.enabled) {
+      continue;
+    }
+    resetPhysicsBody(item);
+    if (!item.physics.startAsleep) {
+      wakePhysicsItem(item);
+    }
+  }
 }
 
 function ensureCanvasSize() {
@@ -8483,9 +8533,7 @@ function startRecording() {
     return;
   }
 
-  clearAllScriptRunners();
-  stopAllAudioNodes();
-  state.physics.accumulator = 0;
+  prepareStageForRecording();
   renderStageViews(performance.now());
   const stream = recordingCanvas.captureStream(30);
   const mimeType = getRecordingMimeType();
@@ -8531,6 +8579,7 @@ function startRecording() {
   recorder.start(150);
   state.recording = recordingState;
   triggerScripts("recording_start");
+  renderStageViews(performance.now());
   updateRecordingUi();
 }
 
@@ -8953,7 +9002,7 @@ function renderSetMiniCodePanel() {
     button.type = "button";
     button.className = "script-palette-button";
     button.draggable = true;
-    button.textContent = block.title;
+    button.textContent = getScriptBlockDisplayTitle(block);
     button.addEventListener("click", () => addBlockToSelectedActor(block.type));
     button.addEventListener("contextmenu", (event) => {
       event.preventDefault();
