@@ -433,11 +433,11 @@ button:disabled {
 
 .music-maker-card.expanded {
   position: fixed;
-  top: 6.5rem;
-  right: 1.2rem;
-  left: 1.2rem;
-  z-index: 9;
-  width: auto;
+  top: 6.2rem;
+  right: 1rem;
+  left: auto;
+  z-index: 11;
+  width: min(72vw, 980px);
   max-height: calc(100vh - 8rem);
   overflow: auto;
   box-shadow: 0 30px 80px rgba(54, 27, 12, 0.28);
@@ -960,9 +960,12 @@ button:disabled {
 }
 
 .pen-animation-panel {
-  left: 1rem;
-  bottom: 4.4rem;
-  width: min(26rem, calc(100% - 2rem));
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  left: auto;
+  z-index: 14;
+  width: min(28rem, calc(100vw - 2rem));
 }
 
 .object-physics-panel {

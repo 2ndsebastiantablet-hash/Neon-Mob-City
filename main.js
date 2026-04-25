@@ -1086,6 +1086,7 @@ const elements = {
   createObjectButton: document.querySelector("#createObjectButton"),
   importCharacterButton: document.querySelector("#importCharacterButton"),
   importTextureButton: document.querySelector("#importTextureButton"),
+  createTextureButton: document.querySelector("#createTextureButton"),
   editTextureButton: document.querySelector("#editTextureButton"),
   importObjectButton: document.querySelector("#importObjectButton"),
   physicsToggleButton: document.querySelector("#physicsToggleButton"),
@@ -1414,7 +1415,7 @@ function serializeGlobalPhysicsSettings(physics) {
 function createDefaultObjectPhysics(kind = "object") {
   const settings = createDefaultPhysicsSettings().settings;
   return {
-    enabled: true,
+    enabled: kind === "object",
     gravityAffected: true,
     bodyType: "dynamic",
     mass: 1,
@@ -1447,7 +1448,7 @@ function normalizeObjectPhysics(physics, kind) {
     };
   }
   return {
-    enabled: source.enabled !== false,
+    enabled: typeof source.enabled === "boolean" ? source.enabled : defaults.enabled,
     gravityAffected: source.gravityAffected !== false,
     bodyType: ["static", "dynamic", "kinematic"].includes(source.bodyType) ? source.bodyType : "dynamic",
     mass: clamp(Number(source.mass ?? defaults.mass), 0.1, 100),
@@ -1584,6 +1585,7 @@ const state = {
   textureEditor: {
     textureId: null,
     drawing: false,
+    pendingName: "",
   },
   dragPaintedIds: new Set(),
   lastPointer: { x: 0, y: 0, inside: false },
@@ -6015,6 +6017,12 @@ function onCharacterBuilderPointerDown(event) {
   }
 
   if (state.characterBuilder.activeTool === "bucket") {
+    const item = hitTestBuilderItem(point);
+    if (fillObjectColor(item, state.characterBuilder.fillColor)) {
+      state.characterBuilder.selectedItemId = item.id;
+      state.characterBuilder.selectedDrawingId = null;
+      return;
+    }
     const drawing = hitTestBuilderDrawing(point);
     if (drawing?.closed) {
       drawing.fillColor = state.characterBuilder.fillColor;
@@ -6436,9 +6444,6 @@ function applySelectionResizeFromHandle(handleId, point, startBounds, snapshots)
 }
 
 function applyDrawingResizeFromHandle(drawing, handleId, point, startBounds) {
-  if (drawing.type !== "image") {
-    return;
-  }
   const minSize = 24;
   const centerX = (startBounds.left + startBounds.right) * 0.5;
   const centerY = (startBounds.top + startBounds.bottom) * 0.5;
@@ -6457,8 +6462,19 @@ function applyDrawingResizeFromHandle(drawing, handleId, point, startBounds) {
     height = Math.max(minSize, (startBounds.bottom - startBounds.top) * ratio);
   }
 
-  drawing.w = width;
-  drawing.h = height;
+  if (drawing.type === "image") {
+    drawing.w = width;
+    drawing.h = height;
+  } else {
+    const startWidth = Math.max(minSize, startBounds.right - startBounds.left);
+    const startHeight = Math.max(minSize, startBounds.bottom - startBounds.top);
+    const scaleX = width / startWidth;
+    const scaleY = height / startHeight;
+    drawing.points = (drawing.points || []).map((drawingPoint) => ({
+      x: centerX + (drawingPoint.x - centerX) * scaleX,
+      y: centerY + (drawingPoint.y - centerY) * scaleY,
+    }));
+  }
   markProjectDirty();
 }
 
@@ -6482,7 +6498,7 @@ function getDrawingResizeHandles(drawing) {
 }
 
 function hitTestDrawingResizeHandle(drawing, point) {
-  if (!drawing || drawing.type !== "image") {
+  if (!drawing) {
     return null;
   }
   for (const handle of getDrawingResizeHandles(drawing)) {
@@ -6841,9 +6857,17 @@ function syncLightControls(light) {
 
 function fillSetDrawingAtPoint(point) {
   const set = getActiveSet();
+  const item = hitTestSetItem(set, point.x, point.y);
+  if (fillObjectColor(item, elements.setFillColor.value)) {
+    state.setSelection = new Set([item.id]);
+    state.setSelectedItemId = item.id;
+    state.setSelectedLightId = null;
+    state.setSelectedDrawingId = null;
+    return;
+  }
   const drawing = hitTestSetDrawing(set, point);
   if (!drawing?.closed) {
-    elements.setEditorLabel.textContent = "The paint bucket only fills closed set drawings.";
+    elements.setEditorLabel.textContent = "The paint bucket fills objects and closed set drawings.";
     return;
   }
   drawing.fillColor = elements.setFillColor.value;
@@ -7243,6 +7267,12 @@ function onPointerDown(event) {
   }
 
   if (state.activeTool && state.activeTool.type === "bucket") {
+    const item = hitTest(point.x, point.y);
+    if (fillObjectColor(item, state.activeTool.id || elements.stageFillColor.value)) {
+      setSelection([item.id]);
+      elements.toolLabel.textContent = "Filled object color.";
+      return;
+    }
     const drawing = hitTestStageDrawing(point);
     if (drawing?.closed) {
       drawing.fillColor = state.activeTool.id || elements.stageFillColor.value;
@@ -7251,7 +7281,7 @@ function onPointerDown(event) {
       elements.toolLabel.textContent = "Filled closed drawing.";
       markProjectDirty();
     } else {
-      elements.toolLabel.textContent = "The paint bucket only fills closed pen shapes.";
+      elements.toolLabel.textContent = "The paint bucket fills objects and closed pen shapes.";
     }
     return;
   }
@@ -7505,7 +7535,7 @@ function showActorContextMenu(actor, event) {
   const canCodeSelection = selectedItems.length === 1 || Boolean(selectedGroupId);
   const characterDef = actor.kind === "character" ? getCharacterDef(actor.subtype) : null;
   elements.actorContextCodeButton.classList.toggle("hidden", !canCodeSelection);
-  elements.actorContextPenButton.classList.toggle("hidden", selectedItems.length !== 1 || actor.kind !== "character");
+  elements.actorContextPenButton.classList.toggle("hidden", selectedItems.length !== 1 || !isPhysicsObject(actor));
   elements.actorContextEditCharacterButton.classList.toggle("hidden", selectedItems.length !== 1 || !characterDef?.builderData);
   elements.actorContextPhysicsToggleButton.classList.toggle("hidden", !(selectedItems.length === 1 && isPhysicsObject(actor)));
   elements.actorContextPhysicsToggleButton.textContent = actor.physics?.enabled ? "Physics Off" : "Physics On";
@@ -7735,6 +7765,15 @@ function changeSelectedObjectColor(color) {
     }
   }
   markProjectDirty();
+}
+
+function fillObjectColor(item, color) {
+  if (!item || item.kind !== "object") {
+    return false;
+  }
+  item.color = color;
+  markProjectDirty();
+  return true;
 }
 
 function copySelection() {
@@ -8986,9 +9025,7 @@ function drawSetContent(set, options = {}) {
     const selectedDrawing = set.drawings.find((drawing) => drawing.id === state.setSelectedDrawingId);
     if (selectedDrawing) {
       drawDrawingSelection(selectedDrawing);
-      if (selectedDrawing.type === "image") {
-        drawDrawingResizeHandles(selectedDrawing);
-      }
+      drawDrawingResizeHandles(selectedDrawing);
     }
     drawSetMarquee();
   }
@@ -9101,6 +9138,7 @@ function drawStage(now, options = {}) {
     const selectedStageDrawing = state.stageDrawings.find((drawing) => drawing.id === state.stageSelectedDrawingId);
     if (showSelectionOutlines && selectedStageDrawing) {
       drawDrawingSelection(selectedStageDrawing);
+      drawDrawingResizeHandles(selectedStageDrawing);
     }
   }
 
@@ -9128,6 +9166,7 @@ function drawStage(now, options = {}) {
       const selectedItem = getSingleSelectedItem();
       if (selectedItem) {
         drawResizeHandles(selectedItem);
+        drawRotationHandle(selectedItem);
       }
     } else if (state.selection.size > 1) {
       const bounds = getItemsBounds(getSelectedItems());
@@ -9258,6 +9297,24 @@ async function deleteRecording(recordingId) {
   await loadRecordings();
 }
 
+async function renameRecording(recordingId) {
+  const recording = state.recordings.find((candidate) => candidate.id === recordingId);
+  if (!recording) {
+    return;
+  }
+  const nextName = window.prompt("Rename this video:", recording.name || "Take");
+  if (!nextName?.trim()) {
+    return;
+  }
+  await recordingStore.save({
+    ...recording,
+    name: nextName.trim(),
+  });
+  await loadRecordings();
+  state.selectedRecordingId = recordingId;
+  renderLibrary();
+}
+
 function formatDate(dateString) {
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
@@ -9329,7 +9386,16 @@ function renderLibrary() {
       deleteRecording(recording.id);
     });
 
-    actions.append(watchButton, deleteButton);
+    const renameButton = document.createElement("button");
+    renameButton.type = "button";
+    renameButton.className = "ghost-button";
+    renameButton.textContent = "Rename";
+    renameButton.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await renameRecording(recording.id);
+    });
+
+    actions.append(watchButton, renameButton, deleteButton);
     header.append(titleWrap, actions);
 
     const copy = document.createElement("p");
@@ -9398,9 +9464,11 @@ function startRecording() {
   recorder.onstop = async () => {
     const duration = (performance.now() - recordingState.startedAt) / 1000;
     const blob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+    const defaultName = `Take ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`;
+    const name = window.prompt("Name this video:", defaultName)?.trim() || defaultName;
     const recording = {
       id: `take-${Date.now()}`,
-      name: `Take ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`,
+      name,
       createdAt: new Date().toISOString(),
       duration,
       blob,
@@ -9571,8 +9639,8 @@ function closeObjectPhysicsEditor() {
 
 function refreshPhysicsStatusLabel() {
   elements.physicsStatusLabel.textContent = state.physics.statusMessage || (state.physics.enabled
-    ? "Physics on. Place or drag stage actors to test collisions."
-    : "Physics is off. Turn it on to enable collisions, pushing, and gravity for stage actors.");
+    ? "World physics is on for this scene. Place or drag stage actors to test collisions."
+    : "World physics is off. Turn it on to enable collisions, pushing, and gravity for stage actors.");
 }
 
 function renderPhysicsMaskEditor(item) {
@@ -9635,7 +9703,7 @@ function renderPhysicsLayerMatrix() {
 }
 
 function renderPhysicsControls() {
-  elements.physicsToggleButton.textContent = `Physics: ${state.physics.enabled ? "On" : "Off"}`;
+  elements.physicsToggleButton.textContent = state.physics.enabled ? "Turn World Physics Off" : "Turn World Physics On";
   elements.gravityToggleButton.textContent = `Gravity: ${state.physics.gravityEnabled ? "On" : "Off"}`;
   elements.physicsToggleButton.className = `${state.physics.enabled ? "primary" : "secondary"}-button full-width`;
   elements.gravityToggleButton.className = `${state.physics.gravityEnabled ? "secondary" : "ghost"}-button full-width`;
@@ -9701,7 +9769,7 @@ function togglePhysicsEnabled() {
     resetAllPhysicsRuntime();
     closeObjectPhysicsEditor();
   } else {
-    state.physics.statusMessage = "Physics on. Place or drag stage actors to test collisions.";
+    state.physics.statusMessage = "World physics is on for this scene. Place or drag stage actors to test collisions.";
     for (const item of getActiveStageActors()) {
       if (isPhysicsObject(item) && item.physics.enabled) {
         wakePhysicsItem(item);
@@ -9756,7 +9824,7 @@ function openPhysicsEditorForActor(actorId) {
     return;
   }
   state.physics.enabled = true;
-  state.physics.statusMessage = "Physics on. Place or drag stage actors to test collisions.";
+  state.physics.statusMessage = "World physics is on for this scene. Place or drag stage actors to test collisions.";
   state.physics.objectEditorItemId = actor.id;
   hideActorContextMenu();
   hideSetActorContextMenu();
@@ -10173,6 +10241,25 @@ function saveMusicMakerLoop() {
   renderActiveScriptEditor();
 }
 
+function renameAudioItem(audioValue) {
+  const audioItem = state.customMusic.find((candidate) => candidate.value === audioValue);
+  if (!audioItem) {
+    return;
+  }
+  const nextName = window.prompt("Rename this audio:", audioItem.label || "Audio");
+  if (!nextName?.trim()) {
+    return;
+  }
+  audioItem.label = nextName.trim();
+  if (audioItem.source === "music-maker") {
+    elements.musicMakerName.value = audioItem.label;
+  }
+  markProjectDirty();
+  saveProjectState();
+  renderAudioLibrary();
+  renderActiveScriptEditor();
+}
+
 function renderAudioLibrary() {
   if (!elements.audioLibraryList) {
     return;
@@ -10204,6 +10291,11 @@ function renderAudioLibrary() {
     playButton.className = "ghost-button";
     playButton.textContent = "Play";
     playButton.addEventListener("click", () => playPlaceholderTone("music", audioItem.value));
+    const renameButton = document.createElement("button");
+    renameButton.type = "button";
+    renameButton.className = "ghost-button";
+    renameButton.textContent = "Rename";
+    renameButton.addEventListener("click", () => renameAudioItem(audioItem.value));
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className = "ghost-button";
@@ -10215,7 +10307,7 @@ function renderAudioLibrary() {
       renderAudioLibrary();
       renderActiveScriptEditor();
     });
-    actions.append(playButton, deleteButton);
+    actions.append(playButton, renameButton, deleteButton);
     card.append(text, actions);
     elements.audioLibraryList.append(card);
   }
@@ -10224,7 +10316,7 @@ function renderAudioLibrary() {
 function toggleMusicMakerExpanded() {
   state.audio.musicMakerExpanded = !state.audio.musicMakerExpanded;
   elements.musicMakerCard.classList.toggle("expanded", state.audio.musicMakerExpanded);
-  elements.expandMusicMakerButton.textContent = state.audio.musicMakerExpanded ? "Music Maker <-" : "Music Maker ->";
+  elements.expandMusicMakerButton.textContent = state.audio.musicMakerExpanded ? "Music Maker >>" : "Music Maker ->";
 }
 
 function setMicRecordingUi(recording, label = null) {
@@ -10306,17 +10398,19 @@ function stopMicRecording() {
   }
 }
 
-function openTextureEditor() {
-  const textureId = state.activeTool?.type === "texture" ? state.activeTool.id : state.setToolSelection.texture;
-  const texture = getTextureDef(textureId);
-  if (!texture) {
+function openTextureEditor(textureId = null, options = {}) {
+  const resolvedTextureId = textureId || (state.activeTool?.type === "texture" ? state.activeTool.id : state.setToolSelection.texture);
+  const texture = resolvedTextureId ? getTextureDef(resolvedTextureId) : null;
+  const isNewTexture = Boolean(options.createNew) || !texture;
+  if (!isNewTexture && !texture) {
     elements.toolLabel.textContent = "Pick a texture first, then open the texture editor.";
     return;
   }
-  state.textureEditor.textureId = textureId;
-  elements.textureEditorTitle.textContent = `Editing: ${texture.name}`;
+  state.textureEditor.textureId = isNewTexture ? null : resolvedTextureId;
+  state.textureEditor.pendingName = options.name || (isNewTexture ? "Custom Texture" : texture.name);
+  elements.textureEditorTitle.textContent = isNewTexture ? `Create Texture: ${state.textureEditor.pendingName}` : `Editing: ${texture.name}`;
   elements.textureEditorPanel.classList.remove("hidden");
-  setupTextureEditorCanvas(texture);
+  setupTextureEditorCanvas(isNewTexture ? null : texture);
 }
 
 function setupTextureEditorCanvas(texture) {
@@ -10343,6 +10437,7 @@ function setupTextureEditorCanvas(texture) {
 function closeTextureEditor() {
   state.textureEditor.textureId = null;
   state.textureEditor.drawing = false;
+  state.textureEditor.pendingName = "";
   elements.textureEditorPanel.classList.add("hidden");
 }
 
@@ -10387,22 +10482,20 @@ function endTextureEditorStroke(event) {
 
 function saveTextureEditor() {
   const existingId = state.textureEditor.textureId;
-  if (!existingId) {
-    return;
-  }
   const imageData = elements.textureEditorCanvas.toDataURL("image/png");
   let texture = state.customTextures.find((candidate) => candidate.id === existingId);
   if (!texture) {
-    const baseTexture = getTextureDef(existingId);
+    const baseTexture = existingId ? getTextureDef(existingId) : null;
     texture = {
       id: `custom-texture-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: `${baseTexture?.name || "Texture"} Drawing`,
+      name: state.textureEditor.pendingName || `${baseTexture?.name || "Texture"} Drawing`,
       copy: "Drawn texture.",
       preview: `center / cover no-repeat url("${imageData}")`,
       imageData,
     };
     state.customTextures.push(texture);
   } else {
+    texture.name = state.textureEditor.pendingName || texture.name;
     texture.imageData = imageData;
     texture.preview = `center / cover no-repeat url("${imageData}")`;
   }
@@ -10579,6 +10672,10 @@ function bindEvents() {
   });
   elements.importCharacterButton.addEventListener("click", () => elements.importCharacterInput.click());
   elements.importTextureButton.addEventListener("click", () => elements.importTextureInput.click());
+  elements.createTextureButton.addEventListener("click", () => {
+    const name = window.prompt("Name this texture:", "Custom Texture")?.trim() || "Custom Texture";
+    openTextureEditor(null, { createNew: true, name });
+  });
   elements.editTextureButton.addEventListener("click", openTextureEditor);
   elements.closeTextureEditorButton.addEventListener("click", closeTextureEditor);
   elements.saveTextureEditorButton.addEventListener("click", saveTextureEditor);
