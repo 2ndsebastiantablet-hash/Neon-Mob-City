@@ -1249,7 +1249,6 @@ const elements = {
     characters: document.querySelector("#charactersPanel"),
     textures: document.querySelector("#texturesPanel"),
     objects: document.querySelector("#objectsPanel"),
-    draw: document.querySelector("#drawPanel"),
     audio: document.querySelector("#audioPanel"),
     camera: document.querySelector("#cameraPanel"),
   },
@@ -1608,6 +1607,7 @@ const state = {
   projectDirty: false,
   undoStack: [],
   undoRestoring: false,
+  nextLayerOrder: 1,
   scriptRunners: [],
   penAnimationRunners: [],
   stopAllScriptsRequested: false,
@@ -1822,6 +1822,10 @@ function serializePenAnimation(animation) {
   };
 }
 
+function getNextLayerOrder() {
+  return state.nextLayerOrder++;
+}
+
 function normalizeItem(item) {
   const physics = normalizeObjectPhysics(item.physics, item.kind);
   const runtime = createItemRuntime();
@@ -1838,6 +1842,7 @@ function normalizeItem(item) {
     groupId: item.groupId || null,
     groupScriptHostId: item.groupScriptHostId || null,
     rotation: typeof item.rotation === "number" ? item.rotation : 0,
+    layerOrder: typeof item.layerOrder === "number" ? item.layerOrder : getNextLayerOrder(),
     imageData: item.imageData || null,
     physics,
     penAnimation: item.penAnimation ? normalizePenAnimation(item.penAnimation) : null,
@@ -1905,6 +1910,7 @@ function serializeItem(item) {
     groupId: item.groupId || null,
     groupScriptHostId: item.groupScriptHostId || null,
     rotation: item.rotation || 0,
+    layerOrder: item.layerOrder,
     physics: serializeObjectPhysics(item.physics || normalizeObjectPhysics(null, item.kind)),
     penAnimation: item.penAnimation ? serializePenAnimation(item.penAnimation) : null,
     scripts: item.scripts.map(serializeBlock),
@@ -1979,6 +1985,7 @@ function createStageSet(name = createSetName()) {
 function serializeDrawing(drawing) {
   return {
     id: drawing.id,
+    layerOrder: drawing.layerOrder,
     type: drawing.type || "path",
     color: drawing.color,
     imageData: drawing.imageData || null,
@@ -1995,6 +2002,7 @@ function serializeDrawing(drawing) {
 function normalizeDrawing(drawing) {
   return {
     id: drawing.id || `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    layerOrder: typeof drawing.layerOrder === "number" ? drawing.layerOrder : getNextLayerOrder(),
     type: drawing.type === "image" ? "image" : "path",
     color: drawing.color || "#2f8f83",
     imageData: drawing.imageData || null,
@@ -2159,6 +2167,7 @@ function buildProjectSnapshot() {
     scene: { ...state.scene },
     physics: serializeGlobalPhysicsSettings(state.physics),
     nextId: state.nextId,
+    nextLayerOrder: state.nextLayerOrder,
     globalVolume: state.globalVolume,
   };
 }
@@ -2191,6 +2200,7 @@ function restoreProjectSnapshot(snapshot) {
     state.animationChunks = Array.isArray(snapshot.animationChunks) ? snapshot.animationChunks.map(normalizeAnimationChunk) : [];
     state.physics = snapshot.physics ? normalizeGlobalPhysicsSettings(snapshot.physics) : createDefaultPhysicsSettings();
     state.nextId = typeof snapshot.nextId === "number" ? snapshot.nextId : state.nextId;
+    state.nextLayerOrder = typeof snapshot.nextLayerOrder === "number" ? snapshot.nextLayerOrder : state.nextLayerOrder;
     state.globalVolume = typeof snapshot.globalVolume === "number" ? clamp(snapshot.globalVolume, 0, 1) : state.globalVolume;
     ensureDefaultScene();
     ensureDefaultSet();
@@ -2249,6 +2259,7 @@ function saveProjectState() {
       scene: { ...state.scene },
       physics: serializeGlobalPhysicsSettings(state.physics),
       nextId: state.nextId,
+      nextLayerOrder: state.nextLayerOrder,
       globalVolume: state.globalVolume,
     };
     window.localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(payload));
@@ -2320,6 +2331,9 @@ function loadProjectState() {
       if (allItems.length > 0) {
         state.nextId = Math.max(...allItems.map((item) => item.id)) + 1;
       }
+    }
+    if (typeof payload.nextLayerOrder === "number") {
+      state.nextLayerOrder = payload.nextLayerOrder;
     }
     if (typeof payload.globalVolume === "number") {
       state.globalVolume = clamp(payload.globalVolume, 0, 1);
@@ -2460,6 +2474,10 @@ function isPhysicsObject(item) {
   return item?.kind === "object" || item?.kind === "character";
 }
 
+function isActorPhysicsRunning(item) {
+  return isPhysicsObject(item) && item.physics?.enabled && (item.kind === "object" || state.physics.enabled);
+}
+
 function isPhysicsCircle(item) {
   return item?.subtype === "circle";
 }
@@ -2541,7 +2559,7 @@ function wakeMatchingPhysicsItems(predicate = () => true) {
 }
 
 function resyncPhysicsBodyAfterResize(item) {
-  if (!state.physics.enabled || !isPhysicsObject(item) || !item.physics?.enabled) {
+  if (!isActorPhysicsRunning(item)) {
     return;
   }
   resetPhysicsBody(item);
@@ -2724,7 +2742,7 @@ function setPhysicsMotionFromDelta(item, dx, dy, deltaSeconds, options = {}) {
 }
 
 function canGrabItemManually(item) {
-  return !isPhysicsObject(item) || !state.physics.enabled || item.physics.canGrab;
+  return !isActorPhysicsRunning(item) || item.physics.canGrab;
 }
 
 function getBoxBoxCollision(shapeA, shapeB) {
@@ -2957,7 +2975,7 @@ function updatePhysicsSleepState(item, deltaSeconds) {
 }
 
 function stepPhysics(deltaSeconds) {
-  const physicsItems = getActiveStageActors().filter((item) => isPhysicsObject(item) && item.physics.enabled);
+  const physicsItems = getActiveStageActors().filter((item) => isActorPhysicsRunning(item));
   const maxObjects = state.physics.settings.maxObjects;
   const simulatedItems = physicsItems.slice(0, maxObjects);
   const gravity = getPhysicsGravityVector();
@@ -2969,8 +2987,10 @@ function stepPhysics(deltaSeconds) {
     state.physics.statusMessage = `Physics is simulating the first ${maxObjects} actors right now to keep the stage stable.`;
   } else {
     state.physics.statusMessage = state.physics.enabled
-      ? `Physics on. ${simulatedItems.length} actor${simulatedItems.length === 1 ? "" : "s"} active.`
-      : "Physics is off. Turn it on to enable collisions, pushing, and gravity for stage actors.";
+      ? `World physics on. ${simulatedItems.length} actor${simulatedItems.length === 1 ? "" : "s"} active.`
+      : simulatedItems.some((item) => item.kind === "object")
+        ? `World physics off. ${simulatedItems.filter((item) => item.kind === "object").length} object${simulatedItems.filter((item) => item.kind === "object").length === 1 ? "" : "s"} still using local physics.`
+        : "World physics is off. Turn it on when you want full-scene simulation.";
   }
 
   for (const item of simulatedItems) {
@@ -2989,7 +3009,7 @@ function stepPhysics(deltaSeconds) {
       continue;
     }
 
-    if (item.physics.bodyType !== "kinematic" && state.physics.gravityEnabled && item.physics.gravityAffected) {
+    if (item.physics.bodyType !== "kinematic" && item.physics.gravityAffected && (item.kind === "object" || state.physics.gravityEnabled)) {
       body.vx += gravity.x * item.physics.gravityScale * deltaSeconds;
       body.vy += gravity.y * item.physics.gravityScale * deltaSeconds;
     }
@@ -3057,7 +3077,8 @@ function stepPhysics(deltaSeconds) {
 }
 
 function updatePhysics(deltaSeconds) {
-  if (!state.physics.enabled) {
+  const hasObjectPhysics = getActiveStageActors().some((item) => item.kind === "object" && item.physics?.enabled);
+  if (!state.physics.enabled && !hasObjectPhysics) {
     state.physics.accumulator = 0;
     state.physics.statusMessage = "";
     return;
@@ -3082,7 +3103,7 @@ function moveActorDirectly(actor, nextX, nextY, deltaSeconds = 1 / 60) {
   actor.x = nextX;
   actor.y = nextY;
   clampItemToStage(actor);
-  if (state.physics.enabled && actor.physics?.enabled) {
+  if (isActorPhysicsRunning(actor)) {
     setPhysicsMotionFromDelta(actor, dx, dy, Math.max(1 / 120, deltaSeconds), { controlled: true });
   }
   markProjectDirty();
@@ -5419,8 +5440,6 @@ function getPanelToolType(panelName) {
       return "texture";
     case "objects":
       return "object";
-    case "draw":
-      return "draw";
     case "audio":
       return "audio";
     default:
@@ -7054,6 +7073,7 @@ function onSetPointerDown(event) {
     pushUndoSnapshot();
     const drawing = {
       id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      layerOrder: getNextLayerOrder(),
       color: state.setPenColor,
       closed: false,
       fillColor: null,
@@ -7357,18 +7377,16 @@ function hitTest(x, y) {
 
 function startDragSelection(point) {
   const selectedItems = getSelectedItems();
-  if (state.physics.enabled) {
-    const blockedItem = selectedItems.find((item) => isPhysicsObject(item) && !item.physics.canGrab);
-    if (blockedItem) {
-      elements.toolLabel.textContent = "Manual grab is turned off for that object.";
-      return;
-    }
+  const blockedItem = selectedItems.find((item) => isActorPhysicsRunning(item) && !item.physics.canGrab);
+  if (blockedItem) {
+    elements.toolLabel.textContent = "Manual grab is turned off for that object.";
+    return;
   }
 
   const snapshot = new Map();
   for (const item of selectedItems) {
     snapshot.set(item.id, { x: item.x, y: item.y });
-    if (state.physics.enabled && isPhysicsObject(item) && item.physics.enabled) {
+    if (isActorPhysicsRunning(item)) {
       const body = ensurePhysicsRuntime(item);
       body.dragging = true;
       wakePhysicsItem(item);
@@ -7457,6 +7475,7 @@ function onPointerDown(event) {
     pushUndoSnapshot();
     const drawing = {
       id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      layerOrder: getNextLayerOrder(),
       type: "path",
       color: state.activeTool.id || elements.stagePenColor.value,
       closed: false,
@@ -7564,7 +7583,7 @@ function onPointerMove(event) {
       const snapshot = state.interaction.snapshot.get(item.id);
       const nextX = snapshot.x + dx;
       const nextY = snapshot.y + dy;
-      if (state.physics.enabled && isPhysicsObject(item) && item.physics.enabled) {
+      if (isActorPhysicsRunning(item)) {
         moveActorDirectly(item, nextX, nextY, 1 / 60);
         ensurePhysicsRuntime(item).dragging = true;
       } else {
@@ -7585,7 +7604,7 @@ function onPointerMove(event) {
     const item = getItemById(state.interaction.itemId);
     if (item) {
       applyResizeFromHandle(item, state.interaction.handleId, point, state.interaction.startBounds);
-      if (state.physics.enabled && isPhysicsObject(item)) {
+      if (isActorPhysicsRunning(item)) {
         wakePhysicsItem(item);
       }
     }
@@ -7596,7 +7615,7 @@ function onPointerMove(event) {
     const item = getItemById(state.interaction.itemId);
     if (item) {
       applyRotationFromPoint(item, state.interaction, point);
-      if (state.physics.enabled && isPhysicsObject(item)) {
+      if (isActorPhysicsRunning(item)) {
         wakePhysicsItem(item);
       }
     }
@@ -7764,8 +7783,6 @@ function toggleActorPhysicsEnabled(actorId) {
   const nextEnabled = !actor.physics.enabled;
   actor.physics.enabled = nextEnabled;
   if (nextEnabled) {
-    state.physics.enabled = true;
-    state.physics.statusMessage = "Physics on. Place or drag stage actors to test collisions.";
     resetPhysicsBody(actor);
     wakePhysicsItem(actor);
   } else {
@@ -8241,7 +8258,7 @@ function moveSelectionByKeys(deltaSeconds) {
     if (!state.selection.has(item.id)) {
       continue;
     }
-    if (state.physics.enabled && isPhysicsObject(item) && item.physics.enabled) {
+    if (isActorPhysicsRunning(item)) {
       moveActorDirectly(item, item.x + dx, item.y + dy, deltaSeconds);
     } else {
       item.x += dx;
@@ -8526,7 +8543,7 @@ function resolveFill(item, fallbackColor) {
 }
 
 function drawPhysicsBadge(item) {
-  if (!currentRenderFlags.showPhysicsBadges || !state.physics.enabled || !isPhysicsObject(item) || !item.physics.enabled) {
+  if (!currentRenderFlags.showPhysicsBadges || !isActorPhysicsRunning(item)) {
     return;
   }
   const bounds = getItemBounds(item);
@@ -8559,14 +8576,14 @@ function drawPhysicsBadge(item) {
 }
 
 function drawPhysicsDebugOverlay() {
-  if (!state.physics.enabled || !currentRenderFlags.showPhysicsDebug) {
+  if (!currentRenderFlags.showPhysicsDebug) {
     return;
   }
   ctx.save();
   ctx.setLineDash([8, 6]);
   ctx.lineWidth = 2;
   for (const item of getActiveStageActors()) {
-    if (!isPhysicsObject(item) || !item.physics.enabled) {
+    if (!isActorPhysicsRunning(item)) {
       continue;
     }
     const shape = getPhysicsShape(item);
@@ -9137,6 +9154,23 @@ function drawSetDrawings(set) {
   ctx.restore();
 }
 
+function drawOrderedSceneElements(items = [], drawings = []) {
+  const elementsToDraw = [
+    ...items.map((item) => ({ type: "item", order: item.layerOrder || 0, value: item })),
+    ...drawings.map((drawing) => ({ type: "drawing", order: drawing.layerOrder || 0, value: drawing })),
+  ].sort((left, right) => left.order - right.order);
+
+  for (const entry of elementsToDraw) {
+    if (entry.type === "drawing") {
+      drawSetDrawings({ drawings: [entry.value] });
+    } else if (entry.value.kind === "character") {
+      drawCharacter(entry.value);
+    } else {
+      drawObject(entry.value);
+    }
+  }
+}
+
 function drawDrawingSelection(drawing) {
   const bounds = getDrawingBounds(drawing);
   if (!bounds) {
@@ -9205,14 +9239,7 @@ function drawSetContent(set, options = {}) {
     return;
   }
 
-  drawSetDrawings(set);
-  for (const item of set.items) {
-    if (item.kind === "character") {
-      drawCharacter(item);
-    } else {
-      drawObject(item);
-    }
-  }
+  drawOrderedSceneElements(set.items, set.drawings);
   drawSetLights(set, showEditorHandles);
 
   if (showEditorHandles) {
@@ -9340,7 +9367,7 @@ function drawStage(now, options = {}) {
   const sceneStageSet = state.sceneSetId ? getStageSetById(state.sceneSetId) : null;
 
   if (showMainWorkspace) {
-    drawSetDrawings({ drawings: state.stageDrawings });
+    drawOrderedSceneElements(state.items, state.stageDrawings);
     const selectedStageDrawing = state.stageDrawings.find((drawing) => drawing.id === state.stageSelectedDrawingId);
     if (showSelectionOutlines && selectedStageDrawing) {
       drawDrawingSelection(selectedStageDrawing);
@@ -9353,13 +9380,6 @@ function drawStage(now, options = {}) {
   }
 
   if (showMainWorkspace) {
-    for (const item of state.items) {
-      if (item.kind === "character") {
-        drawCharacter(item);
-      } else {
-        drawObject(item);
-      }
-    }
     drawPhysicsDebugOverlay();
     drawSceneLighting();
   }
@@ -9847,7 +9867,7 @@ function closeObjectPhysicsEditor() {
 function refreshPhysicsStatusLabel() {
   elements.physicsStatusLabel.textContent = state.physics.statusMessage || (state.physics.enabled
     ? "World physics is on for this scene. Place or drag stage actors to test collisions."
-    : "World physics is off. Turn it on to enable collisions, pushing, and gravity for stage actors.");
+    : "World physics is off. Objects still use their own physics unless you disable them per object.");
 }
 
 function renderPhysicsMaskEditor(item) {
@@ -9933,7 +9953,7 @@ function renderPhysicsControls() {
   refreshPhysicsStatusLabel();
 
   const item = getPhysicsEditorItem();
-  if (!state.physics.enabled || !item) {
+  if (!item) {
     closeObjectPhysicsEditor();
     return;
   }
@@ -9973,13 +9993,11 @@ function togglePhysicsEnabled() {
   state.physics.enabled = !state.physics.enabled;
   state.physics.accumulator = 0;
   if (!state.physics.enabled) {
-    state.physics.statusMessage = "";
-    resetAllPhysicsRuntime();
-    closeObjectPhysicsEditor();
+    state.physics.statusMessage = "World physics is off. Objects still use their own physics unless you disable them per object.";
   } else {
     state.physics.statusMessage = "World physics is on for this scene. Place or drag stage actors to test collisions.";
     for (const item of getActiveStageActors()) {
-      if (isPhysicsObject(item) && item.physics.enabled) {
+      if (isActorPhysicsRunning(item)) {
         wakePhysicsItem(item);
       }
     }
@@ -9993,7 +10011,7 @@ function toggleGravityEnabled() {
   state.physics.gravityEnabled = !state.physics.gravityEnabled;
   if (state.physics.gravityEnabled) {
     for (const item of getActiveStageActors()) {
-      if (isPhysicsObject(item) && item.physics.enabled && item.physics.gravityAffected) {
+      if (item.kind === "character" && isActorPhysicsRunning(item) && item.physics.gravityAffected) {
         wakePhysicsItem(item);
       }
     }
@@ -10032,8 +10050,6 @@ function openPhysicsEditorForActor(actorId) {
   if (!actor || !isPhysicsObject(actor)) {
     return;
   }
-  state.physics.enabled = true;
-  state.physics.statusMessage = "World physics is on for this scene. Place or drag stage actors to test collisions.";
   state.physics.objectEditorItemId = actor.id;
   hideActorContextMenu();
   hideSetActorContextMenu();
@@ -10368,6 +10384,7 @@ async function importImageAsset(kind, file) {
     const set = getActiveSet();
     const drawing = {
       id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      layerOrder: getNextLayerOrder(),
       type: "image",
       color: "#ffffff",
       imageData,
@@ -10529,27 +10546,12 @@ function renderAudioLibrary() {
   }
 }
 
-function layoutExpandedMusicMaker(referenceRect = elements.musicMakerCard.getBoundingClientRect()) {
-  const studioRect = elements.studioScreen.getBoundingClientRect();
-  const right = Math.max(12, window.innerWidth - referenceRect.right);
-  const top = clamp(referenceRect.top, 96, window.innerHeight - 320);
-  const width = Math.min(Math.max(referenceRect.width + studioRect.width * 0.4, 520), Math.max(520, studioRect.width - 24));
-  elements.musicMakerCard.style.top = `${top}px`;
-  elements.musicMakerCard.style.right = `${right}px`;
-  elements.musicMakerCard.style.width = `${width}px`;
-}
-
 function toggleMusicMakerExpanded() {
-  const collapsedRect = elements.musicMakerCard.getBoundingClientRect();
   state.audio.musicMakerExpanded = !state.audio.musicMakerExpanded;
   elements.musicMakerCard.classList.toggle("expanded", state.audio.musicMakerExpanded);
-  if (state.audio.musicMakerExpanded) {
-    layoutExpandedMusicMaker(collapsedRect);
-  } else {
-    elements.musicMakerCard.style.top = "";
-    elements.musicMakerCard.style.right = "";
-    elements.musicMakerCard.style.width = "";
-  }
+  elements.musicMakerCard.style.top = "";
+  elements.musicMakerCard.style.right = "";
+  elements.musicMakerCard.style.width = "";
   elements.expandMusicMakerButton.textContent = state.audio.musicMakerExpanded ? "Music Maker >>" : "Music Maker ->";
 }
 
@@ -10864,14 +10866,14 @@ function bindEvents() {
       markProjectDirty();
     }
   });
-  elements.stageDrawButton.addEventListener("click", () => setActiveTool("draw", elements.stagePenColor.value));
-  elements.stageBucketButton.addEventListener("click", () => setActiveTool("bucket", elements.stageFillColor.value));
-  elements.stagePenColor.addEventListener("input", () => {
+  elements.stageDrawButton?.addEventListener("click", () => setActiveTool("draw", elements.stagePenColor.value));
+  elements.stageBucketButton?.addEventListener("click", () => setActiveTool("bucket", elements.stageFillColor.value));
+  elements.stagePenColor?.addEventListener("input", () => {
     if (state.activeTool?.type === "draw") {
       setActiveTool("draw", elements.stagePenColor.value);
     }
   });
-  elements.stageFillColor.addEventListener("input", () => {
+  elements.stageFillColor?.addEventListener("input", () => {
     if (state.activeTool?.type === "bucket") {
       setActiveTool("bucket", elements.stageFillColor.value);
     }
@@ -11030,9 +11032,6 @@ function bindEvents() {
   });
   window.addEventListener("resize", () => {
     ensureCanvasSize();
-    if (state.audio.musicMakerExpanded) {
-      layoutExpandedMusicMaker();
-    }
   });
   window.addEventListener("beforeunload", saveProjectState);
 }

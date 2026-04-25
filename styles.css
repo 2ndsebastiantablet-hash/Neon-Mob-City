@@ -433,12 +433,10 @@ button:disabled {
 
 .music-maker-card.expanded {
   position: fixed;
-  top: 6.2rem;
-  right: 1rem;
-  left: auto;
-  z-index: 11;
-  width: min(72vw, 980px);
-  max-height: calc(100vh - 8rem);
+  inset: 5rem 1.5rem 1.5rem 1.5rem;
+  z-index: 18;
+  width: auto;
+  max-height: none;
   overflow: auto;
   box-shadow: 0 30px 80px rgba(54, 27, 12, 0.28);
 }

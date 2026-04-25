@@ -124,7 +124,6 @@
             <button type="button" class="sidebar-tab active" data-panel="characters">Characters</button>
             <button type="button" class="sidebar-tab" data-panel="textures">Textures</button>
             <button type="button" class="sidebar-tab" data-panel="objects">Objects</button>
-            <button type="button" class="sidebar-tab" data-panel="draw">Draw</button>
             <button type="button" class="sidebar-tab" data-panel="audio">Audio</button>
             <button type="button" class="sidebar-tab" data-panel="camera">Camera</button>
             <button type="button" class="sidebar-tab" data-panel="stage">Stage</button>
@@ -160,7 +159,7 @@
               <div class="set-control-card">
                 <button id="physicsToggleButton" type="button" class="secondary-button full-width">Turn World Physics On</button>
                 <button id="gravityToggleButton" type="button" class="ghost-button full-width">Gravity: On</button>
-                <button id="physicsSettingsButton" type="button" class="ghost-button full-width">Advanced Physics Settings</button>
+                <button id="physicsSettingsButton" type="button" class="ghost-button full-width">Advanced World Physics Settings</button>
                 <p id="physicsStatusLabel">Physics is off. Turn it on to enable collisions, pushing, and gravity for stage actors.</p>
               </div>
               <div id="physicsSettingsPanel" class="set-control-card hidden">
@@ -190,17 +189,6 @@
                 </div>
               </div>
               <div id="objectList" class="tool-grid object-grid"></div>
-            </section>
-
-            <section id="drawPanel" class="tool-panel hidden" aria-label="Draw">
-              <div class="set-control-card">
-                <p>Draw directly on the regular stage. Drawings are visible in recordings.</p>
-                <label class="set-control-label">Pen color <input id="stagePenColor" type="color" value="#2f8f83"></label>
-                <button id="stageDrawButton" type="button" class="secondary-button full-width">Use Drawing Pen</button>
-                <label class="set-control-label">Fill color <input id="stageFillColor" type="color" value="#ffd166"></label>
-                <button id="stageBucketButton" type="button" class="secondary-button full-width">Use Paint Bucket</button>
-                <p>Close a drawing by ending near its start point. A yellow outline means it can be filled.</p>
-              </div>
             </section>
 
             <section id="audioPanel" class="tool-panel hidden" aria-label="Audio">
