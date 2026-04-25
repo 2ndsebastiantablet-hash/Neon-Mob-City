@@ -1079,6 +1079,7 @@ const elements = {
   recordButton: document.querySelector("#recordButton"),
   stopButton: document.querySelector("#stopButton"),
   openLibraryButton: document.querySelector("#openLibraryButton"),
+  globalUndoButton: document.querySelector("#globalUndoButton"),
   characterList: document.querySelector("#characterList"),
   textureList: document.querySelector("#textureList"),
   objectList: document.querySelector("#objectList"),
@@ -1131,6 +1132,8 @@ const elements = {
   actorContextGroupButton: document.querySelector("#actorContextGroupButton"),
   actorContextUngroupButton: document.querySelector("#actorContextUngroupButton"),
   actorContextColor: document.querySelector("#actorContextColor"),
+  drawingContextMenu: document.querySelector("#drawingContextMenu"),
+  drawingContextDeleteButton: document.querySelector("#drawingContextDeleteButton"),
   objectPhysicsPanel: document.querySelector("#objectPhysicsPanel"),
   objectPhysicsTitle: document.querySelector("#objectPhysicsTitle"),
   closeObjectPhysicsButton: document.querySelector("#closeObjectPhysicsButton"),
@@ -1211,8 +1214,9 @@ const elements = {
   setPenControls: document.querySelector("#setPenControls"),
   setBaseColors: document.querySelector("#setBaseColors"),
   setPenColor: document.querySelector("#setPenColor"),
-  setBucketControls: document.querySelector("#setBucketControls"),
   setFillColor: document.querySelector("#setFillColor"),
+  setUsePenButton: document.querySelector("#setUsePenButton"),
+  setUseBucketButton: document.querySelector("#setUseBucketButton"),
   setLightControls: document.querySelector("#setLightControls"),
   setAddLightButton: document.querySelector("#setAddLightButton"),
   setLightType: document.querySelector("#setLightType"),
@@ -1228,6 +1232,8 @@ const elements = {
   setActorContextPenButton: document.querySelector("#setActorContextPenButton"),
   setActorContextPhysicsToggleButton: document.querySelector("#setActorContextPhysicsToggleButton"),
   setActorContextPhysicsButton: document.querySelector("#setActorContextPhysicsButton"),
+  setDrawingContextMenu: document.querySelector("#setDrawingContextMenu"),
+  setDrawingContextDeleteButton: document.querySelector("#setDrawingContextDeleteButton"),
   scriptActorLabel: document.querySelector("#scriptActorLabel"),
   scriptActorList: document.querySelector("#scriptActorList"),
   scriptCategoryTabs: document.querySelector("#scriptCategoryTabs"),
@@ -1533,6 +1539,8 @@ const state = {
   },
   setMiniCodeItemId: null,
   setContextItemId: null,
+  contextDrawingId: null,
+  setContextDrawingId: null,
   setPenColor: "#2f8f83",
   sceneSetId: null,
   characterBuilder: {
@@ -1598,6 +1606,8 @@ const state = {
   lastFrameTime: 0,
   lastProjectSaveTime: 0,
   projectDirty: false,
+  undoStack: [],
+  undoRestoring: false,
   scriptRunners: [],
   penAnimationRunners: [],
   stopAllScriptsRequested: false,
@@ -2079,6 +2089,8 @@ function loadSceneWorkspace(sceneId) {
   state.scriptTargetId = SCENE_TARGET_ID;
   hideActorContextMenu();
   hideSetActorContextMenu();
+  hideDrawingContextMenu();
+  hideSetDrawingContextMenu();
   closePenAnimationEditor();
   closeSetMiniCodePanel();
   closeObjectPhysicsEditor();
@@ -2127,6 +2139,95 @@ function getSetItemById(itemId) {
 
 function markProjectDirty() {
   state.projectDirty = true;
+}
+
+function buildProjectSnapshot() {
+  syncCurrentSceneToWorkspace();
+  return {
+    scenes: state.scenes.map(serializeSceneWorkspace),
+    activeSceneId: state.activeSceneId,
+    items: state.items.map(serializeItem),
+    sets: state.sets.map(serializeStageSet),
+    activeSetId: state.activeSetId,
+    customCharacters: state.customCharacters.map((item) => ({ ...item })),
+    customObjects: state.customObjects.map((item) => ({ ...item })),
+    customTextures: state.customTextures.map((item) => ({ ...item })),
+    customMusic: state.customMusic.map((item) => ({ ...item })),
+    animationChunks: state.animationChunks.map(serializeAnimationChunk),
+    stageDrawings: state.stageDrawings.map(serializeDrawing),
+    sceneScripts: state.sceneScripts.map(serializeBlock),
+    scene: { ...state.scene },
+    physics: serializeGlobalPhysicsSettings(state.physics),
+    nextId: state.nextId,
+    globalVolume: state.globalVolume,
+  };
+}
+
+function pushUndoSnapshot() {
+  if (state.undoRestoring || state.recording) {
+    return;
+  }
+  const snapshot = JSON.stringify(buildProjectSnapshot());
+  if (state.undoStack[state.undoStack.length - 1] === snapshot) {
+    return;
+  }
+  state.undoStack.push(snapshot);
+  if (state.undoStack.length > 50) {
+    state.undoStack.shift();
+  }
+}
+
+function restoreProjectSnapshot(snapshot) {
+  state.undoRestoring = true;
+  try {
+    state.scenes = Array.isArray(snapshot.scenes) ? snapshot.scenes.map(normalizeSceneWorkspace) : [];
+    state.sets = Array.isArray(snapshot.sets) ? snapshot.sets.map(normalizeStageSet) : [];
+    state.activeSceneId = snapshot.activeSceneId || null;
+    state.activeSetId = snapshot.activeSetId || null;
+    state.customCharacters = Array.isArray(snapshot.customCharacters) ? snapshot.customCharacters.map((item) => ({ ...item })) : [];
+    state.customObjects = Array.isArray(snapshot.customObjects) ? snapshot.customObjects.map((item) => ({ ...item })) : [];
+    state.customTextures = Array.isArray(snapshot.customTextures) ? snapshot.customTextures.map((item) => ({ ...item })) : [];
+    state.customMusic = Array.isArray(snapshot.customMusic) ? snapshot.customMusic.map((item) => ({ ...item })) : [];
+    state.animationChunks = Array.isArray(snapshot.animationChunks) ? snapshot.animationChunks.map(normalizeAnimationChunk) : [];
+    state.physics = snapshot.physics ? normalizeGlobalPhysicsSettings(snapshot.physics) : createDefaultPhysicsSettings();
+    state.nextId = typeof snapshot.nextId === "number" ? snapshot.nextId : state.nextId;
+    state.globalVolume = typeof snapshot.globalVolume === "number" ? clamp(snapshot.globalVolume, 0, 1) : state.globalVolume;
+    ensureDefaultScene();
+    ensureDefaultSet();
+    loadSceneWorkspace(state.activeSceneId);
+    hideDrawingContextMenu();
+    hideSetDrawingContextMenu();
+    patternCaches.stage.clear();
+    patternCaches.recording.clear();
+    patternCaches.set.clear();
+    patternCaches.builder.clear();
+    populateToolLists();
+    populateSetToolLists();
+    updateToolButtons();
+    updateSelectionLabel();
+    updateToolLabel();
+    renderPhysicsControls();
+    renderScriptCategoryTabs();
+    renderScriptPalette();
+    renderActiveScriptEditor();
+    renderAudioLibrary();
+    renderStageModule();
+    markProjectDirty();
+    saveProjectState();
+  } finally {
+    state.undoRestoring = false;
+  }
+}
+
+function undoLastAction() {
+  if (state.recording || state.undoStack.length === 0) {
+    return;
+  }
+  const snapshot = state.undoStack.pop();
+  if (!snapshot) {
+    return;
+  }
+  restoreProjectSnapshot(JSON.parse(snapshot));
 }
 
 function saveProjectState() {
@@ -2477,7 +2578,7 @@ function getPhysicsShape(item) {
       type: "circle",
       x: item.x,
       y: item.y,
-      radius: Math.min(size.w, size.h) * 0.5,
+      radius: Math.min(size.w, size.h) * 0.46,
     };
   }
   return {
@@ -2686,7 +2787,7 @@ function getCircleBoxCollision(circle, box) {
       dy = 0;
       distance = 1;
       return {
-        normal: { x: dx, y: 0 },
+        normal: { x: -dx, y: 0 },
         penetration: circle.radius + diffX,
       };
     }
@@ -2694,7 +2795,7 @@ function getCircleBoxCollision(circle, box) {
     dy = offsetY >= 0 ? 1 : -1;
     distance = 1;
     return {
-      normal: { x: 0, y: dy },
+      normal: { x: 0, y: -dy },
       penetration: circle.radius + diffY,
     };
   }
@@ -2704,7 +2805,7 @@ function getCircleBoxCollision(circle, box) {
   }
 
   return {
-    normal: { x: dx / distance, y: dy / distance },
+    normal: { x: -dx / distance, y: -dy / distance },
     penetration: circle.radius - distance,
   };
 }
@@ -5375,6 +5476,7 @@ function closeStageModule() {
   state.stageModuleOpen = false;
   state.setInteraction = null;
   hideSetActorContextMenu();
+  hideSetDrawingContextMenu();
   closeSetMiniCodePanel();
   closeObjectPhysicsEditor();
   elements.stageModule.classList.add("hidden");
@@ -5577,6 +5679,7 @@ function placeItemFromTool(point) {
     return;
   }
 
+  pushUndoSnapshot();
   clampItemToStage(item);
   state.items.push(item);
   setSelection([item.id]);
@@ -5861,6 +5964,7 @@ function renderCharacterBuilderImage() {
 }
 
 function saveCharacterBuilder() {
+  pushUndoSnapshot();
   const isObjectBuilder = state.characterBuilder.assetType === "object";
   const name = elements.characterBuilderName.value.trim() || (isObjectBuilder ? "Custom Object" : "Custom Character");
   const imageData = renderCharacterBuilderImage();
@@ -5968,6 +6072,7 @@ function pasteCharacterBuilderClipboard() {
   if (!builder.clipboard.items.length && !builder.clipboard.drawings.length) {
     return;
   }
+  pushUndoSnapshot();
 
   if (builder.clipboard.items.length > 0) {
     const template = builder.clipboard.items[0];
@@ -6001,6 +6106,7 @@ function onCharacterBuilderPointerDown(event) {
   characterBuilderCanvas.setPointerCapture?.(event.pointerId);
 
   if (state.characterBuilder.activeTool === "object") {
+    pushUndoSnapshot();
     const item = createObjectItem(state.characterBuilder.toolSelection.object, point.x, point.y);
     clampBuilderItem(item);
     state.characterBuilder.items.push(item);
@@ -6011,12 +6117,14 @@ function onCharacterBuilderPointerDown(event) {
   }
 
   if (state.characterBuilder.activeTool === "texture") {
+    pushUndoSnapshot();
     applyBuilderTexture(point);
     state.characterBuilder.interaction = { type: "paintTexture" };
     return;
   }
 
   if (state.characterBuilder.activeTool === "bucket") {
+    pushUndoSnapshot();
     const item = hitTestBuilderItem(point);
     if (fillObjectColor(item, state.characterBuilder.fillColor)) {
       state.characterBuilder.selectedItemId = item.id;
@@ -6034,6 +6142,7 @@ function onCharacterBuilderPointerDown(event) {
   }
 
   if (state.characterBuilder.activeTool === "pen") {
+    pushUndoSnapshot();
     const drawing = normalizeDrawing({
       id: `builder-drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: "path",
@@ -6053,11 +6162,13 @@ function onCharacterBuilderPointerDown(event) {
   const selectedItem = state.characterBuilder.items.find((item) => item.id === state.characterBuilder.selectedItemId);
   const rotateHandle = hitTestRotationHandle(selectedItem, point);
   if (rotateHandle) {
+    pushUndoSnapshot();
     state.characterBuilder.interaction = beginRotateInteraction(selectedItem, point);
     return;
   }
   const resizeHandle = hitTestResizeHandle(selectedItem, point);
   if (resizeHandle) {
+    pushUndoSnapshot();
     state.characterBuilder.interaction = {
       type: "resize",
       itemId: selectedItem.id,
@@ -6070,6 +6181,7 @@ function onCharacterBuilderPointerDown(event) {
   const selectedDrawing = state.characterBuilder.drawings.find((drawing) => drawing.id === state.characterBuilder.selectedDrawingId);
   const drawingResizeHandle = hitTestDrawingResizeHandle(selectedDrawing, point);
   if (drawingResizeHandle) {
+    pushUndoSnapshot();
     state.characterBuilder.interaction = {
       type: "drawingResize",
       drawingId: selectedDrawing.id,
@@ -6081,6 +6193,7 @@ function onCharacterBuilderPointerDown(event) {
 
   const hitItem = hitTestBuilderItem(point);
   if (hitItem) {
+    pushUndoSnapshot();
     state.characterBuilder.selectedItemId = hitItem.id;
     state.characterBuilder.selectedDrawingId = null;
     state.characterBuilder.interaction = { type: "dragItem", itemId: hitItem.id, start: point, x: hitItem.x, y: hitItem.y };
@@ -6089,6 +6202,7 @@ function onCharacterBuilderPointerDown(event) {
 
   const hitDrawing = hitTestBuilderDrawing(point);
   if (hitDrawing) {
+    pushUndoSnapshot();
     state.characterBuilder.selectedDrawingId = hitDrawing.id;
     state.characterBuilder.selectedItemId = null;
     state.characterBuilder.interaction = {
@@ -6195,6 +6309,7 @@ function onCharacterBuilderPointerUp(event) {
 }
 
 function deleteCharacterBuilderSelection() {
+  pushUndoSnapshot();
   const builder = state.characterBuilder;
   if (builder.selectedItemId != null) {
     builder.items = builder.items.filter((item) => item.id !== builder.selectedItemId);
@@ -6616,6 +6731,7 @@ function setSetEditorTool(tool) {
   state.setSelectedItemId = null;
   state.setSelectedDrawingId = null;
   state.setPointerMoved = false;
+  hideSetDrawingContextMenu();
   renderStageModule();
 }
 
@@ -6639,6 +6755,7 @@ function renderSceneList() {
 }
 
 function addSceneWorkspace() {
+  pushUndoSnapshot();
   syncCurrentSceneToWorkspace();
   const scene = createSceneWorkspace(createSceneName());
   state.scenes.push(scene);
@@ -6658,6 +6775,7 @@ function selectSceneWorkspace(sceneId) {
 }
 
 function addStageSet() {
+  pushUndoSnapshot();
   const nextSet = createStageSet(createSetName());
   state.sets.push(nextSet);
   state.activeSetId = nextSet.id;
@@ -6743,6 +6861,34 @@ function hideSetActorContextMenu() {
   elements.setActorContextMenu.classList.add("hidden");
 }
 
+function showSetDrawingContextMenu(drawingId, event) {
+  state.setContextDrawingId = drawingId;
+  const panelRect = elements.stageModule.querySelector(".stage-module-shell").getBoundingClientRect();
+  elements.setDrawingContextMenu.style.left = `${clamp(event.clientX - panelRect.left, 12, panelRect.width - 170)}px`;
+  elements.setDrawingContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - 90)}px`;
+  elements.setDrawingContextMenu.classList.remove("hidden");
+}
+
+function hideSetDrawingContextMenu() {
+  state.setContextDrawingId = null;
+  elements.setDrawingContextMenu.classList.add("hidden");
+}
+
+function deleteSetContextDrawing() {
+  if (!state.setContextDrawingId) {
+    return;
+  }
+  pushUndoSnapshot();
+  const set = getActiveSet();
+  set.drawings = set.drawings.filter((drawing) => drawing.id !== state.setContextDrawingId);
+  if (state.setSelectedDrawingId === state.setContextDrawingId) {
+    state.setSelectedDrawingId = null;
+  }
+  hideSetDrawingContextMenu();
+  markProjectDirty();
+  renderStageModule();
+}
+
 function closeSetMiniCodePanel() {
   state.setMiniCodeItemId = null;
   state.selectedScriptBlockId = null;
@@ -6751,6 +6897,7 @@ function closeSetMiniCodePanel() {
 }
 
 function deleteSelectedSetThing() {
+  pushUndoSnapshot();
   const set = getActiveSet();
   if (state.setSelection.size > 0) {
     const deletedIds = new Set(state.setSelection);
@@ -6796,6 +6943,7 @@ function copySetSelection() {
 
 function pasteSetClipboard() {
   const set = getActiveSet();
+  pushUndoSnapshot();
   const newIds = [];
   for (const template of state.setClipboard.items) {
     const item = normalizeItem({
@@ -6887,19 +7035,23 @@ function onSetPointerDown(event) {
   state.setPointerMoved = false;
   setCanvas.setPointerCapture?.(event.pointerId);
   hideSetActorContextMenu();
+  hideSetDrawingContextMenu();
 
   if (state.setEditorTool === "character" || state.setEditorTool === "object") {
+    pushUndoSnapshot();
     placeSetItem(point);
     return;
   }
 
   if (state.setEditorTool === "texture") {
+    pushUndoSnapshot();
     applySetTextureAtPoint(point);
     state.setInteraction = { type: "paintTexture" };
     return;
   }
 
   if (state.setEditorTool === "pen") {
+    pushUndoSnapshot();
     const drawing = {
       id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       color: state.setPenColor,
@@ -6914,11 +7066,13 @@ function onSetPointerDown(event) {
   }
 
   if (state.setEditorTool === "bucket") {
+    pushUndoSnapshot();
     fillSetDrawingAtPoint(point);
     return;
   }
 
   if (state.setEditorTool === "light") {
+    pushUndoSnapshot();
     const hitLight = hitTestSetLight(set, point.x, point.y);
     const light = hitLight || createLight(point.x, point.y);
     if (!hitLight) {
@@ -6937,12 +7091,14 @@ function onSetPointerDown(event) {
   const setSelectedItem = getSetSelectedItem();
   const rotateHandle = hitTestRotationHandle(setSelectedItem, point);
   if (rotateHandle) {
+    pushUndoSnapshot();
     state.setInteraction = beginRotateInteraction(setSelectedItem, point);
     return;
   }
 
   const resizeHandle = hitTestResizeHandle(setSelectedItem, point);
   if (resizeHandle) {
+    pushUndoSnapshot();
     state.setInteraction = {
       type: "resizeItem",
       itemId: setSelectedItem.id,
@@ -6956,6 +7112,7 @@ function onSetPointerDown(event) {
   const selectedDrawing = set.drawings.find((drawing) => drawing.id === state.setSelectedDrawingId);
   const drawingResizeHandle = hitTestDrawingResizeHandle(selectedDrawing, point);
   if (drawingResizeHandle) {
+    pushUndoSnapshot();
     state.setInteraction = {
       type: "resizeDrawing",
       drawingId: selectedDrawing.id,
@@ -6967,6 +7124,7 @@ function onSetPointerDown(event) {
 
   const light = hitTestSetLight(set, point.x, point.y);
   if (light) {
+    pushUndoSnapshot();
     state.setSelectedLightId = light.id;
     state.setSelectedItemId = null;
     state.setSelectedDrawingId = null;
@@ -6996,6 +7154,7 @@ function onSetPointerDown(event) {
     for (const selectedItem of getSetSelectedItems()) {
       snapshot.set(selectedItem.id, { x: selectedItem.x, y: selectedItem.y });
     }
+    pushUndoSnapshot();
     state.setInteraction = { type: "dragItem", itemId: item.id, start: point, snapshot, wasAlreadySelected };
     renderStageModule();
     return;
@@ -7007,6 +7166,7 @@ function onSetPointerDown(event) {
     state.setSelectedItemId = null;
     state.setSelectedLightId = null;
     state.setSelectedDrawingId = drawing.id;
+    pushUndoSnapshot();
     const bounds = getDrawingBounds(drawing);
     state.setInteraction = {
       type: "dragDrawing",
@@ -7165,6 +7325,7 @@ function onSetContextMenu(event) {
   const item = hitTestSetItem(getActiveSet(), point.x, point.y);
   if (item) {
     setSetSelection([item.id]);
+    hideSetDrawingContextMenu();
     showSetActorContextMenu(item, event);
     renderStageModule();
     return;
@@ -7172,12 +7333,15 @@ function onSetContextMenu(event) {
   hideSetActorContextMenu();
   const drawing = hitTestSetDrawing(getActiveSet(), point);
   if (drawing) {
-    const set = getActiveSet();
-    set.drawings = set.drawings.filter((candidate) => candidate.id !== drawing.id);
-    state.setSelectedDrawingId = null;
-    markProjectDirty();
+    state.setSelection.clear();
+    state.setSelectedItemId = null;
+    state.setSelectedLightId = null;
+    state.setSelectedDrawingId = drawing.id;
+    showSetDrawingContextMenu(drawing.id, event);
     renderStageModule();
+    return;
   }
+  hideSetDrawingContextMenu();
 }
 
 function hitTest(x, y) {
@@ -7248,6 +7412,7 @@ function onPointerDown(event) {
   state.lastPointer = { x: point.x, y: point.y, inside: true };
   stageCanvas.setPointerCapture?.(event.pointerId);
   hideActorContextMenu();
+  hideDrawingContextMenu();
 
   if (state.penAnimation.actorId && state.penAnimation.tool) {
     startPenAnimationDrawing(point);
@@ -7260,6 +7425,7 @@ function onPointerDown(event) {
   }
 
   if (state.activeTool && state.activeTool.type === "texture") {
+    pushUndoSnapshot();
     state.dragPaintedIds = new Set();
     applyTextureAtPoint(point);
     state.interaction = { type: "paintTexture" };
@@ -7267,6 +7433,7 @@ function onPointerDown(event) {
   }
 
   if (state.activeTool && state.activeTool.type === "bucket") {
+    pushUndoSnapshot();
     const item = hitTest(point.x, point.y);
     if (fillObjectColor(item, state.activeTool.id || elements.stageFillColor.value)) {
       setSelection([item.id]);
@@ -7287,6 +7454,7 @@ function onPointerDown(event) {
   }
 
   if (state.activeTool && state.activeTool.type === "draw") {
+    pushUndoSnapshot();
     const drawing = {
       id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: "path",
@@ -7303,6 +7471,7 @@ function onPointerDown(event) {
 
   const selectionResizeHandle = hitTestSelectionResizeHandle(point);
   if (selectionResizeHandle) {
+    pushUndoSnapshot();
     const snapshots = new Map();
     for (const item of getSelectedItems()) {
       snapshots.set(item.id, {
@@ -7324,11 +7493,13 @@ function onPointerDown(event) {
   const selectedItem = getSingleSelectedItem();
   const rotateHandle = hitTestRotationHandle(selectedItem, point);
   if (rotateHandle) {
+    pushUndoSnapshot();
     state.interaction = beginRotateInteraction(selectedItem, point);
     return;
   }
   const resizeHandle = hitTestResizeHandle(selectedItem, point);
   if (resizeHandle) {
+    pushUndoSnapshot();
     state.interaction = {
       type: "resize",
       itemId: selectedItem.id,
@@ -7348,10 +7519,12 @@ function onPointerDown(event) {
         setSelection([hit.id]);
       }
     }
+    pushUndoSnapshot();
     startDragSelection(point);
   } else {
     const drawing = hitTestStageDrawing(point);
     if (drawing) {
+      pushUndoSnapshot();
       state.selection.clear();
       state.stageSelectedDrawingId = drawing.id;
       updateSelectionLabel();
@@ -7556,11 +7729,38 @@ function hideActorContextMenu() {
   elements.actorContextMenu.classList.add("hidden");
 }
 
+function showDrawingContextMenu(drawingId, event) {
+  state.contextDrawingId = drawingId;
+  const panelRect = elements.drawingContextMenu.parentElement.getBoundingClientRect();
+  elements.drawingContextMenu.style.left = `${clamp(event.clientX - panelRect.left, 12, panelRect.width - 170)}px`;
+  elements.drawingContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - 90)}px`;
+  elements.drawingContextMenu.classList.remove("hidden");
+}
+
+function hideDrawingContextMenu() {
+  state.contextDrawingId = null;
+  elements.drawingContextMenu.classList.add("hidden");
+}
+
+function deleteContextDrawing() {
+  if (!state.contextDrawingId) {
+    return;
+  }
+  pushUndoSnapshot();
+  state.stageDrawings = state.stageDrawings.filter((drawing) => drawing.id !== state.contextDrawingId);
+  if (state.stageSelectedDrawingId === state.contextDrawingId) {
+    state.stageSelectedDrawingId = null;
+  }
+  hideDrawingContextMenu();
+  markProjectDirty();
+}
+
 function toggleActorPhysicsEnabled(actorId) {
   const actor = getItemById(actorId);
   if (!actor || !isPhysicsObject(actor)) {
     return;
   }
+  pushUndoSnapshot();
   const nextEnabled = !actor.physics.enabled;
   actor.physics.enabled = nextEnabled;
   if (nextEnabled) {
@@ -7602,16 +7802,18 @@ function onStageContextMenu(event) {
   if (!actor) {
     const drawing = hitTestStageDrawing(point);
     if (drawing) {
-      state.stageDrawings = state.stageDrawings.filter((candidate) => candidate.id !== drawing.id);
-      state.stageSelectedDrawingId = null;
       hideActorContextMenu();
-      elements.toolLabel.textContent = "Drawing deleted.";
-      markProjectDirty();
+      state.selection.clear();
+      state.stageSelectedDrawingId = drawing.id;
+      updateSelectionLabel();
+      showDrawingContextMenu(drawing.id, event);
       return;
     }
     hideActorContextMenu();
+    hideDrawingContextMenu();
     return;
   }
+  hideDrawingContextMenu();
   if (!state.selection.has(actor.id)) {
     if (actor.groupId) {
       setSelection(state.items.filter((item) => item.groupId === actor.groupId).map((item) => item.id));
@@ -7759,6 +7961,7 @@ function ungroupSelection() {
 }
 
 function changeSelectedObjectColor(color) {
+  pushUndoSnapshot();
   for (const item of getSelectedItems()) {
     if (item.kind === "object") {
       item.color = color;
@@ -7799,6 +8002,7 @@ function copySelection() {
 
 function pasteClipboard() {
   if (state.stageDrawingClipboard.length > 0 && state.clipboard.length === 0) {
+    pushUndoSnapshot();
     const drawing = normalizeDrawing(state.stageDrawingClipboard[0]);
     drawing.id = `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     offsetDrawing(drawing, 28, 28);
@@ -7813,6 +8017,7 @@ function pasteClipboard() {
   if (state.clipboard.length === 0) {
     return;
   }
+  pushUndoSnapshot();
 
   const bounds = state.clipboard.reduce(
     (accumulator, item) => {
@@ -7891,6 +8096,7 @@ function pasteClipboard() {
 }
 
 function deleteSelection() {
+  pushUndoSnapshot();
   if (state.stageSelectedDrawingId != null) {
     state.stageDrawings = state.stageDrawings.filter((drawing) => drawing.id !== state.stageSelectedDrawingId);
     state.stageSelectedDrawingId = null;
@@ -9540,6 +9746,7 @@ async function goToStudio() {
 }
 
 function clearStage() {
+  pushUndoSnapshot();
   state.items = [];
   state.stageDrawings = [];
   state.sceneScripts = [];
@@ -9762,6 +9969,7 @@ function renderPhysicsControls() {
 }
 
 function togglePhysicsEnabled() {
+  pushUndoSnapshot();
   state.physics.enabled = !state.physics.enabled;
   state.physics.accumulator = 0;
   if (!state.physics.enabled) {
@@ -9781,6 +9989,7 @@ function togglePhysicsEnabled() {
 }
 
 function toggleGravityEnabled() {
+  pushUndoSnapshot();
   state.physics.gravityEnabled = !state.physics.gravityEnabled;
   if (state.physics.gravityEnabled) {
     for (const item of getActiveStageActors()) {
@@ -9844,6 +10053,7 @@ function updatePhysicsEditorItem(update) {
   if (!item) {
     return;
   }
+  pushUndoSnapshot();
   update(item.physics);
   if (item.physics.bodyType === "static") {
     item.physics.gravityAffected = false;
@@ -9994,14 +10204,16 @@ function renderSetList() {
 
 function renderSetToolPanels() {
   for (const button of elements.setToolTabs) {
-    button.classList.toggle("active", button.dataset.setTool === state.setEditorTool);
+    const isPenFamily = button.dataset.setTool === "pen" && (state.setEditorTool === "pen" || state.setEditorTool === "bucket");
+    button.classList.toggle("active", isPenFamily || button.dataset.setTool === state.setEditorTool);
   }
   elements.setCharacterList.classList.toggle("hidden", state.setEditorTool !== "character");
   elements.setObjectList.classList.toggle("hidden", state.setEditorTool !== "object");
   elements.setTextureList.classList.toggle("hidden", state.setEditorTool !== "texture");
-  elements.setPenControls.classList.toggle("hidden", state.setEditorTool !== "pen");
-  elements.setBucketControls.classList.toggle("hidden", state.setEditorTool !== "bucket");
+  elements.setPenControls.classList.toggle("hidden", !(state.setEditorTool === "pen" || state.setEditorTool === "bucket"));
   elements.setLightControls.classList.toggle("hidden", state.setEditorTool !== "light");
+  elements.setUsePenButton.classList.toggle("active", state.setEditorTool === "pen");
+  elements.setUseBucketButton.classList.toggle("active", state.setEditorTool === "bucket");
 
   for (const card of elements.stageModule.querySelectorAll(".set-tool-grid .tool-card")) {
     const type = card.dataset.toolType;
@@ -10103,6 +10315,7 @@ async function importImageAsset(kind, file) {
   if (!file) {
     return;
   }
+  pushUndoSnapshot();
   const imageData = await readFileAsDataUrl(file);
   const id = `custom-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const name = createImportedAssetName(file, `Imported ${kind}`);
@@ -10186,6 +10399,7 @@ async function importMusicAsset(file, blockId = null) {
   if (!file) {
     return;
   }
+  pushUndoSnapshot();
   const dataUrl = await readFileAsDataUrl(file);
   const value = `custom-music-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const label = createImportedAssetName(file, "Imported music");
@@ -10227,6 +10441,7 @@ function cloneMusicPattern(pattern = state.musicMaker.cells) {
 }
 
 function saveMusicMakerLoop() {
+  pushUndoSnapshot();
   const label = elements.musicMakerName.value.trim() || "My Loop";
   const value = `custom-music-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   state.customMusic.push({
@@ -10250,6 +10465,7 @@ function renameAudioItem(audioValue) {
   if (!nextName?.trim()) {
     return;
   }
+  pushUndoSnapshot();
   audioItem.label = nextName.trim();
   if (audioItem.source === "music-maker") {
     elements.musicMakerName.value = audioItem.label;
@@ -10313,9 +10529,27 @@ function renderAudioLibrary() {
   }
 }
 
+function layoutExpandedMusicMaker(referenceRect = elements.musicMakerCard.getBoundingClientRect()) {
+  const studioRect = elements.studioScreen.getBoundingClientRect();
+  const right = Math.max(12, window.innerWidth - referenceRect.right);
+  const top = clamp(referenceRect.top, 96, window.innerHeight - 320);
+  const width = Math.min(Math.max(referenceRect.width + studioRect.width * 0.4, 520), Math.max(520, studioRect.width - 24));
+  elements.musicMakerCard.style.top = `${top}px`;
+  elements.musicMakerCard.style.right = `${right}px`;
+  elements.musicMakerCard.style.width = `${width}px`;
+}
+
 function toggleMusicMakerExpanded() {
+  const collapsedRect = elements.musicMakerCard.getBoundingClientRect();
   state.audio.musicMakerExpanded = !state.audio.musicMakerExpanded;
   elements.musicMakerCard.classList.toggle("expanded", state.audio.musicMakerExpanded);
+  if (state.audio.musicMakerExpanded) {
+    layoutExpandedMusicMaker(collapsedRect);
+  } else {
+    elements.musicMakerCard.style.top = "";
+    elements.musicMakerCard.style.right = "";
+    elements.musicMakerCard.style.width = "";
+  }
   elements.expandMusicMakerButton.textContent = state.audio.musicMakerExpanded ? "Music Maker >>" : "Music Maker ->";
 }
 
@@ -10481,6 +10715,7 @@ function endTextureEditorStroke(event) {
 }
 
 function saveTextureEditor() {
+  pushUndoSnapshot();
   const existingId = state.textureEditor.textureId;
   const imageData = elements.textureEditorCanvas.toDataURL("image/png");
   let texture = state.customTextures.find((candidate) => candidate.id === existingId);
@@ -10521,6 +10756,7 @@ function bindEvents() {
   elements.libraryToStudioButton.addEventListener("click", goToStudio);
   elements.libraryMenuButton.addEventListener("click", goToMenu);
   elements.clearStageButton.addEventListener("click", clearStage);
+  elements.globalUndoButton.addEventListener("click", undoLastAction);
   elements.recordButton.addEventListener("click", startRecording);
   elements.stopButton.addEventListener("click", stopRecording);
   elements.openLibraryButton.addEventListener("click", openLibrary);
@@ -10536,6 +10772,7 @@ function bindEvents() {
   elements.actorContextGroupButton.addEventListener("click", groupSelection);
   elements.actorContextUngroupButton.addEventListener("click", ungroupSelection);
   elements.actorContextColor.addEventListener("input", () => changeSelectedObjectColor(elements.actorContextColor.value));
+  elements.drawingContextDeleteButton.addEventListener("click", deleteContextDrawing);
   elements.closeObjectPhysicsButton.addEventListener("click", closeObjectPhysicsEditor);
   elements.physicsToggleButton.addEventListener("click", togglePhysicsEnabled);
   elements.gravityToggleButton.addEventListener("click", toggleGravityEnabled);
@@ -10714,8 +10951,10 @@ function bindEvents() {
     state.setPenColor = elements.setPenColor.value;
     setSetEditorTool("pen");
   });
+  elements.setUsePenButton.addEventListener("click", () => setSetEditorTool("pen"));
+  elements.setUseBucketButton.addEventListener("click", () => setSetEditorTool("bucket"));
   elements.setFillColor.addEventListener("input", () => {
-    if (state.setEditorTool !== "bucket") {
+    if (!(state.setEditorTool === "bucket" || state.setEditorTool === "pen")) {
       return;
     }
     renderStageModule();
@@ -10724,6 +10963,7 @@ function bindEvents() {
   elements.setActorContextPenButton.addEventListener("click", openSetContextPenAnimation);
   elements.setActorContextPhysicsToggleButton.addEventListener("click", toggleSetContextPhysics);
   elements.setActorContextPhysicsButton.addEventListener("click", openSetContextPhysicsEditor);
+  elements.setDrawingContextDeleteButton.addEventListener("click", deleteSetContextDrawing);
   elements.setAddLightButton.addEventListener("click", () => {
     setSetEditorTool("light");
     const set = getActiveSet();
@@ -10773,8 +11013,14 @@ function bindEvents() {
     if (!elements.actorContextMenu.contains(event.target)) {
       hideActorContextMenu();
     }
+    if (!elements.drawingContextMenu.contains(event.target)) {
+      hideDrawingContextMenu();
+    }
     if (!elements.setActorContextMenu.contains(event.target)) {
       hideSetActorContextMenu();
+    }
+    if (!elements.setDrawingContextMenu.contains(event.target)) {
+      hideSetDrawingContextMenu();
     }
   });
   window.addEventListener("contextmenu", (event) => {
@@ -10782,7 +11028,12 @@ function bindEvents() {
       hideBlockInfo();
     }
   });
-  window.addEventListener("resize", ensureCanvasSize);
+  window.addEventListener("resize", () => {
+    ensureCanvasSize();
+    if (state.audio.musicMakerExpanded) {
+      layoutExpandedMusicMaker();
+    }
+  });
   window.addEventListener("beforeunload", saveProjectState);
 }
 

@@ -40,6 +40,7 @@
           <button id="menuButton" type="button" class="ghost-button">Menu</button>
         </div>
       </header>
+      <button id="globalUndoButton" type="button" class="ghost-button global-undo-button">Undo</button>
 
       <div class="studio-layout">
         <section class="stage-panel" aria-label="Stage">
@@ -59,6 +60,9 @@
             <button id="actorContextGroupButton" type="button">Group</button>
             <button id="actorContextUngroupButton" type="button">Ungroup</button>
             <label class="set-control-label">Object color <input id="actorContextColor" type="color" value="#f4a261"></label>
+          </div>
+          <div id="drawingContextMenu" class="actor-context-menu hidden">
+            <button id="drawingContextDeleteButton" type="button">Delete Drawing</button>
           </div>
           <aside id="objectPhysicsPanel" class="object-physics-panel hidden" aria-label="Object physics editor">
             <div class="texture-editor-header">
@@ -337,7 +341,6 @@
                 <button type="button" class="set-tool-tab" data-set-tool="object">Objects</button>
                 <button type="button" class="set-tool-tab" data-set-tool="texture">Textures</button>
                 <button type="button" class="set-tool-tab" data-set-tool="pen">Pen</button>
-                <button type="button" class="set-tool-tab" data-set-tool="bucket">Bucket</button>
                 <button type="button" class="set-tool-tab" data-set-tool="light">Lights</button>
               </div>
               <div id="setCharacterList" class="set-tool-grid"></div>
@@ -347,10 +350,11 @@
                 <p>Draw directly onto this set.</p>
                 <div id="setBaseColors" class="set-color-row"></div>
                 <label class="set-control-label">Custom color <input id="setPenColor" type="color" value="#2f8f83"></label>
-              </div>
-              <div id="setBucketControls" class="set-control-card hidden">
-                <p>Fill closed set drawings.</p>
                 <label class="set-control-label">Fill color <input id="setFillColor" type="color" value="#ffd166"></label>
+                <div class="audio-actions">
+                  <button id="setUsePenButton" type="button" class="secondary-button">Use Pen</button>
+                  <button id="setUseBucketButton" type="button" class="secondary-button">Use Bucket</button>
+                </div>
               </div>
               <div id="setLightControls" class="set-control-card hidden">
                 <button id="setAddLightButton" type="button" class="secondary-button full-width">Add Light Source</button>
@@ -372,6 +376,9 @@
             <button id="setActorContextPenButton" type="button">Pen Animation</button>
             <button id="setActorContextPhysicsToggleButton" type="button">Physics On</button>
             <button id="setActorContextPhysicsButton" type="button">Advanced Physics</button>
+          </div>
+          <div id="setDrawingContextMenu" class="actor-context-menu hidden">
+            <button id="setDrawingContextDeleteButton" type="button">Delete Drawing</button>
           </div>
 
           <aside id="setMiniCodePanel" class="set-mini-code-panel hidden" aria-label="Set mini code panel">

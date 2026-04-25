@@ -534,6 +534,13 @@ button:disabled {
   backdrop-filter: blur(10px);
 }
 
+.global-undo-button {
+  position: absolute;
+  top: 5.4rem;
+  right: 1.1rem;
+  z-index: 15;
+}
+
 .scripts-module-shell {
   position: relative;
   z-index: 1;
