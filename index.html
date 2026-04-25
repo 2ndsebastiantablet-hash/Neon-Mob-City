@@ -23,29 +23,87 @@
         <div class="menu-actions">
           <button id="playButton" type="button" class="primary-button">Play</button>
           <button id="libraryButton" type="button" class="secondary-button">Library</button>
+          <button id="friendsButton" type="button" class="ghost-button">Friends</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="projectSelectScreen" class="screen menu-screen hidden" aria-label="Project select">
+      <div class="menu-card menu-card-wide">
+        <p class="menu-kicker">Select Project</p>
+        <h2>Your Projects</h2>
+        <p class="menu-copy">Each project keeps its own scenes, stage state, scripts, comments, and collaborators.</p>
+        <div class="menu-actions project-select-actions">
+          <button id="createProjectButton" type="button" class="primary-button">+ New Project</button>
+          <button id="projectSelectMenuButton" type="button" class="ghost-button">Back To Menu</button>
+        </div>
+        <div id="projectList" class="project-list"></div>
+      </div>
+    </section>
+
+    <section id="friendsScreen" class="screen menu-screen hidden" aria-label="Friends">
+      <div class="menu-card menu-card-wide friends-card">
+        <div class="friends-header">
+          <div>
+            <p class="menu-kicker">Friends</p>
+            <h2>Profile & Friend Codes</h2>
+          </div>
+          <button id="friendsBackButton" type="button" class="ghost-button">Back To Menu</button>
+        </div>
+        <div class="friends-layout">
+          <section class="friends-panel">
+            <h3>Your Profile</h3>
+            <div class="profile-row">
+              <button id="profileAvatarButton" type="button" class="profile-avatar">W</button>
+              <div class="profile-copy">
+                <button id="profileNameButton" type="button" class="profile-name-button">Worm Director</button>
+                <p id="profileFriendCode" class="profile-friend-code">Friend code: WRM-000000</p>
+              </div>
+            </div>
+            <input id="profileColorInput" class="hidden" type="color" value="#2f8f83">
+            <label class="set-control-label">Add friend by code <input id="friendCodeInput" type="text" placeholder="WRM-123456"></label>
+            <button id="sendFriendRequestButton" type="button" class="primary-button full-width">Send Friend Request</button>
+          </section>
+
+          <section class="friends-panel">
+            <h3>Friend Requests</h3>
+            <div id="friendRequestsList" class="friends-list"></div>
+          </section>
+
+          <section class="friends-panel">
+            <h3>Friends</h3>
+            <div id="friendsList" class="friends-list"></div>
+          </section>
         </div>
       </div>
     </section>
 
     <section id="studioScreen" class="screen studio-screen hidden" aria-label="Movie studio">
-      <header class="topbar">
-        <div>
+      <header class="topbar studio-topbar">
+        <div class="studio-topbar-left">
+          <button id="leaveProjectButton" type="button" class="ghost-button">Leave</button>
+          <button id="globalUndoButton" type="button" class="ghost-button">Undo</button>
+          <button id="projectAddFriendButton" type="button" class="ghost-button">Add Friend</button>
+        </div>
+        <div class="studio-project-heading">
           <p class="topbar-label">Director Mode</p>
-          <h2>Worms Studio</h2>
+          <h2 id="projectTitle">Worms Studio</h2>
+          <p id="projectRoleLabel" class="studio-role-label">Owner</p>
         </div>
         <div class="topbar-actions">
+          <div id="projectPresenceRow" class="project-presence-row"></div>
+          <button id="projectMembersButton" type="button" class="ghost-button">Friends List</button>
           <span id="recordingBadge" class="recording-badge">Idle</span>
           <button id="clearStageButton" type="button" class="ghost-button">Clear Stage</button>
           <button id="studioLibraryButton" type="button" class="ghost-button">Library</button>
-          <button id="menuButton" type="button" class="ghost-button">Menu</button>
         </div>
       </header>
-      <button id="globalUndoButton" type="button" class="ghost-button global-undo-button">Undo</button>
 
       <div class="studio-layout">
         <section class="stage-panel" aria-label="Stage">
           <div class="stage-frame">
             <canvas id="stageCanvas" aria-label="Movie stage"></canvas>
+            <div id="projectCommentPopup" class="project-comment-popup hidden"></div>
           </div>
           <div class="stage-footer">
             <p id="selectionLabel" class="stage-status">No selection.</p>
@@ -63,6 +121,9 @@
           </div>
           <div id="drawingContextMenu" class="actor-context-menu hidden">
             <button id="drawingContextDeleteButton" type="button">Delete Drawing</button>
+          </div>
+          <div id="commentContextMenu" class="actor-context-menu hidden">
+            <button id="addCommentButton" type="button">Add Comment</button>
           </div>
           <aside id="objectPhysicsPanel" class="object-physics-panel hidden" aria-label="Object physics editor">
             <div class="texture-editor-header">
@@ -194,21 +255,12 @@
             <section id="audioPanel" class="tool-panel hidden" aria-label="Audio">
               <div class="audio-panel">
                 <button id="importAudioButton" type="button" class="secondary-button full-width import-button">Import Audio</button>
+                <button id="openMusicMakerButton" type="button" class="primary-button full-width import-button">Open Music Maker</button>
                 <div class="set-control-card">
                   <p>Record from your microphone. A 3-second countdown starts before capture.</p>
                   <button id="recordMicButton" type="button" class="primary-button full-width">Microphone</button>
                   <button id="stopMicButton" type="button" class="secondary-button full-width" disabled>Stop Mic Recording</button>
                   <p id="audioCountdownLabel" class="audio-countdown">Mic idle.</p>
-                </div>
-                <div id="musicMakerCard" class="set-control-card music-maker-card">
-                  <p>Music Maker: click notes in the grid, preview the loop, then save it into the audio library.</p>
-                  <button id="expandMusicMakerButton" type="button" class="ghost-button full-width">Music Maker -&gt;</button>
-                  <label class="set-control-label">Song name <input id="musicMakerName" type="text" value="My Loop"></label>
-                  <div id="musicMakerGrid" class="music-maker-grid" aria-label="Music maker note grid"></div>
-                  <div class="audio-actions">
-                    <button id="previewMusicMakerButton" type="button" class="ghost-button">Preview</button>
-                    <button id="saveMusicMakerButton" type="button" class="secondary-button">Save Loop</button>
-                  </div>
                 </div>
                 <div class="set-control-card">
                   <h4>Audio Library</h4>
@@ -284,6 +336,37 @@
           </div>
         </div>
         <div id="scriptBlockInfo" class="script-block-info hidden" role="dialog" aria-live="polite"></div>
+      </section>
+
+      <section id="musicMakerModule" class="scripts-module hidden" aria-label="Music Maker">
+        <div class="scripts-module-backdrop"></div>
+        <div class="music-maker-module-shell">
+          <header class="scripts-module-header">
+            <div>
+              <p class="topbar-label">Audio Workshop</p>
+              <h3>Music Maker</h3>
+              <p class="scripts-copy">Compose loops in a dedicated workspace, preview the whole pattern, then save it into your audio library.</p>
+            </div>
+            <div class="scripts-module-actions">
+              <button id="closeMusicMakerButton" type="button" class="ghost-button">Back To Audio</button>
+            </div>
+          </header>
+          <div class="music-maker-module-layout">
+            <section class="music-maker-main-panel">
+              <label class="set-control-label">Song name <input id="musicMakerName" type="text" value="My Loop"></label>
+              <div id="musicMakerGrid" class="music-maker-grid music-maker-grid-large" aria-label="Music maker note grid"></div>
+            </section>
+            <aside class="music-maker-side-panel">
+              <div class="set-control-card">
+                <p>Click cells to place notes. Each row is a different pitch or drum lane, and preview plays the full loop.</p>
+                <div class="audio-actions">
+                  <button id="previewMusicMakerButton" type="button" class="ghost-button">Preview</button>
+                  <button id="saveMusicMakerButton" type="button" class="secondary-button">Save Loop</button>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
       </section>
 
       <section id="stageModule" class="stage-module hidden" aria-label="Stage set editor">
@@ -433,6 +516,22 @@
           </div>
         </div>
       </section>
+
+      <aside id="projectMembersPanel" class="project-side-panel hidden" aria-label="Project members">
+        <div class="texture-editor-header">
+          <strong>Project Friends</strong>
+          <button id="closeProjectMembersButton" type="button" class="ghost-button">Close</button>
+        </div>
+        <div id="projectMembersList" class="friends-list"></div>
+      </aside>
+
+      <aside id="projectAddFriendPanel" class="project-side-panel hidden" aria-label="Add friend to project">
+        <div class="texture-editor-header">
+          <strong>Add Friend To Project</strong>
+          <button id="closeProjectAddFriendButton" type="button" class="ghost-button">Close</button>
+        </div>
+        <div id="projectFriendPickerList" class="friends-list"></div>
+      </aside>
     </section>
 
     <input id="importCharacterInput" class="hidden" type="file" accept="image/*">

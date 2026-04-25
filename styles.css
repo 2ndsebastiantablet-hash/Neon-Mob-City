@@ -173,6 +173,129 @@ button:disabled {
   justify-content: center;
   gap: 0.9rem;
   margin-top: 1.55rem;
+  flex-wrap: wrap;
+}
+
+.menu-card-wide {
+  width: min(68rem, 100%);
+  text-align: left;
+}
+
+.project-select-actions {
+  justify-content: flex-start;
+}
+
+.project-list,
+.friends-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.project-card,
+.friend-row,
+.request-row,
+.project-member-row {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 251, 244, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(82, 47, 18, 0.08);
+}
+
+.project-card-head,
+.friend-row-head,
+.request-row-head,
+.project-member-head,
+.friends-header,
+.profile-row,
+.studio-topbar-left,
+.project-presence-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.project-card-head,
+.friend-row-head,
+.request-row-head,
+.project-member-head,
+.friends-header {
+  justify-content: space-between;
+}
+
+.project-card-title,
+.project-meta,
+.project-member-meta,
+.profile-friend-code,
+.comment-meta {
+  margin: 0;
+}
+
+.project-meta,
+.project-member-meta,
+.profile-friend-code {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.friends-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.friends-layout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.friends-panel {
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 250, 242, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(82, 47, 18, 0.08);
+}
+
+.friends-panel h3,
+.friends-panel h4 {
+  margin-top: 0;
+}
+
+.profile-avatar,
+.presence-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  color: #fffaf3;
+  font-weight: 900;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.presence-avatar {
+  width: 2.2rem;
+  height: 2.2rem;
+  font-size: 0.85rem;
+}
+
+.profile-name-button {
+  padding: 0;
+  border-radius: 0;
+  color: var(--ink);
+  background: transparent;
+  box-shadow: none;
+  font-size: 1.08rem;
+}
+
+.profile-name-button:hover {
+  transform: none;
+  box-shadow: none;
+  color: var(--accent-deep);
 }
 
 .studio-screen,
@@ -194,11 +317,30 @@ button:disabled {
   font-size: clamp(1.8rem, 3vw, 2.7rem);
 }
 
+.studio-topbar {
+  align-items: center;
+}
+
+.studio-project-heading {
+  min-width: 0;
+}
+
+.studio-role-label {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.7rem;
+}
+
+.project-presence-row {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .recording-badge {
@@ -427,22 +569,8 @@ button:disabled {
   background: rgba(67, 42, 22, 0.08);
 }
 
-.music-maker-card {
-  transition: width 180ms ease, transform 180ms ease, box-shadow 180ms ease;
-}
-
-.music-maker-card.expanded {
-  position: fixed;
-  inset: 5rem 1.5rem 1.5rem 1.5rem;
-  z-index: 18;
-  width: auto;
-  max-height: none;
-  overflow: auto;
-  box-shadow: 0 30px 80px rgba(54, 27, 12, 0.28);
-}
-
-.music-maker-card.expanded .music-maker-grid {
-  gap: 0.36rem;
+.music-maker-grid-large {
+  min-height: 22rem;
 }
 
 .music-maker-note {
@@ -532,13 +660,6 @@ button:disabled {
   backdrop-filter: blur(10px);
 }
 
-.global-undo-button {
-  position: absolute;
-  top: 5.4rem;
-  right: 1.1rem;
-  z-index: 15;
-}
-
 .scripts-module-shell {
   position: relative;
   z-index: 1;
@@ -590,6 +711,83 @@ button:disabled {
     linear-gradient(135deg, rgba(255, 249, 239, 0.98), rgba(255, 245, 232, 0.98));
   box-shadow: 0 26px 60px rgba(54, 27, 12, 0.24);
   overflow: hidden;
+}
+
+.music-maker-module-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: calc(100vw - 2rem);
+  height: calc(100vh - 2rem);
+  margin: 1rem;
+  padding: 1rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at top left, rgba(161, 225, 255, 0.35), transparent 30%),
+    linear-gradient(135deg, rgba(255, 249, 239, 0.98), rgba(244, 249, 255, 0.98));
+  box-shadow: 0 26px 60px rgba(54, 27, 12, 0.24);
+}
+
+.music-maker-module-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  gap: 1rem;
+  min-height: 0;
+}
+
+.music-maker-main-panel,
+.music-maker-side-panel,
+.project-side-panel {
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 250, 242, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(82, 47, 18, 0.08);
+}
+
+.music-maker-main-panel {
+  display: grid;
+  gap: 1rem;
+  min-height: 0;
+}
+
+.music-maker-side-panel {
+  display: grid;
+  align-content: start;
+  gap: 0.8rem;
+}
+
+.project-side-panel {
+  position: absolute;
+  top: 5.8rem;
+  right: 1.2rem;
+  width: min(24rem, calc(100vw - 2.4rem));
+  max-height: calc(100vh - 7rem);
+  overflow: auto;
+  z-index: 14;
+  box-shadow: 0 26px 60px rgba(54, 27, 12, 0.24);
+}
+
+.project-comment-popup {
+  position: absolute;
+  min-width: 13rem;
+  max-width: 18rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(82, 47, 18, 0.12);
+  background: rgba(255, 250, 242, 0.96);
+  box-shadow: 0 24px 40px rgba(54, 27, 12, 0.2);
+  z-index: 11;
+}
+
+.project-comment-popup p {
+  margin: 0;
+}
+
+.comment-meta {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
 }
 
 .scripts-module-header,
@@ -1011,6 +1209,17 @@ button:disabled {
   margin: 0;
   color: var(--muted);
   line-height: 1.35;
+}
+
+.viewer-lock .sidebar-card,
+.viewer-lock .sidebar-tabs,
+.viewer-lock .sidebar-help {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.viewer-lock .stage-frame {
+  cursor: default;
 }
 
 .texture-editor-panel {
@@ -1444,13 +1653,16 @@ button:disabled {
 
   .scripts-module-layout,
   .stage-module-layout,
-  .character-builder-layout {
+  .character-builder-layout,
+  .music-maker-module-layout,
+  .friends-layout {
     grid-template-columns: 1fr;
   }
 
   .scripts-module-shell,
   .stage-module-shell,
-  .character-builder-shell {
+  .character-builder-shell,
+  .music-maker-module-shell {
     height: calc(100vh - 1.2rem);
     width: calc(100vw - 1.2rem);
     margin: 0.6rem;
@@ -1458,6 +1670,12 @@ button:disabled {
 
   .set-mini-code-panel {
     width: min(100%, 42rem);
+  }
+
+  .project-side-panel {
+    left: 1rem;
+    right: 1rem;
+    width: auto;
   }
 }
 
@@ -1490,8 +1708,14 @@ button:disabled {
     width: 100%;
   }
 
+  .studio-topbar-left,
+  .project-presence-row {
+    justify-content: center;
+  }
+
   .scripts-module-shell,
-  .stage-module-shell {
+  .stage-module-shell,
+  .music-maker-module-shell {
     padding: 0.75rem;
   }
 
@@ -1505,7 +1729,8 @@ button:disabled {
 
   .sidebar-tabs,
   .tool-grid,
-  .set-mini-code-layout {
+  .set-mini-code-layout,
+  .friends-layout {
     grid-template-columns: 1fr;
   }
 

@@ -173,6 +173,8 @@ const TEXTURE_DEFS = [
 ];
 
 const PROJECT_STORAGE_KEY = "worms-project-v2";
+const APP_STORAGE_KEY = "worms-app-v1";
+const PROJECT_DATA_PREFIX = "worms-project-data-";
 const STAGE_GRID_SIZE = 48;
 const SCENE_TARGET_ID = "scene";
 const CHARACTER_BUILDER_WIDTH = 420;
@@ -1064,11 +1066,37 @@ const patternCaches = {
 
 const elements = {
   menuScreen: document.querySelector("#menuScreen"),
+  projectSelectScreen: document.querySelector("#projectSelectScreen"),
+  friendsScreen: document.querySelector("#friendsScreen"),
   studioScreen: document.querySelector("#studioScreen"),
   libraryScreen: document.querySelector("#libraryScreen"),
   playButton: document.querySelector("#playButton"),
   libraryButton: document.querySelector("#libraryButton"),
-  menuButton: document.querySelector("#menuButton"),
+  friendsButton: document.querySelector("#friendsButton"),
+  createProjectButton: document.querySelector("#createProjectButton"),
+  projectSelectMenuButton: document.querySelector("#projectSelectMenuButton"),
+  projectList: document.querySelector("#projectList"),
+  friendsBackButton: document.querySelector("#friendsBackButton"),
+  profileAvatarButton: document.querySelector("#profileAvatarButton"),
+  profileNameButton: document.querySelector("#profileNameButton"),
+  profileFriendCode: document.querySelector("#profileFriendCode"),
+  profileColorInput: document.querySelector("#profileColorInput"),
+  friendCodeInput: document.querySelector("#friendCodeInput"),
+  sendFriendRequestButton: document.querySelector("#sendFriendRequestButton"),
+  friendRequestsList: document.querySelector("#friendRequestsList"),
+  friendsList: document.querySelector("#friendsList"),
+  leaveProjectButton: document.querySelector("#leaveProjectButton"),
+  projectAddFriendButton: document.querySelector("#projectAddFriendButton"),
+  projectMembersButton: document.querySelector("#projectMembersButton"),
+  projectTitle: document.querySelector("#projectTitle"),
+  projectRoleLabel: document.querySelector("#projectRoleLabel"),
+  projectPresenceRow: document.querySelector("#projectPresenceRow"),
+  closeProjectMembersButton: document.querySelector("#closeProjectMembersButton"),
+  projectMembersList: document.querySelector("#projectMembersList"),
+  closeProjectAddFriendButton: document.querySelector("#closeProjectAddFriendButton"),
+  projectAddFriendPanel: document.querySelector("#projectAddFriendPanel"),
+  projectFriendPickerList: document.querySelector("#projectFriendPickerList"),
+  projectMembersPanel: document.querySelector("#projectMembersPanel"),
   studioLibraryButton: document.querySelector("#studioLibraryButton"),
   libraryToStudioButton: document.querySelector("#libraryToStudioButton"),
   libraryMenuButton: document.querySelector("#libraryMenuButton"),
@@ -1134,6 +1162,9 @@ const elements = {
   actorContextColor: document.querySelector("#actorContextColor"),
   drawingContextMenu: document.querySelector("#drawingContextMenu"),
   drawingContextDeleteButton: document.querySelector("#drawingContextDeleteButton"),
+  commentContextMenu: document.querySelector("#commentContextMenu"),
+  addCommentButton: document.querySelector("#addCommentButton"),
+  projectCommentPopup: document.querySelector("#projectCommentPopup"),
   objectPhysicsPanel: document.querySelector("#objectPhysicsPanel"),
   objectPhysicsTitle: document.querySelector("#objectPhysicsTitle"),
   closeObjectPhysicsButton: document.querySelector("#closeObjectPhysicsButton"),
@@ -1171,11 +1202,12 @@ const elements = {
   stageFillColor: document.querySelector("#stageFillColor"),
   stageBucketButton: document.querySelector("#stageBucketButton"),
   importAudioButton: document.querySelector("#importAudioButton"),
+  openMusicMakerButton: document.querySelector("#openMusicMakerButton"),
   recordMicButton: document.querySelector("#recordMicButton"),
   stopMicButton: document.querySelector("#stopMicButton"),
   audioCountdownLabel: document.querySelector("#audioCountdownLabel"),
-  musicMakerCard: document.querySelector("#musicMakerCard"),
-  expandMusicMakerButton: document.querySelector("#expandMusicMakerButton"),
+  musicMakerModule: document.querySelector("#musicMakerModule"),
+  closeMusicMakerButton: document.querySelector("#closeMusicMakerButton"),
   musicMakerName: document.querySelector("#musicMakerName"),
   musicMakerGrid: document.querySelector("#musicMakerGrid"),
   previewMusicMakerButton: document.querySelector("#previewMusicMakerButton"),
@@ -1502,6 +1534,7 @@ function serializeObjectPhysics(physics) {
 }
 
 const state = {
+  app: createDefaultAppState(),
   screen: "menu",
   stageWidth: 900,
   stageHeight: 580,
@@ -1601,6 +1634,8 @@ const state = {
   recording: null,
   recordings: [],
   selectedRecordingId: null,
+  selectedCommentId: null,
+  commentContextPoint: null,
   libraryObjectUrl: null,
   lastFrameTime: 0,
   lastProjectSaveTime: 0,
@@ -1622,11 +1657,11 @@ const state = {
     micChunks: [],
     countdownTimer: null,
     musicPreviewStops: [],
-    musicMakerExpanded: false,
   },
   musicMaker: {
     cells: Array.from({ length: MUSIC_MAKER_ROWS }, () => Array.from({ length: MUSIC_MAKER_COLUMNS }, () => false)),
   },
+  musicMakerModuleOpen: false,
 };
 
 function createRecordingStore() {
@@ -1721,6 +1756,223 @@ function createRecordingStore() {
 }
 
 const recordingStore = createRecordingStore();
+
+function createFriendCode() {
+  return `WRM-${Math.floor(100000 + Math.random() * 900000)}`;
+}
+
+function createDefaultProfile() {
+  return {
+    id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    username: "Worm Director",
+    color: "#2f8f83",
+    friendCode: createFriendCode(),
+  };
+}
+
+function cloneMemberProfile(profile, role = "viewer") {
+  return {
+    userId: profile.id,
+    username: profile.username,
+    color: profile.color,
+    friendCode: profile.friendCode,
+    role,
+    present: false,
+  };
+}
+
+function createProjectMeta(name = "Project 1", ownerProfile = createDefaultProfile()) {
+  return {
+    id: `project-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    ownerId: ownerProfile.id,
+    members: [
+      {
+        ...cloneMemberProfile(ownerProfile, "owner"),
+        present: true,
+      },
+    ],
+    comments: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function createDefaultAppState() {
+  const profile = createDefaultProfile();
+  return {
+    profile,
+    friends: [],
+    friendRequests: [],
+    projects: [createProjectMeta("Project 1", profile)],
+    activeProjectId: null,
+  };
+}
+
+function getProjectStorageKey(projectId) {
+  return `${PROJECT_DATA_PREFIX}${projectId}`;
+}
+
+function getCurrentUserProfile() {
+  return state.app.profile;
+}
+
+function getActiveProjectMeta() {
+  return state.app.projects.find((project) => project.id === state.app.activeProjectId) || null;
+}
+
+function ensureActiveProjectMember(project) {
+  if (!project) {
+    return null;
+  }
+  const profile = getCurrentUserProfile();
+  let member = project.members.find((candidate) => candidate.userId === profile.id);
+  if (!member) {
+    member = {
+      ...cloneMemberProfile(profile, project.ownerId === profile.id ? "owner" : "editor"),
+      present: true,
+    };
+    project.members.push(member);
+  } else {
+    member.username = profile.username;
+    member.color = profile.color;
+    member.friendCode = profile.friendCode;
+    member.present = true;
+  }
+  if (project.ownerId === profile.id) {
+    member.role = "owner";
+  }
+  return member;
+}
+
+function getCurrentProjectRole() {
+  const project = getActiveProjectMeta();
+  if (!project) {
+    return "owner";
+  }
+  return ensureActiveProjectMember(project)?.role || "viewer";
+}
+
+function canEditCurrentProject() {
+  const role = getCurrentProjectRole();
+  return role === "owner" || role === "editor";
+}
+
+function canManageCurrentProject() {
+  return getCurrentProjectRole() === "owner";
+}
+
+function canCommentCurrentProject() {
+  return Boolean(getActiveProjectMeta());
+}
+
+function updateProjectMetaTimestamp(project = getActiveProjectMeta()) {
+  if (project) {
+    project.updatedAt = new Date().toISOString();
+  }
+}
+
+function saveAppState() {
+  try {
+    window.localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(state.app));
+  } catch {
+    // ignore localStorage failures so the editor keeps running
+  }
+}
+
+function createKnownProfileFromCode(friendCode) {
+  const cleaned = friendCode.trim().toUpperCase();
+  return {
+    id: `friend-${cleaned.toLowerCase()}`,
+    username: `Friend ${cleaned.slice(-4)}`,
+    color: `hsl(${Math.abs(cleaned.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0)) % 360} 70% 48%)`,
+    friendCode: cleaned,
+  };
+}
+
+function normalizeProjectMeta(project) {
+  const normalized = {
+    id: project.id || `project-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: project.name || "Project",
+    ownerId: project.ownerId || state.app.profile?.id || createDefaultProfile().id,
+    members: Array.isArray(project.members) ? project.members.map((member) => ({
+      userId: member.userId || `member-${Math.random().toString(36).slice(2, 7)}`,
+      username: member.username || "Friend",
+      color: member.color || "#5d76db",
+      friendCode: member.friendCode || createFriendCode(),
+      role: ["owner", "editor", "viewer"].includes(member.role) ? member.role : "viewer",
+      present: Boolean(member.present),
+    })) : [],
+    comments: Array.isArray(project.comments) ? project.comments.map((comment) => ({
+      id: comment.id || `comment-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      userId: comment.userId || "",
+      username: comment.username || "Friend",
+      color: comment.color || "#2f8f83",
+      text: comment.text || "",
+      x: Number(comment.x || 0),
+      y: Number(comment.y || 0),
+      createdAt: comment.createdAt || new Date().toISOString(),
+    })) : [],
+    createdAt: project.createdAt || new Date().toISOString(),
+    updatedAt: project.updatedAt || new Date().toISOString(),
+  };
+  ensureActiveProjectMember(normalized);
+  return normalized;
+}
+
+function loadAppState() {
+  let loaded = null;
+  try {
+    const raw = window.localStorage.getItem(APP_STORAGE_KEY);
+    if (raw) {
+      loaded = JSON.parse(raw);
+    }
+  } catch {
+    loaded = null;
+  }
+
+  if (!loaded) {
+    state.app = createDefaultAppState();
+    const legacy = window.localStorage.getItem(PROJECT_STORAGE_KEY);
+    if (legacy) {
+      window.localStorage.setItem(getProjectStorageKey(state.app.projects[0].id), legacy);
+    }
+    saveAppState();
+    return;
+  }
+
+  const profile = loaded.profile && loaded.profile.id ? loaded.profile : createDefaultProfile();
+  state.app = {
+    profile: {
+      id: profile.id,
+      username: profile.username || "Worm Director",
+      color: profile.color || "#2f8f83",
+      friendCode: profile.friendCode || createFriendCode(),
+    },
+    friends: Array.isArray(loaded.friends) ? loaded.friends.map((friend) => ({
+      id: friend.id || `friend-${Math.random().toString(36).slice(2, 7)}`,
+      username: friend.username || "Friend",
+      color: friend.color || "#5d76db",
+      friendCode: friend.friendCode || createFriendCode(),
+    })) : [],
+    friendRequests: Array.isArray(loaded.friendRequests) ? loaded.friendRequests.map((request) => ({
+      id: request.id || `request-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      profile: request.profile?.id ? request.profile : createKnownProfileFromCode(request.profile?.friendCode || createFriendCode()),
+      direction: request.direction === "outgoing" ? "outgoing" : "incoming",
+      createdAt: request.createdAt || new Date().toISOString(),
+    })) : [],
+    projects: Array.isArray(loaded.projects) && loaded.projects.length
+      ? loaded.projects.map(normalizeProjectMeta)
+      : [createProjectMeta("Project 1", profile)],
+    activeProjectId: loaded.activeProjectId || null,
+  };
+  if (!state.app.projects.some((project) => project.id === state.app.activeProjectId)) {
+    state.app.activeProjectId = null;
+  }
+  for (const project of state.app.projects) {
+    ensureActiveProjectMember(project);
+  }
+}
 
 function createBlockId() {
   return `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -2169,6 +2421,7 @@ function buildProjectSnapshot() {
     nextId: state.nextId,
     nextLayerOrder: state.nextLayerOrder,
     globalVolume: state.globalVolume,
+    projectComments: getProjectComments().map((comment) => ({ ...comment })),
   };
 }
 
@@ -2184,6 +2437,7 @@ function pushUndoSnapshot() {
   if (state.undoStack.length > 50) {
     state.undoStack.shift();
   }
+  applyProjectPermissions();
 }
 
 function restoreProjectSnapshot(snapshot) {
@@ -2202,6 +2456,12 @@ function restoreProjectSnapshot(snapshot) {
     state.nextId = typeof snapshot.nextId === "number" ? snapshot.nextId : state.nextId;
     state.nextLayerOrder = typeof snapshot.nextLayerOrder === "number" ? snapshot.nextLayerOrder : state.nextLayerOrder;
     state.globalVolume = typeof snapshot.globalVolume === "number" ? clamp(snapshot.globalVolume, 0, 1) : state.globalVolume;
+    const activeProject = getActiveProjectMeta();
+    if (activeProject && Array.isArray(snapshot.projectComments)) {
+      activeProject.comments = snapshot.projectComments.map((comment) => ({ ...comment }));
+      updateProjectMetaTimestamp(activeProject);
+      saveAppState();
+    }
     ensureDefaultScene();
     ensureDefaultSet();
     loadSceneWorkspace(state.activeSceneId);
@@ -2238,9 +2498,13 @@ function undoLastAction() {
     return;
   }
   restoreProjectSnapshot(JSON.parse(snapshot));
+  applyProjectPermissions();
 }
 
 function saveProjectState() {
+  if (!state.app.activeProjectId) {
+    return;
+  }
   try {
     syncCurrentSceneToWorkspace();
     const payload = {
@@ -2262,7 +2526,9 @@ function saveProjectState() {
       nextLayerOrder: state.nextLayerOrder,
       globalVolume: state.globalVolume,
     };
-    window.localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(payload));
+    window.localStorage.setItem(getProjectStorageKey(state.app.activeProjectId), JSON.stringify(payload));
+    updateProjectMetaTimestamp();
+    saveAppState();
     state.projectDirty = false;
     state.lastProjectSaveTime = performance.now();
   } catch {
@@ -2270,9 +2536,38 @@ function saveProjectState() {
   }
 }
 
-function loadProjectState() {
+function resetProjectStateFields() {
+  state.scenes = [];
+  state.activeSceneId = null;
+  state.items = [];
+  state.sets = [];
+  state.activeSetId = null;
+  state.customCharacters = [];
+  state.customObjects = [];
+  state.customTextures = [];
+  state.customMusic = [];
+  state.animationChunks = [];
+  state.stageDrawings = [];
+  state.sceneScripts = [];
+  state.scene = {
+    lightingColor: "#fff7d6",
+    lightingStrength: 0,
+  };
+  state.physics = createDefaultPhysicsSettings();
+  state.nextId = 1;
+  state.nextLayerOrder = 1;
+  state.globalVolume = 0.65;
+  state.undoStack = [];
+  state.selection = new Set();
+  state.stageSelectedDrawingId = null;
+  state.scriptTargetId = SCENE_TARGET_ID;
+  state.sceneSetId = null;
+}
+
+function loadProjectState(projectId = state.app.activeProjectId) {
+  resetProjectStateFields();
   try {
-    const raw = window.localStorage.getItem(PROJECT_STORAGE_KEY);
+    const raw = projectId ? window.localStorage.getItem(getProjectStorageKey(projectId)) : null;
     if (!raw) {
       ensureDefaultScene();
       loadSceneWorkspace(state.activeSceneId);
@@ -2341,11 +2636,548 @@ function loadProjectState() {
     ensureDefaultScene();
     loadSceneWorkspace(state.activeSceneId);
   } catch {
-    state.items = [];
     ensureDefaultScene();
     loadSceneWorkspace(state.activeSceneId);
   }
   ensureDefaultSet();
+}
+
+function getProjectDisplayRole(role) {
+  switch (role) {
+    case "owner":
+      return "Owner";
+    case "editor":
+      return "Editor";
+    default:
+      return "Viewer";
+  }
+}
+
+function getProjectComments() {
+  return getActiveProjectMeta()?.comments || [];
+}
+
+function hideProjectCommentPopup() {
+  state.selectedCommentId = null;
+  elements.projectCommentPopup.classList.add("hidden");
+  elements.projectCommentPopup.innerHTML = "";
+}
+
+function showProjectCommentPopup(comment) {
+  if (!comment) {
+    hideProjectCommentPopup();
+    return;
+  }
+  state.selectedCommentId = comment.id;
+  const stageRect = stageFrame.getBoundingClientRect();
+  const scaleX = stageRect.width / Math.max(1, state.stageWidth);
+  const scaleY = stageRect.height / Math.max(1, state.stageHeight);
+  elements.projectCommentPopup.innerHTML = "";
+  const text = document.createElement("p");
+  text.textContent = comment.text;
+  const meta = document.createElement("p");
+  meta.className = "comment-meta";
+  meta.textContent = `${comment.username} • ${formatDate(comment.createdAt)}`;
+  elements.projectCommentPopup.append(text, meta);
+  elements.projectCommentPopup.style.left = `${clamp(comment.x * scaleX + 18, 8, stageRect.width - 220)}px`;
+  elements.projectCommentPopup.style.top = `${clamp(comment.y * scaleY + 18, 8, stageRect.height - 120)}px`;
+  elements.projectCommentPopup.classList.remove("hidden");
+}
+
+function hitTestProjectComment(point) {
+  const comments = getProjectComments();
+  for (let index = comments.length - 1; index >= 0; index -= 1) {
+    const comment = comments[index];
+    if (Math.hypot(point.x - comment.x, point.y - comment.y) <= 13) {
+      return comment;
+    }
+  }
+  return null;
+}
+
+function addProjectCommentAt(point) {
+  const project = getActiveProjectMeta();
+  if (!project || !canCommentCurrentProject()) {
+    return;
+  }
+  const text = window.prompt("Add comment:");
+  if (!text?.trim()) {
+    return;
+  }
+  pushUndoSnapshot();
+  const profile = getCurrentUserProfile();
+  project.comments.push({
+    id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    userId: profile.id,
+    username: profile.username,
+    color: profile.color,
+    text: text.trim(),
+    x: point.x,
+    y: point.y,
+    createdAt: new Date().toISOString(),
+  });
+  updateProjectMetaTimestamp(project);
+  saveAppState();
+  hideActorContextMenu();
+  hideDrawingContextMenu();
+  elements.commentContextMenu.classList.add("hidden");
+}
+
+function getNextProjectName() {
+  return `Project ${state.app.projects.length + 1}`;
+}
+
+function renderProjectList() {
+  elements.projectList.innerHTML = "";
+  for (const project of state.app.projects) {
+    const card = document.createElement("article");
+    card.className = "project-card";
+    const head = document.createElement("div");
+    head.className = "project-card-head";
+    const textWrap = document.createElement("div");
+    const title = document.createElement("h3");
+    title.className = "project-card-title";
+    title.textContent = project.name;
+    const meta = document.createElement("p");
+    meta.className = "project-meta";
+    meta.textContent = `${project.members.length} member${project.members.length === 1 ? "" : "s"} • ${project.comments.length} comment${project.comments.length === 1 ? "" : "s"}`;
+    textWrap.append(title, meta);
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = "secondary-button";
+    openButton.textContent = "Open";
+    openButton.addEventListener("click", () => openProject(project.id));
+    head.append(textWrap, openButton);
+    card.append(head);
+    card.addEventListener("click", () => openProject(project.id));
+    elements.projectList.append(card);
+  }
+}
+
+function createProject() {
+  const name = window.prompt("Name this project:", getNextProjectName())?.trim() || getNextProjectName();
+  const project = createProjectMeta(name, getCurrentUserProfile());
+  state.app.projects.push(project);
+  state.app.activeProjectId = project.id;
+  saveAppState();
+  openProject(project.id);
+}
+
+function renderProfileButton(button, profile, fallbackLetter = "W") {
+  if (!button || !profile) {
+    return;
+  }
+  button.style.background = profile.color;
+  button.textContent = (profile.username || fallbackLetter).slice(0, 1).toUpperCase();
+  button.title = profile.username || fallbackLetter;
+}
+
+function renderFriendsScreen() {
+  const profile = getCurrentUserProfile();
+  renderProfileButton(elements.profileAvatarButton, profile);
+  elements.profileNameButton.textContent = profile.username;
+  elements.profileFriendCode.textContent = `Friend code: ${profile.friendCode}`;
+  elements.profileColorInput.value = profile.color;
+
+  elements.friendRequestsList.innerHTML = "";
+  if (state.app.friendRequests.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "script-empty";
+    empty.textContent = "No friend requests yet.";
+    elements.friendRequestsList.append(empty);
+  } else {
+    for (const request of state.app.friendRequests) {
+      const row = document.createElement("div");
+      row.className = "request-row";
+      const head = document.createElement("div");
+      head.className = "request-row-head";
+      const name = document.createElement("strong");
+      name.textContent = request.profile.username;
+      const meta = document.createElement("span");
+      meta.className = "project-member-meta";
+      meta.textContent = request.direction === "incoming" ? "Wants to friend you." : "Waiting for reply.";
+      const avatar = document.createElement("button");
+      avatar.type = "button";
+      avatar.className = "presence-avatar";
+      renderProfileButton(avatar, request.profile, "F");
+      const info = document.createElement("div");
+      info.append(name, meta);
+      head.append(avatar, info);
+      row.append(head);
+      const actions = document.createElement("div");
+      actions.className = "audio-actions";
+      if (request.direction === "incoming") {
+        const accept = document.createElement("button");
+        accept.type = "button";
+        accept.className = "secondary-button";
+        accept.textContent = "Accept";
+        accept.addEventListener("click", () => acceptFriendRequest(request.id));
+        const decline = document.createElement("button");
+        decline.type = "button";
+        decline.className = "ghost-button";
+        decline.textContent = "Decline";
+        decline.addEventListener("click", () => declineFriendRequest(request.id));
+        actions.append(accept, decline);
+      } else {
+        const pending = document.createElement("button");
+        pending.type = "button";
+        pending.className = "ghost-button";
+        pending.textContent = "Pending";
+        pending.disabled = true;
+        actions.append(pending);
+      }
+      row.append(actions);
+      elements.friendRequestsList.append(row);
+    }
+  }
+
+  elements.friendsList.innerHTML = "";
+  if (state.app.friends.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "script-empty";
+    empty.textContent = "No friends added yet.";
+    elements.friendsList.append(empty);
+    return;
+  }
+
+  for (const friend of state.app.friends) {
+    const row = document.createElement("div");
+    row.className = "friend-row";
+    const head = document.createElement("div");
+    head.className = "friend-row-head";
+    const avatar = document.createElement("button");
+    avatar.type = "button";
+    avatar.className = "presence-avatar";
+    renderProfileButton(avatar, friend, "F");
+    const info = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = friend.username;
+    const meta = document.createElement("span");
+    meta.className = "project-member-meta";
+    meta.textContent = friend.friendCode;
+    info.append(name, meta);
+    head.append(avatar, info);
+    row.append(head);
+    elements.friendsList.append(row);
+  }
+}
+
+function sendFriendRequest() {
+  const code = elements.friendCodeInput.value.trim().toUpperCase();
+  if (!code || code === getCurrentUserProfile().friendCode) {
+    return;
+  }
+  if (state.app.friends.some((friend) => friend.friendCode === code) || state.app.friendRequests.some((request) => request.profile.friendCode === code)) {
+    return;
+  }
+  const profile = createKnownProfileFromCode(code);
+  state.app.friendRequests.unshift({
+    id: `request-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    profile,
+    direction: "incoming",
+    createdAt: new Date().toISOString(),
+  });
+  elements.friendCodeInput.value = "";
+  saveAppState();
+  renderFriendsScreen();
+}
+
+function acceptFriendRequest(requestId) {
+  const request = state.app.friendRequests.find((candidate) => candidate.id === requestId);
+  if (!request) {
+    return;
+  }
+  if (!state.app.friends.some((friend) => friend.id === request.profile.id)) {
+    state.app.friends.push({ ...request.profile });
+  }
+  state.app.friendRequests = state.app.friendRequests.filter((candidate) => candidate.id !== requestId);
+  saveAppState();
+  renderFriendsScreen();
+}
+
+function declineFriendRequest(requestId) {
+  state.app.friendRequests = state.app.friendRequests.filter((candidate) => candidate.id !== requestId);
+  saveAppState();
+  renderFriendsScreen();
+}
+
+function renderProjectPresence() {
+  const project = getActiveProjectMeta();
+  elements.projectPresenceRow.innerHTML = "";
+  if (!project) {
+    return;
+  }
+  const presentMembers = project.members.filter((member) => member.present);
+  for (const member of presentMembers) {
+    const avatar = document.createElement("button");
+    avatar.type = "button";
+    avatar.className = "presence-avatar";
+    renderProfileButton(avatar, member, "F");
+    elements.projectPresenceRow.append(avatar);
+  }
+}
+
+function transferProjectOwnership(project, memberId) {
+  if (!project || !canManageCurrentProject()) {
+    return;
+  }
+  const member = project.members.find((candidate) => candidate.userId === memberId);
+  if (!member) {
+    return;
+  }
+  project.ownerId = member.userId;
+  for (const candidate of project.members) {
+    if (candidate.userId === member.userId) {
+      candidate.role = "owner";
+    } else if (candidate.role === "owner") {
+      candidate.role = "editor";
+    }
+  }
+  updateProjectMetaTimestamp(project);
+  saveAppState();
+  renderProjectMembersPanel();
+  renderProjectChrome();
+}
+
+function updateProjectMemberRole(memberId, role) {
+  const project = getActiveProjectMeta();
+  if (!project || !canManageCurrentProject()) {
+    return;
+  }
+  const member = project.members.find((candidate) => candidate.userId === memberId);
+  if (!member || member.userId === project.ownerId) {
+    return;
+  }
+  member.role = role;
+  updateProjectMetaTimestamp(project);
+  saveAppState();
+  renderProjectMembersPanel();
+  renderProjectChrome();
+}
+
+function renderProjectMembersPanel() {
+  const project = getActiveProjectMeta();
+  elements.projectMembersList.innerHTML = "";
+  if (!project) {
+    return;
+  }
+  for (const member of project.members) {
+    const row = document.createElement("div");
+    row.className = "project-member-row";
+    const head = document.createElement("div");
+    head.className = "project-member-head";
+    const avatar = document.createElement("button");
+    avatar.type = "button";
+    avatar.className = "presence-avatar";
+    renderProfileButton(avatar, member, "F");
+    const info = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = member.username;
+    const meta = document.createElement("p");
+    meta.className = "project-member-meta";
+    meta.textContent = `${getProjectDisplayRole(member.role)} • ${member.present ? "Present" : "Away"}`;
+    info.append(name, meta);
+    head.append(avatar, info);
+    row.append(head);
+
+    const controls = document.createElement("div");
+    controls.className = "audio-actions";
+    const presence = document.createElement("label");
+    presence.className = "set-control-label";
+    presence.textContent = "Present";
+    const presenceInput = document.createElement("input");
+    presenceInput.type = "checkbox";
+    presenceInput.checked = member.present;
+    presenceInput.disabled = member.userId === getCurrentUserProfile().id ? true : !canManageCurrentProject();
+    presenceInput.addEventListener("input", () => {
+      member.present = presenceInput.checked;
+      updateProjectMetaTimestamp(project);
+      saveAppState();
+      renderProjectMembersPanel();
+      renderProjectChrome();
+    });
+    presence.append(presenceInput);
+    controls.append(presence);
+
+    if (canManageCurrentProject()) {
+      const roleSelect = document.createElement("select");
+      roleSelect.innerHTML = `
+        <option value="owner">Owner</option>
+        <option value="editor">Editor</option>
+        <option value="viewer">Viewer</option>
+      `;
+      roleSelect.value = member.role;
+      roleSelect.disabled = member.userId === project.ownerId;
+      roleSelect.addEventListener("change", () => updateProjectMemberRole(member.userId, roleSelect.value));
+      controls.append(roleSelect);
+
+      if (member.userId !== project.ownerId) {
+        const transfer = document.createElement("button");
+        transfer.type = "button";
+        transfer.className = "ghost-button";
+        transfer.textContent = "Make Owner";
+        transfer.addEventListener("click", () => transferProjectOwnership(project, member.userId));
+        controls.append(transfer);
+      }
+    }
+
+    row.append(controls);
+    elements.projectMembersList.append(row);
+  }
+}
+
+function renderProjectFriendPicker() {
+  const project = getActiveProjectMeta();
+  elements.projectFriendPickerList.innerHTML = "";
+  if (!project) {
+    return;
+  }
+  const availableFriends = state.app.friends.filter((friend) => !project.members.some((member) => member.userId === friend.id));
+  if (availableFriends.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "script-empty";
+    empty.textContent = "All current friends are already in this project.";
+    elements.projectFriendPickerList.append(empty);
+    return;
+  }
+  for (const friend of availableFriends) {
+    const row = document.createElement("div");
+    row.className = "friend-row";
+    const head = document.createElement("div");
+    head.className = "friend-row-head";
+    const avatar = document.createElement("button");
+    avatar.type = "button";
+    avatar.className = "presence-avatar";
+    renderProfileButton(avatar, friend, "F");
+    const info = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = friend.username;
+    const meta = document.createElement("span");
+    meta.className = "project-member-meta";
+    meta.textContent = friend.friendCode;
+    info.append(name, meta);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "secondary-button";
+    add.textContent = "Add";
+    add.addEventListener("click", () => {
+      project.members.push({
+        ...cloneMemberProfile(friend, "viewer"),
+        present: false,
+      });
+      updateProjectMetaTimestamp(project);
+      saveAppState();
+      renderProjectFriendPicker();
+      renderProjectMembersPanel();
+      renderProjectChrome();
+    });
+    head.append(avatar, info, add);
+    row.append(head);
+    elements.projectFriendPickerList.append(row);
+  }
+}
+
+function openProjectMembersPanel() {
+  renderProjectMembersPanel();
+  elements.projectMembersPanel.classList.remove("hidden");
+}
+
+function closeProjectMembersPanel() {
+  elements.projectMembersPanel.classList.add("hidden");
+}
+
+function openProjectAddFriendPanel() {
+  if (!canManageCurrentProject()) {
+    return;
+  }
+  renderProjectFriendPicker();
+  elements.projectAddFriendPanel.classList.remove("hidden");
+}
+
+function closeProjectAddFriendPanel() {
+  elements.projectAddFriendPanel.classList.add("hidden");
+}
+
+function renderProjectChrome() {
+  const project = getActiveProjectMeta();
+  const role = getCurrentProjectRole();
+  elements.projectTitle.textContent = project?.name || "Worms Studio";
+  elements.projectRoleLabel.textContent = `${getProjectDisplayRole(role)}${project ? ` • ${project.name}` : ""}`;
+  elements.projectAddFriendButton.disabled = !canManageCurrentProject();
+  elements.projectAddFriendButton.classList.toggle("hidden", !project || !canManageCurrentProject());
+  elements.projectMembersButton.classList.toggle("hidden", !project);
+  elements.leaveProjectButton.classList.toggle("hidden", !project);
+  elements.studioScreen.classList.toggle("viewer-lock", role === "viewer");
+  renderProjectPresence();
+}
+
+async function leaveProject() {
+  await stopRecording();
+  const project = getActiveProjectMeta();
+  if (project) {
+    const selfMember = project.members.find((member) => member.userId === getCurrentUserProfile().id);
+    if (selfMember) {
+      selfMember.present = false;
+    }
+  }
+  saveProjectState();
+  closeProjectMembersPanel();
+  closeProjectAddFriendPanel();
+  hideProjectCommentPopup();
+  state.app.activeProjectId = null;
+  saveAppState();
+  showScreen("projects");
+  renderProjectList();
+}
+
+function applyProjectPermissions() {
+  const canEdit = canEditCurrentProject();
+  if (!canEdit) {
+    closeScriptsModule();
+    closeStageModule();
+    closeCharacterBuilder();
+    closeMusicMakerModule();
+  }
+  elements.clearStageButton.disabled = !canEdit;
+  elements.recordButton.disabled = !canEdit || Boolean(state.recording) || !window.MediaRecorder;
+  elements.globalUndoButton.disabled = !canEdit || state.undoStack.length === 0;
+}
+
+function syncProjectMembershipToProfile() {
+  for (const project of state.app.projects) {
+    ensureActiveProjectMember(project);
+  }
+}
+
+function openFriendsScreen() {
+  renderFriendsScreen();
+  showScreen("friends");
+}
+
+async function openProject(projectId) {
+  if (!projectId) {
+    return;
+  }
+  if (state.app.activeProjectId && state.app.activeProjectId !== projectId) {
+    saveProjectState();
+  }
+  state.app.activeProjectId = projectId;
+  const project = getActiveProjectMeta();
+  ensureActiveProjectMember(project);
+  closeProjectMembersPanel();
+  closeProjectAddFriendPanel();
+  hideProjectCommentPopup();
+  loadProjectState(projectId);
+  populateToolLists();
+  populateSetToolLists();
+  renderAudioLibrary();
+  renderPhysicsControls();
+  renderStageModule();
+  renderScriptEditor();
+  saveAppState();
+  renderProjectChrome();
+  applyProjectPermissions();
+  await goToStudio();
 }
 
 function createBlockFromType(type) {
@@ -5465,6 +6297,7 @@ function updateSidebarTabs() {
 function openScriptsModule() {
   state.scriptsModuleOpen = true;
   closeCharacterBuilder();
+  closeMusicMakerModule();
   elements.scriptsModule.classList.remove("hidden");
   updateSidebarTabs();
   renderScriptEditor();
@@ -5486,6 +6319,7 @@ function openStageModule() {
   elements.stageModule.classList.remove("hidden");
   closeScriptsModule();
   closeCharacterBuilder();
+  closeMusicMakerModule();
   updateSidebarTabs();
   renderStageModule();
   ensureCanvasSize();
@@ -5500,6 +6334,22 @@ function closeStageModule() {
   closeObjectPhysicsEditor();
   elements.stageModule.classList.add("hidden");
   updateSidebarTabs();
+}
+
+function openMusicMakerModule() {
+  if (!canEditCurrentProject()) {
+    return;
+  }
+  state.musicMakerModuleOpen = true;
+  closeScriptsModule();
+  closeStageModule();
+  closeCharacterBuilder();
+  elements.musicMakerModule.classList.remove("hidden");
+}
+
+function closeMusicMakerModule() {
+  state.musicMakerModuleOpen = false;
+  elements.musicMakerModule.classList.add("hidden");
 }
 
 function setActiveTool(type, id) {
@@ -5610,7 +6460,7 @@ function updateToolButtons() {
 function updateRecordingUi() {
   const isRecording = Boolean(state.recording);
   const canRecord = Boolean(window.MediaRecorder);
-  elements.recordButton.disabled = isRecording || !canRecord;
+  elements.recordButton.disabled = isRecording || !canRecord || !canEditCurrentProject();
   elements.stopButton.disabled = !isRecording;
   elements.recordingBadge.classList.toggle("recording", isRecording);
   if (!canRecord) {
@@ -5623,12 +6473,18 @@ function updateRecordingUi() {
 function showScreen(screenName) {
   state.screen = screenName;
   elements.menuScreen.classList.toggle("hidden", screenName !== "menu");
+  elements.projectSelectScreen.classList.toggle("hidden", screenName !== "projects");
+  elements.friendsScreen.classList.toggle("hidden", screenName !== "friends");
   elements.studioScreen.classList.toggle("hidden", screenName !== "studio");
   elements.libraryScreen.classList.toggle("hidden", screenName !== "library");
   if (screenName !== "studio") {
     closeScriptsModule();
     closeStageModule();
     closeCharacterBuilder();
+    closeMusicMakerModule();
+    closeProjectMembersPanel();
+    closeProjectAddFriendPanel();
+    hideProjectCommentPopup();
     clearAllScriptRunners();
     stopAllAudioNodes();
   }
@@ -7046,7 +7902,7 @@ function fillSetDrawingAtPoint(point) {
 }
 
 function onSetPointerDown(event) {
-  if (!state.stageModuleOpen || event.button !== 0) {
+  if (!state.stageModuleOpen || event.button !== 0 || !canEditCurrentProject()) {
     return;
   }
   const point = getSetCanvasPoint(event);
@@ -7341,6 +8197,9 @@ function onSetContextMenu(event) {
     return;
   }
   event.preventDefault();
+  if (!canEditCurrentProject()) {
+    return;
+  }
   const point = getSetCanvasPoint(event);
   const item = hitTestSetItem(getActiveSet(), point.x, point.y);
   if (item) {
@@ -7431,6 +8290,19 @@ function onPointerDown(event) {
   stageCanvas.setPointerCapture?.(event.pointerId);
   hideActorContextMenu();
   hideDrawingContextMenu();
+  elements.commentContextMenu.classList.add("hidden");
+
+  const comment = hitTestProjectComment(point);
+  if (comment) {
+    showProjectCommentPopup(comment);
+    return;
+  }
+  hideProjectCommentPopup();
+
+  if (!canEditCurrentProject()) {
+    clearSelection();
+    return;
+  }
 
   if (state.penAnimation.actorId && state.penAnimation.tool) {
     startPenAnimationDrawing(point);
@@ -7815,6 +8687,23 @@ function onStageContextMenu(event) {
   }
   event.preventDefault();
   const point = getCanvasPoint(event);
+  const comment = hitTestProjectComment(point);
+  if (comment) {
+    showProjectCommentPopup(comment);
+    return;
+  }
+  if (!canEditCurrentProject()) {
+    hideActorContextMenu();
+    hideDrawingContextMenu();
+    if (canCommentCurrentProject()) {
+      state.commentContextPoint = point;
+      const panelRect = elements.commentContextMenu.parentElement.getBoundingClientRect();
+      elements.commentContextMenu.style.left = `${clamp(event.clientX - panelRect.left, 12, panelRect.width - 150)}px`;
+      elements.commentContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - 80)}px`;
+      elements.commentContextMenu.classList.remove("hidden");
+    }
+    return;
+  }
   const actor = hitTest(point.x, point.y);
   if (!actor) {
     const drawing = hitTestStageDrawing(point);
@@ -7828,8 +8717,16 @@ function onStageContextMenu(event) {
     }
     hideActorContextMenu();
     hideDrawingContextMenu();
+    if (canCommentCurrentProject()) {
+      state.commentContextPoint = point;
+      const panelRect = elements.commentContextMenu.parentElement.getBoundingClientRect();
+      elements.commentContextMenu.style.left = `${clamp(event.clientX - panelRect.left, 12, panelRect.width - 150)}px`;
+      elements.commentContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - 80)}px`;
+      elements.commentContextMenu.classList.remove("hidden");
+    }
     return;
   }
+  elements.commentContextMenu.classList.add("hidden");
   hideDrawingContextMenu();
   if (!state.selection.has(actor.id)) {
     if (actor.groupId) {
@@ -8149,8 +9046,12 @@ function handleKeyDown(event) {
   }
 
   const key = event.key.toLowerCase();
+  const canEdit = canEditCurrentProject();
 
   if ((event.ctrlKey || event.metaKey) && key === "c") {
+    if (!canEdit) {
+      return;
+    }
     event.preventDefault();
     if (state.characterBuilderOpen) {
       copyCharacterBuilderSelection();
@@ -8165,6 +9066,9 @@ function handleKeyDown(event) {
   }
 
   if ((event.ctrlKey || event.metaKey) && key === "v") {
+    if (!canEdit) {
+      return;
+    }
     event.preventDefault();
     if (state.characterBuilderOpen) {
       pasteCharacterBuilderClipboard();
@@ -8179,6 +9083,9 @@ function handleKeyDown(event) {
   }
 
   if (key === "backspace") {
+    if (!canEdit) {
+      return;
+    }
     event.preventDefault();
     if (state.characterBuilderOpen) {
       deleteCharacterBuilderSelection();
@@ -8218,11 +9125,11 @@ function handleKeyDown(event) {
     return;
   }
 
-  if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+  if (canEdit && !event.ctrlKey && !event.metaKey && !event.altKey) {
     triggerScripts("key_pressed", { key: normalizeScriptKey(event.key) });
   }
 
-  if (["w", "a", "s", "d"].includes(key)) {
+  if (canEdit && ["w", "a", "s", "d"].includes(key)) {
     event.preventDefault();
     state.keysPressed.add(key);
   }
@@ -9315,6 +10222,24 @@ function drawPenAnimationEditor(actors = getActiveStageActors()) {
   }
 }
 
+function drawProjectComments() {
+  const comments = getProjectComments();
+  if (!comments.length) {
+    return;
+  }
+  ctx.save();
+  for (const comment of comments) {
+    ctx.fillStyle = comment.color || "#2f8f83";
+    ctx.strokeStyle = comment.id === state.selectedCommentId ? "#2c1d14" : "rgba(255,255,255,0.92)";
+    ctx.lineWidth = comment.id === state.selectedCommentId ? 3 : 2;
+    ctx.beginPath();
+    ctx.arc(comment.x, comment.y, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawStage(now, options = {}) {
   const {
     showSelectionOutlines = true,
@@ -9408,6 +10333,10 @@ function drawStage(now, options = {}) {
     }
   }
 
+  if (showMainWorkspace && showEditorOverlays) {
+    drawProjectComments();
+  }
+
   if (showEditorOverlays) {
     drawPlacementPreview();
     drawMarquee();
@@ -9470,6 +10399,14 @@ function renderStageViews(now) {
   }
 
   renderCharacterBuilder();
+  if (state.selectedCommentId) {
+    const comment = getProjectComments().find((candidate) => candidate.id === state.selectedCommentId);
+    if (comment) {
+      showProjectCommentPopup(comment);
+    } else {
+      hideProjectCommentPopup();
+    }
+  }
 }
 
 function animate(now) {
@@ -9659,7 +10596,7 @@ function getRecordingMimeType() {
 }
 
 function startRecording() {
-  if (state.recording || !window.MediaRecorder) {
+  if (state.recording || !window.MediaRecorder || !canEditCurrentProject()) {
     return;
   }
 
@@ -9755,11 +10692,20 @@ async function openLibrary() {
 async function goToMenu() {
   await stopRecording();
   saveProjectState();
+  closeProjectMembersPanel();
+  closeProjectAddFriendPanel();
   showScreen("menu");
 }
 
 async function goToStudio() {
+  if (!state.app.activeProjectId) {
+    showScreen("projects");
+    renderProjectList();
+    return;
+  }
   showScreen("studio");
+  renderProjectChrome();
+  applyProjectPermissions();
   updateSelectionLabel();
   updateToolLabel();
   renderScriptEditor();
@@ -10546,15 +11492,6 @@ function renderAudioLibrary() {
   }
 }
 
-function toggleMusicMakerExpanded() {
-  state.audio.musicMakerExpanded = !state.audio.musicMakerExpanded;
-  elements.musicMakerCard.classList.toggle("expanded", state.audio.musicMakerExpanded);
-  elements.musicMakerCard.style.top = "";
-  elements.musicMakerCard.style.right = "";
-  elements.musicMakerCard.style.width = "";
-  elements.expandMusicMakerButton.textContent = state.audio.musicMakerExpanded ? "Music Maker >>" : "Music Maker ->";
-}
-
 function setMicRecordingUi(recording, label = null) {
   elements.recordMicButton.disabled = recording;
   elements.stopMicButton.disabled = !recording;
@@ -10751,9 +11688,40 @@ function saveTextureEditor() {
 }
 
 function bindEvents() {
-  elements.playButton.addEventListener("click", goToStudio);
+  elements.playButton.addEventListener("click", () => {
+    renderProjectList();
+    showScreen("projects");
+  });
   elements.libraryButton.addEventListener("click", openLibrary);
-  elements.menuButton.addEventListener("click", goToMenu);
+  elements.friendsButton.addEventListener("click", openFriendsScreen);
+  elements.createProjectButton.addEventListener("click", createProject);
+  elements.projectSelectMenuButton.addEventListener("click", goToMenu);
+  elements.friendsBackButton.addEventListener("click", goToMenu);
+  elements.profileAvatarButton.addEventListener("click", () => elements.profileColorInput.click());
+  elements.profileColorInput.addEventListener("input", () => {
+    state.app.profile.color = elements.profileColorInput.value;
+    syncProjectMembershipToProfile();
+    saveAppState();
+    renderFriendsScreen();
+    renderProjectChrome();
+  });
+  elements.profileNameButton.addEventListener("click", () => {
+    const nextName = window.prompt("Change username:", state.app.profile.username)?.trim();
+    if (!nextName) {
+      return;
+    }
+    state.app.profile.username = nextName;
+    syncProjectMembershipToProfile();
+    saveAppState();
+    renderFriendsScreen();
+    renderProjectChrome();
+  });
+  elements.sendFriendRequestButton.addEventListener("click", sendFriendRequest);
+  elements.leaveProjectButton.addEventListener("click", leaveProject);
+  elements.projectAddFriendButton.addEventListener("click", openProjectAddFriendPanel);
+  elements.projectMembersButton.addEventListener("click", openProjectMembersPanel);
+  elements.closeProjectMembersButton.addEventListener("click", closeProjectMembersPanel);
+  elements.closeProjectAddFriendButton.addEventListener("click", closeProjectAddFriendPanel);
   elements.studioLibraryButton.addEventListener("click", openLibrary);
   elements.libraryToStudioButton.addEventListener("click", goToStudio);
   elements.libraryMenuButton.addEventListener("click", goToMenu);
@@ -10775,6 +11743,12 @@ function bindEvents() {
   elements.actorContextUngroupButton.addEventListener("click", ungroupSelection);
   elements.actorContextColor.addEventListener("input", () => changeSelectedObjectColor(elements.actorContextColor.value));
   elements.drawingContextDeleteButton.addEventListener("click", deleteContextDrawing);
+  elements.addCommentButton.addEventListener("click", () => {
+    if (state.commentContextPoint) {
+      addProjectCommentAt(state.commentContextPoint);
+    }
+    elements.commentContextMenu.classList.add("hidden");
+  });
   elements.closeObjectPhysicsButton.addEventListener("click", closeObjectPhysicsEditor);
   elements.physicsToggleButton.addEventListener("click", togglePhysicsEnabled);
   elements.gravityToggleButton.addEventListener("click", toggleGravityEnabled);
@@ -10883,7 +11857,8 @@ function bindEvents() {
     importMusicAsset(elements.importAudioInput.files?.[0]);
     elements.importAudioInput.value = "";
   });
-  elements.expandMusicMakerButton.addEventListener("click", toggleMusicMakerExpanded);
+  elements.openMusicMakerButton.addEventListener("click", openMusicMakerModule);
+  elements.closeMusicMakerButton.addEventListener("click", closeMusicMakerModule);
   elements.recordMicButton.addEventListener("click", startMicCountdown);
   elements.stopMicButton.addEventListener("click", stopMicRecording);
   elements.previewMusicMakerButton.addEventListener("click", () => playMusicPattern(cloneMusicPattern()));
@@ -11024,6 +11999,18 @@ function bindEvents() {
     if (!elements.setDrawingContextMenu.contains(event.target)) {
       hideSetDrawingContextMenu();
     }
+    if (!elements.commentContextMenu.contains(event.target)) {
+      elements.commentContextMenu.classList.add("hidden");
+    }
+    if (!elements.projectCommentPopup.contains(event.target)) {
+      hideProjectCommentPopup();
+    }
+    if (!elements.projectMembersPanel.contains(event.target) && !elements.projectMembersButton.contains(event.target)) {
+      closeProjectMembersPanel();
+    }
+    if (!elements.projectAddFriendPanel.contains(event.target) && !elements.projectAddFriendButton.contains(event.target)) {
+      closeProjectAddFriendPanel();
+    }
   });
   window.addEventListener("contextmenu", (event) => {
     if (!event.target.closest?.(".script-block, .script-palette-button")) {
@@ -11033,13 +12020,19 @@ function bindEvents() {
   window.addEventListener("resize", () => {
     ensureCanvasSize();
   });
-  window.addEventListener("beforeunload", saveProjectState);
+  window.addEventListener("beforeunload", () => {
+    saveProjectState();
+    saveAppState();
+  });
 }
 
 async function init() {
+  loadAppState();
   loadProjectState();
   populateToolLists();
   populateSetToolLists();
+  renderProjectList();
+  renderFriendsScreen();
   renderMusicMakerGrid();
   renderAudioLibrary();
   renderScriptCategoryTabs();
@@ -11047,6 +12040,8 @@ async function init() {
   bindEvents();
   setActivePanel("characters");
   renderPhysicsControls();
+  renderProjectChrome();
+  applyProjectPermissions();
   updateSelectionLabel();
   updateToolLabel();
   renderScriptEditor();
