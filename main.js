@@ -1083,6 +1083,7 @@ const elements = {
   textureList: document.querySelector("#textureList"),
   objectList: document.querySelector("#objectList"),
   createCharacterButton: document.querySelector("#createCharacterButton"),
+  createObjectButton: document.querySelector("#createObjectButton"),
   importCharacterButton: document.querySelector("#importCharacterButton"),
   importTextureButton: document.querySelector("#importTextureButton"),
   editTextureButton: document.querySelector("#editTextureButton"),
@@ -1124,6 +1125,7 @@ const elements = {
   actorContextCodeButton: document.querySelector("#actorContextCodeButton"),
   actorContextPenButton: document.querySelector("#actorContextPenButton"),
   actorContextEditCharacterButton: document.querySelector("#actorContextEditCharacterButton"),
+  actorContextPhysicsToggleButton: document.querySelector("#actorContextPhysicsToggleButton"),
   actorContextPhysicsButton: document.querySelector("#actorContextPhysicsButton"),
   actorContextGroupButton: document.querySelector("#actorContextGroupButton"),
   actorContextUngroupButton: document.querySelector("#actorContextUngroupButton"),
@@ -1181,7 +1183,9 @@ const elements = {
   stageModuleCloseButton: document.querySelector("#stageModuleCloseButton"),
   characterBuilderModule: document.querySelector("#characterBuilderModule"),
   characterBuilderCanvas: document.querySelector("#characterBuilderCanvas"),
+  characterBuilderTitle: document.querySelector("#characterBuilderTitle"),
   characterBuilderLabel: document.querySelector("#characterBuilderLabel"),
+  characterBuilderNameLabel: document.querySelector("#characterBuilderNameLabel"),
   characterBuilderName: document.querySelector("#characterBuilderName"),
   saveCharacterBuilderButton: document.querySelector("#saveCharacterBuilderButton"),
   closeCharacterBuilderButton: document.querySelector("#closeCharacterBuilderButton"),
@@ -1194,6 +1198,8 @@ const elements = {
   characterBuilderObjectList: document.querySelector("#characterBuilderObjectList"),
   characterBuilderTextureList: document.querySelector("#characterBuilderTextureList"),
   setEditorLabel: document.querySelector("#setEditorLabel"),
+  sceneList: document.querySelector("#sceneList"),
+  addSceneButton: document.querySelector("#addSceneButton"),
   setList: document.querySelector("#setList"),
   addSetButton: document.querySelector("#addSetButton"),
   setCanvas: document.querySelector("#setCanvas"),
@@ -1204,6 +1210,8 @@ const elements = {
   setPenControls: document.querySelector("#setPenControls"),
   setBaseColors: document.querySelector("#setBaseColors"),
   setPenColor: document.querySelector("#setPenColor"),
+  setBucketControls: document.querySelector("#setBucketControls"),
+  setFillColor: document.querySelector("#setFillColor"),
   setLightControls: document.querySelector("#setLightControls"),
   setAddLightButton: document.querySelector("#setAddLightButton"),
   setLightType: document.querySelector("#setLightType"),
@@ -1214,6 +1222,11 @@ const elements = {
   setMiniCodeTitle: document.querySelector("#setMiniCodeTitle"),
   setMiniCodePalette: document.querySelector("#setMiniCodePalette"),
   setMiniCodeWorkspace: document.querySelector("#setMiniCodeWorkspace"),
+  setActorContextMenu: document.querySelector("#setActorContextMenu"),
+  setActorContextCodeButton: document.querySelector("#setActorContextCodeButton"),
+  setActorContextPenButton: document.querySelector("#setActorContextPenButton"),
+  setActorContextPhysicsToggleButton: document.querySelector("#setActorContextPhysicsToggleButton"),
+  setActorContextPhysicsButton: document.querySelector("#setActorContextPhysicsButton"),
   scriptActorLabel: document.querySelector("#scriptActorLabel"),
   scriptActorList: document.querySelector("#scriptActorList"),
   scriptCategoryTabs: document.querySelector("#scriptCategoryTabs"),
@@ -1498,6 +1511,8 @@ const state = {
   lastNonScriptPanel: "characters",
   scriptDrag: null,
   scriptDropTarget: null,
+  scenes: [],
+  activeSceneId: null,
   activeSetId: null,
   setEditorTool: "select",
   setToolSelection: {
@@ -1516,9 +1531,12 @@ const state = {
     drawings: [],
   },
   setMiniCodeItemId: null,
+  setContextItemId: null,
   setPenColor: "#2f8f83",
+  sceneSetId: null,
   characterBuilder: {
     editingId: null,
+    assetType: "character",
     activeTool: "select",
     selectedItemId: null,
     selectedDrawingId: null,
@@ -1885,6 +1903,55 @@ function createSetName() {
   return `Set ${state.sets.length + 1}`;
 }
 
+function createSceneName() {
+  return `Scene ${state.scenes.length + 1}`;
+}
+
+function createSceneWorkspace(name = createSceneName()) {
+  return {
+    id: `scene-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    stageSetId: null,
+    items: [],
+    drawings: [],
+    sceneScripts: [],
+    scene: {
+      lightingColor: "#fff7d6",
+      lightingStrength: 0,
+    },
+  };
+}
+
+function serializeSceneWorkspace(scene) {
+  return {
+    id: scene.id,
+    name: scene.name,
+    stageSetId: scene.stageSetId || null,
+    items: Array.isArray(scene.items) ? scene.items.map((item) => isPhysicsObject(item) || item.kind ? serializeItem(item) : item) : [],
+    drawings: Array.isArray(scene.drawings) ? scene.drawings.map(serializeDrawing) : [],
+    sceneScripts: Array.isArray(scene.sceneScripts) ? scene.sceneScripts.map(serializeBlock) : [],
+    scene: {
+      lightingColor: scene.scene?.lightingColor || "#fff7d6",
+      lightingStrength: clamp(Number(scene.scene?.lightingStrength || 0), 0, 1),
+    },
+  };
+}
+
+function normalizeSceneWorkspace(scene) {
+  return {
+    id: scene.id || `scene-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: scene.name || "Scene",
+    stageSetId: scene.stageSetId || null,
+    items: Array.isArray(scene.items) ? scene.items.map(normalizeItem) : [],
+    drawings: Array.isArray(scene.drawings) ? scene.drawings.map(normalizeDrawing) : [],
+    sceneScripts: Array.isArray(scene.sceneScripts) ? scene.sceneScripts.map(deserializeBlock) : [],
+    scene: {
+      lightingColor: scene.scene?.lightingColor || "#fff7d6",
+      lightingStrength: clamp(Number(scene.scene?.lightingStrength || 0), 0, 1),
+    },
+  };
+}
+
 function createStageSet(name = createSetName()) {
   return {
     id: `set-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -1960,6 +2027,65 @@ function normalizeStageSet(set) {
   };
 }
 
+function ensureDefaultScene() {
+  if (state.scenes.length === 0) {
+    const firstScene = createSceneWorkspace("Scene 1");
+    state.scenes.push(firstScene);
+    state.activeSceneId = firstScene.id;
+  }
+  if (!state.scenes.some((scene) => scene.id === state.activeSceneId)) {
+    state.activeSceneId = state.scenes[0].id;
+  }
+}
+
+function getActiveSceneWorkspace() {
+  ensureDefaultScene();
+  return state.scenes.find((scene) => scene.id === state.activeSceneId) || state.scenes[0];
+}
+
+function syncCurrentSceneToWorkspace() {
+  ensureDefaultScene();
+  const scene = getActiveSceneWorkspace();
+  if (!scene) {
+    return;
+  }
+  scene.items = state.items.map(serializeItem);
+  scene.drawings = state.stageDrawings.map(serializeDrawing);
+  scene.sceneScripts = state.sceneScripts.map(serializeBlock);
+  scene.stageSetId = state.sceneSetId || null;
+  scene.scene = {
+    lightingColor: state.scene.lightingColor || "#fff7d6",
+    lightingStrength: clamp(Number(state.scene.lightingStrength || 0), 0, 1),
+  };
+}
+
+function loadSceneWorkspace(sceneId) {
+  ensureDefaultScene();
+  const scene = state.scenes.find((candidate) => candidate.id === sceneId) || state.scenes[0];
+  state.activeSceneId = scene.id;
+  state.items = scene.items.map(normalizeItem);
+  state.stageDrawings = scene.drawings.map(normalizeDrawing);
+  state.sceneScripts = scene.sceneScripts.map(deserializeBlock);
+  state.sceneSetId = scene.stageSetId || null;
+  if (state.sceneSetId && state.sets.some((set) => set.id === state.sceneSetId)) {
+    state.activeSetId = state.sceneSetId;
+  }
+  state.scene = {
+    lightingColor: scene.scene?.lightingColor || "#fff7d6",
+    lightingStrength: clamp(Number(scene.scene?.lightingStrength || 0), 0, 1),
+  };
+  state.scriptTargetId = SCENE_TARGET_ID;
+  hideActorContextMenu();
+  hideSetActorContextMenu();
+  closePenAnimationEditor();
+  closeSetMiniCodePanel();
+  closeObjectPhysicsEditor();
+  clearAllScriptRunners();
+  stopAllAudioNodes();
+  resetAllPhysicsRuntime();
+  clearSelection();
+}
+
 function ensureDefaultSet() {
   if (state.sets.length === 0) {
     const firstSet = createStageSet("Set 1");
@@ -2003,7 +2129,10 @@ function markProjectDirty() {
 
 function saveProjectState() {
   try {
+    syncCurrentSceneToWorkspace();
     const payload = {
+      scenes: state.scenes.map(serializeSceneWorkspace),
+      activeSceneId: state.activeSceneId,
       items: state.items.map(serializeItem),
       sets: state.sets.map(serializeStageSet),
       activeSetId: state.activeSetId,
@@ -2031,16 +2160,21 @@ function loadProjectState() {
   try {
     const raw = window.localStorage.getItem(PROJECT_STORAGE_KEY);
     if (!raw) {
+      ensureDefaultScene();
+      loadSceneWorkspace(state.activeSceneId);
       ensureDefaultSet();
       return;
     }
 
     const payload = JSON.parse(raw);
-    if (Array.isArray(payload.items)) {
-      state.items = payload.items.map(normalizeItem);
+    if (Array.isArray(payload.scenes)) {
+      state.scenes = payload.scenes.map(normalizeSceneWorkspace);
     }
     if (Array.isArray(payload.sets)) {
       state.sets = payload.sets.map(normalizeStageSet);
+    }
+    if (payload.activeSceneId) {
+      state.activeSceneId = payload.activeSceneId;
     }
     if (payload.activeSetId) {
       state.activeSetId = payload.activeSetId;
@@ -2060,17 +2194,17 @@ function loadProjectState() {
     if (Array.isArray(payload.animationChunks)) {
       state.animationChunks = payload.animationChunks.map(normalizeAnimationChunk);
     }
-    if (Array.isArray(payload.stageDrawings)) {
-      state.stageDrawings = payload.stageDrawings.map(normalizeDrawing);
-    }
-    if (Array.isArray(payload.sceneScripts)) {
-      state.sceneScripts = payload.sceneScripts.map(deserializeBlock);
-    }
-    if (payload.scene) {
-      state.scene = {
-        lightingColor: payload.scene.lightingColor || "#fff7d6",
-        lightingStrength: clamp(Number(payload.scene.lightingStrength || 0), 0, 1),
-      };
+    if (state.scenes.length === 0) {
+      state.scenes = [normalizeSceneWorkspace({
+        id: payload.activeSceneId || `scene-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: "Scene 1",
+        stageSetId: payload.activeSetId || null,
+        items: Array.isArray(payload.items) ? payload.items : [],
+        drawings: Array.isArray(payload.stageDrawings) ? payload.stageDrawings : [],
+        sceneScripts: Array.isArray(payload.sceneScripts) ? payload.sceneScripts : [],
+        scene: payload.scene || null,
+      })];
+      state.activeSceneId = state.scenes[0].id;
     }
     if (payload.physics) {
       state.physics = normalizeGlobalPhysicsSettings(payload.physics);
@@ -2078,7 +2212,8 @@ function loadProjectState() {
     if (typeof payload.nextId === "number") {
       state.nextId = payload.nextId;
     } else {
-      const allItems = [...state.items, ...getAllSetItems()];
+      const sceneItems = state.scenes.flatMap((scene) => scene.items.map(normalizeItem));
+      const allItems = [...sceneItems, ...getAllSetItems()];
       if (allItems.length > 0) {
         state.nextId = Math.max(...allItems.map((item) => item.id)) + 1;
       }
@@ -2086,8 +2221,12 @@ function loadProjectState() {
     if (typeof payload.globalVolume === "number") {
       state.globalVolume = clamp(payload.globalVolume, 0, 1);
     }
+    ensureDefaultScene();
+    loadSceneWorkspace(state.activeSceneId);
   } catch {
     state.items = [];
+    ensureDefaultScene();
+    loadSceneWorkspace(state.activeSceneId);
   }
   ensureDefaultSet();
 }
@@ -2222,6 +2361,11 @@ function isPhysicsCircle(item) {
   return item?.subtype === "circle";
 }
 
+function getActiveStageActors() {
+  const sceneSetItems = state.sceneSetId ? getStageSetById(state.sceneSetId)?.items || [] : [];
+  return [...state.items, ...sceneSetItems];
+}
+
 function getPhysicsGravityVector() {
   const strength = state.physics.gravityEnabled ? state.physics.settings.gravityStrength : 0;
   switch (state.physics.settings.gravityDirection) {
@@ -2280,13 +2424,13 @@ function resetAllPhysicsRuntime() {
   state.physics.pendingTriggerEvents = [];
   state.physics.debugTriggerPairs = [];
   state.physics.debugCollisionPairs = [];
-  for (const item of state.items) {
+  for (const item of getActiveStageActors()) {
     resetPhysicsBody(item);
   }
 }
 
 function wakeMatchingPhysicsItems(predicate = () => true) {
-  for (const item of state.items) {
+  for (const item of getActiveStageActors()) {
     if (isPhysicsObject(item) && item.physics?.enabled && predicate(item)) {
       wakePhysicsItem(item);
     }
@@ -2387,7 +2531,7 @@ function getPhysicsPairItems(pairKey) {
 }
 
 function clearActorTriggerOverlapId(actorId) {
-  for (const item of state.items) {
+  for (const item of getActiveStageActors()) {
     if (isPhysicsObject(item)) {
       ensurePhysicsRuntime(item).overlapIds.delete(actorId);
     }
@@ -2710,7 +2854,7 @@ function updatePhysicsSleepState(item, deltaSeconds) {
 }
 
 function stepPhysics(deltaSeconds) {
-  const physicsItems = state.items.filter((item) => isPhysicsObject(item) && item.physics.enabled);
+  const physicsItems = getActiveStageActors().filter((item) => isPhysicsObject(item) && item.physics.enabled);
   const maxObjects = state.physics.settings.maxObjects;
   const simulatedItems = physicsItems.slice(0, maxObjects);
   const gravity = getPhysicsGravityVector();
@@ -3133,7 +3277,7 @@ function isBlockAvailableForCurrentTarget(block) {
 }
 
 function getItemById(itemId) {
-  return state.items.find((item) => item.id === itemId) || null;
+  return state.items.find((item) => item.id === itemId) || getSetItemById(itemId)?.item || null;
 }
 
 function normalizeScriptKey(key) {
@@ -5213,6 +5357,7 @@ function closeScriptsModule() {
 }
 
 function openStageModule() {
+  ensureDefaultScene();
   ensureDefaultSet();
   state.stageModuleOpen = true;
   state.scriptEditorMode = "main";
@@ -5227,7 +5372,9 @@ function openStageModule() {
 function closeStageModule() {
   state.stageModuleOpen = false;
   state.setInteraction = null;
+  hideSetActorContextMenu();
   closeSetMiniCodePanel();
+  closeObjectPhysicsEditor();
   elements.stageModule.classList.add("hidden");
   updateSidebarTabs();
 }
@@ -5542,29 +5689,38 @@ function renderCharacterBuilderTools() {
   }
 }
 
-function openCharacterBuilder(characterId = null) {
-  const character = characterId ? state.customCharacters.find((candidate) => candidate.id === characterId) : null;
+function openCharacterBuilder(characterId = null, assetType = "character") {
+  const isObjectBuilder = assetType === "object";
+  const assetList = isObjectBuilder ? state.customObjects : state.customCharacters;
+  const asset = characterId ? assetList.find((candidate) => candidate.id === characterId) : null;
+  const assetLabel = isObjectBuilder ? "Object" : "Character";
   state.characterBuilderOpen = true;
-  state.characterBuilder.editingId = character?.id || null;
+  state.characterBuilder.assetType = assetType;
+  state.characterBuilder.editingId = asset?.id || null;
   state.characterBuilder.activeTool = "select";
   state.characterBuilder.selectedItemId = null;
   state.characterBuilder.selectedDrawingId = null;
   state.characterBuilder.interaction = null;
   state.characterBuilder.penColor = elements.characterBuilderPenColor.value;
   state.characterBuilder.fillColor = elements.characterBuilderFillColor.value;
-  elements.characterBuilderName.value = character?.name || "Custom Character";
-  elements.characterBuilderLabel.textContent = character
-    ? `Editing ${character.name}. Save to update every placed copy of this custom character.`
-    : "Build a reusable character out of props, imported images, textures, and pen drawings.";
+  elements.characterBuilderTitle.textContent = `Create ${assetLabel}`;
+  elements.characterBuilderNameLabel.textContent = `${assetLabel} name`;
+  elements.saveCharacterBuilderButton.textContent = `Save ${assetLabel}`;
+  elements.characterBuilderName.value = asset?.name || `Custom ${assetLabel}`;
+  elements.characterBuilderLabel.textContent = asset
+    ? `Editing ${asset.name}. Save to update this custom ${assetLabel.toLowerCase()} everywhere it is used.`
+    : isObjectBuilder
+      ? "Build a reusable object out of shapes, imported images, textures, pen drawings, and paint bucket fills."
+      : "Build a reusable character out of props, imported images, textures, and pen drawings.";
 
-  if (character?.builderData) {
-    state.characterBuilder.items = (character.builderData.items || []).map(normalizeItem);
-    state.characterBuilder.drawings = (character.builderData.drawings || []).map(normalizeDrawing);
-  } else if (character?.imageData) {
+  if (asset?.builderData) {
+    state.characterBuilder.items = (asset.builderData.items || []).map(normalizeItem);
+    state.characterBuilder.drawings = (asset.builderData.drawings || []).map(normalizeDrawing);
+  } else if (asset?.imageData) {
     state.characterBuilder.items = [];
     state.characterBuilder.drawings = [normalizeDrawing({
       type: "image",
-      imageData: character.imageData,
+      imageData: asset.imageData,
       x: CHARACTER_BUILDER_WIDTH * 0.5,
       y: CHARACTER_BUILDER_HEIGHT * 0.5,
       w: CHARACTER_BUILDER_WIDTH * 0.62,
@@ -5703,34 +5859,42 @@ function renderCharacterBuilderImage() {
 }
 
 function saveCharacterBuilder() {
-  const name = elements.characterBuilderName.value.trim() || "Custom Character";
+  const isObjectBuilder = state.characterBuilder.assetType === "object";
+  const name = elements.characterBuilderName.value.trim() || (isObjectBuilder ? "Custom Object" : "Custom Character");
   const imageData = renderCharacterBuilderImage();
   const builderData = {
     items: state.characterBuilder.items.map(serializeItem),
     drawings: state.characterBuilder.drawings.map(serializeDrawing),
   };
-  let character = state.customCharacters.find((candidate) => candidate.id === state.characterBuilder.editingId);
+  const assetList = isObjectBuilder ? state.customObjects : state.customCharacters;
+  let asset = assetList.find((candidate) => candidate.id === state.characterBuilder.editingId);
 
-  if (!character) {
-    character = {
-      id: `custom-character-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  if (!asset) {
+    asset = {
+      id: `custom-${isObjectBuilder ? "object" : "character"}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name,
       preview: "IMG",
-      copy: "Created in the Character Builder.",
+      copy: `Created in the ${isObjectBuilder ? "Object" : "Character"} Builder.`,
       imageData,
       builderData,
     };
-    state.customCharacters.push(character);
+    if (isObjectBuilder) {
+      asset.baseColor = "#f4a261";
+    }
+    assetList.push(asset);
   } else {
-    character.name = name;
-    character.preview = "IMG";
-    character.copy = "Created in the Character Builder.";
-    character.imageData = imageData;
-    character.builderData = builderData;
+    asset.name = name;
+    asset.preview = "IMG";
+    asset.copy = `Created in the ${isObjectBuilder ? "Object" : "Character"} Builder.`;
+    asset.imageData = imageData;
+    asset.builderData = builderData;
+    if (isObjectBuilder) {
+      asset.baseColor = asset.baseColor || "#f4a261";
+    }
   }
 
-  state.setToolSelection.character = character.id;
-  setActiveTool("character", character.id);
+  state.setToolSelection[isObjectBuilder ? "object" : "character"] = asset.id;
+  setActiveTool(isObjectBuilder ? "object" : "character", asset.id);
   patternCaches.stage.clear();
   patternCaches.recording.clear();
   patternCaches.set.clear();
@@ -5739,7 +5903,7 @@ function saveCharacterBuilder() {
   populateSetToolLists();
   markProjectDirty();
   saveProjectState();
-  elements.toolLabel.textContent = `Saved custom character: ${name}.`;
+  elements.toolLabel.textContent = `Saved custom ${isObjectBuilder ? "object" : "character"}: ${name}.`;
   closeCharacterBuilder();
 }
 
@@ -6444,6 +6608,39 @@ function selectSetToolItem(type, id) {
   renderStageModule();
 }
 
+function renderSceneList() {
+  ensureDefaultScene();
+  elements.sceneList.innerHTML = "";
+  for (const scene of state.scenes) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "set-card";
+    button.classList.toggle("active", scene.id === state.activeSceneId);
+    button.innerHTML = `<strong>${scene.name}</strong><span>${scene.items.length} actor${scene.items.length === 1 ? "" : "s"} | ${scene.drawings.length} drawing${scene.drawings.length === 1 ? "" : "s"}</span>`;
+    button.addEventListener("click", () => selectSceneWorkspace(scene.id));
+    elements.sceneList.append(button);
+  }
+}
+
+function addSceneWorkspace() {
+  syncCurrentSceneToWorkspace();
+  const scene = createSceneWorkspace(createSceneName());
+  state.scenes.push(scene);
+  loadSceneWorkspace(scene.id);
+  markProjectDirty();
+  renderStageModule();
+}
+
+function selectSceneWorkspace(sceneId) {
+  if (sceneId === state.activeSceneId) {
+    return;
+  }
+  syncCurrentSceneToWorkspace();
+  loadSceneWorkspace(sceneId);
+  markProjectDirty();
+  renderStageModule();
+}
+
 function addStageSet() {
   const nextSet = createStageSet(createSetName());
   state.sets.push(nextSet);
@@ -6459,11 +6656,14 @@ function addStageSet() {
 
 function selectStageSet(setId) {
   state.activeSetId = setId;
+  state.sceneSetId = setId;
   state.setSelection.clear();
   state.setSelectedItemId = null;
   state.setSelectedDrawingId = null;
   state.setSelectedLightId = null;
   state.setMiniCodeItemId = null;
+  hideSetActorContextMenu();
+  closeObjectPhysicsEditor();
   state.scriptEditorMode = "main";
   markProjectDirty();
   renderStageModule();
@@ -6508,6 +6708,23 @@ function openSetMiniCodePanel(itemId) {
   state.setSelectedLightId = null;
   elements.setMiniCodePanel.classList.remove("hidden");
   renderSetMiniCodePanel();
+}
+
+function showSetActorContextMenu(item, event) {
+  if (!item) {
+    return;
+  }
+  state.setContextItemId = item.id;
+  elements.setActorContextPhysicsToggleButton.textContent = item.physics?.enabled ? "Physics Off" : "Physics On";
+  const panelRect = elements.stageModule.querySelector(".stage-module-shell").getBoundingClientRect();
+  elements.setActorContextMenu.style.left = `${clamp(event.clientX - panelRect.left, 12, panelRect.width - 170)}px`;
+  elements.setActorContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - 170)}px`;
+  elements.setActorContextMenu.classList.remove("hidden");
+}
+
+function hideSetActorContextMenu() {
+  state.setContextItemId = null;
+  elements.setActorContextMenu.classList.add("hidden");
 }
 
 function closeSetMiniCodePanel() {
@@ -6622,6 +6839,21 @@ function syncLightControls(light) {
   elements.setLightBrightness.value = Math.round(light.brightness * 100);
 }
 
+function fillSetDrawingAtPoint(point) {
+  const set = getActiveSet();
+  const drawing = hitTestSetDrawing(set, point);
+  if (!drawing?.closed) {
+    elements.setEditorLabel.textContent = "The paint bucket only fills closed set drawings.";
+    return;
+  }
+  drawing.fillColor = elements.setFillColor.value;
+  state.setSelection.clear();
+  state.setSelectedItemId = null;
+  state.setSelectedLightId = null;
+  state.setSelectedDrawingId = drawing.id;
+  markProjectDirty();
+}
+
 function onSetPointerDown(event) {
   if (!state.stageModuleOpen || event.button !== 0) {
     return;
@@ -6630,6 +6862,7 @@ function onSetPointerDown(event) {
   const set = getActiveSet();
   state.setPointerMoved = false;
   setCanvas.setPointerCapture?.(event.pointerId);
+  hideSetActorContextMenu();
 
   if (state.setEditorTool === "character" || state.setEditorTool === "object") {
     placeSetItem(point);
@@ -6653,6 +6886,11 @@ function onSetPointerDown(event) {
     set.drawings.push(drawing);
     state.setInteraction = { type: "draw", drawingId: drawing.id };
     markProjectDirty();
+    return;
+  }
+
+  if (state.setEditorTool === "bucket") {
+    fillSetDrawingAtPoint(point);
     return;
   }
 
@@ -6902,10 +7140,12 @@ function onSetContextMenu(event) {
   const point = getSetCanvasPoint(event);
   const item = hitTestSetItem(getActiveSet(), point.x, point.y);
   if (item) {
-    openSetMiniCodePanel(item.id);
+    setSetSelection([item.id]);
+    showSetActorContextMenu(item, event);
     renderStageModule();
     return;
   }
+  hideSetActorContextMenu();
   const drawing = hitTestSetDrawing(getActiveSet(), point);
   if (drawing) {
     const set = getActiveSet();
@@ -7267,7 +7507,9 @@ function showActorContextMenu(actor, event) {
   elements.actorContextCodeButton.classList.toggle("hidden", !canCodeSelection);
   elements.actorContextPenButton.classList.toggle("hidden", selectedItems.length !== 1 || actor.kind !== "character");
   elements.actorContextEditCharacterButton.classList.toggle("hidden", selectedItems.length !== 1 || !characterDef?.builderData);
-  elements.actorContextPhysicsButton.classList.toggle("hidden", !(state.physics.enabled && selectedItems.length === 1 && isPhysicsObject(actor)));
+  elements.actorContextPhysicsToggleButton.classList.toggle("hidden", !(selectedItems.length === 1 && isPhysicsObject(actor)));
+  elements.actorContextPhysicsToggleButton.textContent = actor.physics?.enabled ? "Physics Off" : "Physics On";
+  elements.actorContextPhysicsButton.classList.toggle("hidden", !(selectedItems.length === 1 && isPhysicsObject(actor)));
   elements.actorContextGroupButton.classList.toggle("hidden", selectedItems.length < 2);
   elements.actorContextUngroupButton.classList.toggle("hidden", !selectedItems.some((item) => item.groupId));
   elements.actorContextColor.parentElement.classList.toggle("hidden", !selectedObject);
@@ -7282,6 +7524,42 @@ function showActorContextMenu(actor, event) {
 
 function hideActorContextMenu() {
   elements.actorContextMenu.classList.add("hidden");
+}
+
+function toggleActorPhysicsEnabled(actorId) {
+  const actor = getItemById(actorId);
+  if (!actor || !isPhysicsObject(actor)) {
+    return;
+  }
+  const nextEnabled = !actor.physics.enabled;
+  actor.physics.enabled = nextEnabled;
+  if (nextEnabled) {
+    state.physics.enabled = true;
+    state.physics.statusMessage = "Physics on. Place or drag stage actors to test collisions.";
+    resetPhysicsBody(actor);
+    wakePhysicsItem(actor);
+  } else {
+    resetPhysicsBody(actor);
+  }
+  markProjectDirty();
+  renderPhysicsControls();
+}
+
+function openPenAnimationEditorForActor(actorId) {
+  const actor = getItemById(actorId);
+  if (!actor) {
+    return;
+  }
+  state.penAnimation.actorId = actor.id;
+  state.penAnimation.tool = null;
+  state.penAnimation.drawing = false;
+  state.penAnimation.draft = null;
+  elements.penAnimationDuration.value = String(actor.penAnimation?.duration || 2);
+  elements.penAnimationTitle.textContent = `Pen Animation: ${getActorDisplayName(actor)}`;
+  elements.penAnimationPanel.classList.remove("hidden");
+  hideActorContextMenu();
+  hideSetActorContextMenu();
+  updatePenAnimationUi();
 }
 
 function onStageContextMenu(event) {
@@ -7337,19 +7615,7 @@ function openContextCharacterBuilder() {
 }
 
 function openPenAnimationEditor() {
-  const actor = getItemById(state.contextActorId);
-  if (!actor) {
-    return;
-  }
-  state.penAnimation.actorId = actor.id;
-  state.penAnimation.tool = null;
-  state.penAnimation.drawing = false;
-  state.penAnimation.draft = null;
-  elements.penAnimationDuration.value = String(actor.penAnimation?.duration || 2);
-  elements.penAnimationTitle.textContent = `Pen Animation: ${getActorDisplayName(actor)}`;
-  elements.penAnimationPanel.classList.remove("hidden");
-  hideActorContextMenu();
-  updatePenAnimationUi();
+  openPenAnimationEditorForActor(state.contextActorId);
 }
 
 function closePenAnimationEditor() {
@@ -7749,7 +8015,7 @@ function prepareStageForRecording() {
   state.physics.pendingTriggerEvents = [];
   state.physics.debugTriggerPairs = [];
   state.physics.debugCollisionPairs = [];
-  for (const item of state.items) {
+  for (const item of getActiveStageActors()) {
     if (!isPhysicsObject(item) || !item.physics.enabled) {
       continue;
     }
@@ -8054,7 +8320,7 @@ function drawPhysicsDebugOverlay() {
   ctx.save();
   ctx.setLineDash([8, 6]);
   ctx.lineWidth = 2;
-  for (const item of state.items) {
+  for (const item of getActiveStageActors()) {
     if (!isPhysicsObject(item) || !item.physics.enabled) {
       continue;
     }
@@ -8765,11 +9031,11 @@ function getDisplayPenPath(item) {
   return item.penAnimation.points.map((point) => ({ x: point.x + offsetX, y: point.y + offsetY }));
 }
 
-function drawPenAnimationEditor() {
+function drawPenAnimationEditor(actors = getActiveStageActors()) {
   if (state.recording) {
     return;
   }
-  for (const item of state.items) {
+  for (const item of actors) {
     if (item.penAnimation?.points?.length >= 2) {
       drawPath(getDisplayPenPath(item), "rgba(47, 143, 131, 0.82)");
     }
@@ -8785,6 +9051,7 @@ function drawStage(now, options = {}) {
     showEditorOverlays = true,
     showRecordingOverlay = true,
     showSetContent = true,
+    showMainWorkspace = true,
   } = options;
   currentRenderFlags = {
     showPhysicsBadges: showEditorOverlays,
@@ -8827,30 +9094,33 @@ function drawStage(now, options = {}) {
   ctx.fillStyle = "rgba(97, 64, 39, 0.4)";
   ctx.font = "700 14px Trebuchet MS";
   ctx.fillText("WORMS STAGE", 18, state.stageHeight - 18);
+  const sceneStageSet = state.sceneSetId ? getStageSetById(state.sceneSetId) : null;
 
-  drawSetDrawings({ drawings: state.stageDrawings });
-  const selectedStageDrawing = state.stageDrawings.find((drawing) => drawing.id === state.stageSelectedDrawingId);
-  if (showSelectionOutlines && selectedStageDrawing) {
-    drawDrawingSelection(selectedStageDrawing);
-  }
-
-  if (showSetContent) {
-    drawSetContent(getActiveSet(), { showEditorHandles: false });
-  }
-
-  for (const item of state.items) {
-    if (item.kind === "character") {
-      drawCharacter(item);
-    } else {
-      drawObject(item);
+  if (showMainWorkspace) {
+    drawSetDrawings({ drawings: state.stageDrawings });
+    const selectedStageDrawing = state.stageDrawings.find((drawing) => drawing.id === state.stageSelectedDrawingId);
+    if (showSelectionOutlines && selectedStageDrawing) {
+      drawDrawingSelection(selectedStageDrawing);
     }
   }
 
-  drawPhysicsDebugOverlay();
+  if (showSetContent && sceneStageSet) {
+    drawSetContent(sceneStageSet, { showEditorHandles: false });
+  }
 
-  drawSceneLighting();
+  if (showMainWorkspace) {
+    for (const item of state.items) {
+      if (item.kind === "character") {
+        drawCharacter(item);
+      } else {
+        drawObject(item);
+      }
+    }
+    drawPhysicsDebugOverlay();
+    drawSceneLighting();
+  }
 
-  if (showSelectionOutlines) {
+  if (showMainWorkspace && showSelectionOutlines) {
     for (const item of getSelectedItems()) {
       drawSelectionOutline(item);
     }
@@ -8883,7 +9153,7 @@ function drawStage(now, options = {}) {
     drawRecordingOverlay(now);
   }
 
-  if (state.items.length === 0 && getActiveSet().items.length === 0 && getActiveSet().drawings.length === 0) {
+  if (showMainWorkspace && state.items.length === 0 && (!sceneStageSet || (sceneStageSet.items.length === 0 && sceneStageSet.drawings.length === 0))) {
     ctx.save();
     ctx.fillStyle = "rgba(120, 86, 58, 0.7)";
     ctx.font = "700 24px Trebuchet MS";
@@ -8926,8 +9196,10 @@ function renderStageViews(now) {
         showEditorOverlays: false,
         showRecordingOverlay: false,
         showSetContent: false,
+        showMainWorkspace: false,
       });
       drawSetContent(getActiveSet(), { showEditorHandles: true });
+      drawPenAnimationEditor(getActiveSet().items);
       ctx.restore();
     });
   }
@@ -9202,9 +9474,8 @@ async function goToStudio() {
 function clearStage() {
   state.items = [];
   state.stageDrawings = [];
-  state.sets = [];
-  ensureDefaultSet();
   state.sceneScripts = [];
+  state.sceneSetId = null;
   state.scene = {
     lightingColor: "#fff7d6",
     lightingStrength: 0,
@@ -9216,6 +9487,7 @@ function clearStage() {
   stopAllAudioNodes();
   resetAllPhysicsRuntime();
   clearSelection();
+  syncCurrentSceneToWorkspace();
   markProjectDirty();
   saveProjectState();
 }
@@ -9430,7 +9702,7 @@ function togglePhysicsEnabled() {
     closeObjectPhysicsEditor();
   } else {
     state.physics.statusMessage = "Physics on. Place or drag stage actors to test collisions.";
-    for (const item of state.items) {
+    for (const item of getActiveStageActors()) {
       if (isPhysicsObject(item) && item.physics.enabled) {
         wakePhysicsItem(item);
       }
@@ -9443,7 +9715,7 @@ function togglePhysicsEnabled() {
 function toggleGravityEnabled() {
   state.physics.gravityEnabled = !state.physics.gravityEnabled;
   if (state.physics.gravityEnabled) {
-    for (const item of state.items) {
+    for (const item of getActiveStageActors()) {
       if (isPhysicsObject(item) && item.physics.enabled && item.physics.gravityAffected) {
         wakePhysicsItem(item);
       }
@@ -9468,7 +9740,7 @@ function updateGlobalPhysicsSettingsFromInputs() {
   state.physics.settings.layerDebugView = elements.physicsLayerDebugView.checked;
   state.physics.settings.overlapDebugView = elements.physicsOverlapDebugView.checked;
   if (state.physics.enabled) {
-    for (const item of state.items) {
+    for (const item of getActiveStageActors()) {
       if (isPhysicsObject(item) && item.physics.enabled) {
         wakePhysicsItem(item);
       }
@@ -9478,14 +9750,25 @@ function updateGlobalPhysicsSettingsFromInputs() {
   renderPhysicsControls();
 }
 
-function openContextPhysicsEditor() {
-  const actor = getItemById(state.contextActorId);
-  if (!actor || !isPhysicsObject(actor) || !state.physics.enabled) {
+function openPhysicsEditorForActor(actorId) {
+  const actor = getItemById(actorId);
+  if (!actor || !isPhysicsObject(actor)) {
     return;
   }
+  state.physics.enabled = true;
+  state.physics.statusMessage = "Physics on. Place or drag stage actors to test collisions.";
   state.physics.objectEditorItemId = actor.id;
   hideActorContextMenu();
+  hideSetActorContextMenu();
   renderPhysicsControls();
+}
+
+function openContextPhysicsEditor() {
+  openPhysicsEditorForActor(state.contextActorId);
+}
+
+function openSetContextPhysicsEditor() {
+  openPhysicsEditorForActor(state.setContextItemId);
 }
 
 function updatePhysicsEditorItem(update) {
@@ -9515,6 +9798,31 @@ function updatePhysicsEditorItem(update) {
   }
   markProjectDirty();
   renderPhysicsControls();
+}
+
+function openSetContextActorCode() {
+  if (state.setContextItemId == null) {
+    return;
+  }
+  openSetMiniCodePanel(state.setContextItemId);
+  hideSetActorContextMenu();
+  renderStageModule();
+}
+
+function openSetContextPenAnimation() {
+  if (state.setContextItemId == null) {
+    return;
+  }
+  openPenAnimationEditorForActor(state.setContextItemId);
+}
+
+function toggleSetContextPhysics() {
+  if (state.setContextItemId == null) {
+    return;
+  }
+  toggleActorPhysicsEnabled(state.setContextItemId);
+  hideSetActorContextMenu();
+  renderStageModule();
 }
 
 function buildSetToolCard(definition, options) {
@@ -9624,6 +9932,7 @@ function renderSetToolPanels() {
   elements.setObjectList.classList.toggle("hidden", state.setEditorTool !== "object");
   elements.setTextureList.classList.toggle("hidden", state.setEditorTool !== "texture");
   elements.setPenControls.classList.toggle("hidden", state.setEditorTool !== "pen");
+  elements.setBucketControls.classList.toggle("hidden", state.setEditorTool !== "bucket");
   elements.setLightControls.classList.toggle("hidden", state.setEditorTool !== "light");
 
   for (const card of elements.stageModule.querySelectorAll(".set-tool-grid .tool-card")) {
@@ -9696,11 +10005,14 @@ function renderSetMiniCodePanel() {
 }
 
 function renderStageModule() {
+  ensureDefaultScene();
   ensureDefaultSet();
+  renderSceneList();
   renderSetList();
   renderSetToolPanels();
   const set = getActiveSet();
-  elements.setEditorLabel.textContent = `${set.name}: ${set.items.length} item${set.items.length === 1 ? "" : "s"}, ${set.drawings.length} drawing${set.drawings.length === 1 ? "" : "s"}, ${set.lights.length} light${set.lights.length === 1 ? "" : "s"}.`;
+  const scene = getActiveSceneWorkspace();
+  elements.setEditorLabel.textContent = `${scene.name} | ${set.name}: ${set.items.length} item${set.items.length === 1 ? "" : "s"}, ${set.drawings.length} drawing${set.drawings.length === 1 ? "" : "s"}, ${set.lights.length} light${set.lights.length === 1 ? "" : "s"}.`;
   if (state.setMiniCodeItemId != null) {
     renderSetMiniCodePanel();
   }
@@ -10123,6 +10435,10 @@ function bindEvents() {
   elements.actorContextCodeButton.addEventListener("click", openContextActorCode);
   elements.actorContextPenButton.addEventListener("click", openPenAnimationEditor);
   elements.actorContextEditCharacterButton.addEventListener("click", openContextCharacterBuilder);
+  elements.actorContextPhysicsToggleButton.addEventListener("click", () => {
+    toggleActorPhysicsEnabled(state.contextActorId);
+    hideActorContextMenu();
+  });
   elements.actorContextPhysicsButton.addEventListener("click", openContextPhysicsEditor);
   elements.actorContextGroupButton.addEventListener("click", groupSelection);
   elements.actorContextUngroupButton.addEventListener("click", ungroupSelection);
@@ -10241,6 +10557,7 @@ function bindEvents() {
   elements.previewMusicMakerButton.addEventListener("click", () => playMusicPattern(cloneMusicPattern()));
   elements.saveMusicMakerButton.addEventListener("click", saveMusicMakerLoop);
   elements.createCharacterButton.addEventListener("click", () => openCharacterBuilder());
+  elements.createObjectButton.addEventListener("click", () => openCharacterBuilder(null, "object"));
   elements.closeCharacterBuilderButton.addEventListener("click", closeCharacterBuilder);
   elements.saveCharacterBuilderButton.addEventListener("click", saveCharacterBuilder);
   elements.characterBuilderSelectButton.addEventListener("click", () => setCharacterBuilderTool("select"));
@@ -10293,12 +10610,23 @@ function bindEvents() {
     elements.importMusicInput.dataset.blockId = "";
   });
   elements.stageModuleCloseButton.addEventListener("click", closeStageModule);
+  elements.addSceneButton.addEventListener("click", addSceneWorkspace);
   elements.addSetButton.addEventListener("click", addStageSet);
   elements.setMiniCodeCloseButton.addEventListener("click", closeSetMiniCodePanel);
   elements.setPenColor.addEventListener("input", () => {
     state.setPenColor = elements.setPenColor.value;
     setSetEditorTool("pen");
   });
+  elements.setFillColor.addEventListener("input", () => {
+    if (state.setEditorTool !== "bucket") {
+      return;
+    }
+    renderStageModule();
+  });
+  elements.setActorContextCodeButton.addEventListener("click", openSetContextActorCode);
+  elements.setActorContextPenButton.addEventListener("click", openSetContextPenAnimation);
+  elements.setActorContextPhysicsToggleButton.addEventListener("click", toggleSetContextPhysics);
+  elements.setActorContextPhysicsButton.addEventListener("click", openSetContextPhysicsEditor);
   elements.setAddLightButton.addEventListener("click", () => {
     setSetEditorTool("light");
     const set = getActiveSet();
@@ -10344,6 +10672,12 @@ function bindEvents() {
   window.addEventListener("pointerdown", (event) => {
     if (!elements.scriptBlockInfo.contains(event.target)) {
       hideBlockInfo();
+    }
+    if (!elements.actorContextMenu.contains(event.target)) {
+      hideActorContextMenu();
+    }
+    if (!elements.setActorContextMenu.contains(event.target)) {
+      hideSetActorContextMenu();
     }
   });
   window.addEventListener("contextmenu", (event) => {

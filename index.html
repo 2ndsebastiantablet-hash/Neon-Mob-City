@@ -54,6 +54,7 @@
             <button id="actorContextCodeButton" type="button">Code</button>
             <button id="actorContextPenButton" type="button">Pen Animation</button>
             <button id="actorContextEditCharacterButton" type="button">Edit Character</button>
+            <button id="actorContextPhysicsToggleButton" type="button">Physics On</button>
             <button id="actorContextPhysicsButton" type="button">Advanced Physics</button>
             <button id="actorContextGroupButton" type="button">Group</button>
             <button id="actorContextUngroupButton" type="button">Ungroup</button>
@@ -150,6 +151,7 @@
 
             <section id="objectsPanel" class="tool-panel hidden" aria-label="Objects">
               <button id="importObjectButton" type="button" class="secondary-button full-width import-button">Import Object Image</button>
+              <button id="createObjectButton" type="button" class="primary-button full-width import-button">Create Object</button>
               <div class="set-control-card">
                 <button id="physicsToggleButton" type="button" class="secondary-button full-width">Physics: Off</button>
                 <button id="gravityToggleButton" type="button" class="ghost-button full-width">Gravity: On</button>
@@ -308,6 +310,11 @@
           <div class="stage-module-layout">
             <aside class="set-list-panel">
               <div class="set-list-heading">
+                <h4>Scenes</h4>
+                <button id="addSceneButton" type="button" class="secondary-button compact-button">+</button>
+              </div>
+              <div id="sceneList" class="set-list"></div>
+              <div class="set-list-heading">
                 <h4>Sets</h4>
                 <button id="addSetButton" type="button" class="secondary-button compact-button">+</button>
               </div>
@@ -329,6 +336,7 @@
                 <button type="button" class="set-tool-tab" data-set-tool="object">Objects</button>
                 <button type="button" class="set-tool-tab" data-set-tool="texture">Textures</button>
                 <button type="button" class="set-tool-tab" data-set-tool="pen">Pen</button>
+                <button type="button" class="set-tool-tab" data-set-tool="bucket">Bucket</button>
                 <button type="button" class="set-tool-tab" data-set-tool="light">Lights</button>
               </div>
               <div id="setCharacterList" class="set-tool-grid"></div>
@@ -338,6 +346,10 @@
                 <p>Draw directly onto this set.</p>
                 <div id="setBaseColors" class="set-color-row"></div>
                 <label class="set-control-label">Custom color <input id="setPenColor" type="color" value="#2f8f83"></label>
+              </div>
+              <div id="setBucketControls" class="set-control-card hidden">
+                <p>Fill closed set drawings.</p>
+                <label class="set-control-label">Fill color <input id="setFillColor" type="color" value="#ffd166"></label>
               </div>
               <div id="setLightControls" class="set-control-card hidden">
                 <button id="setAddLightButton" type="button" class="secondary-button full-width">Add Light Source</button>
@@ -352,6 +364,13 @@
               </div>
               <button id="importStageButton" type="button" class="secondary-button full-width import-button">Import Stage Image</button>
             </aside>
+          </div>
+
+          <div id="setActorContextMenu" class="actor-context-menu hidden">
+            <button id="setActorContextCodeButton" type="button">Code</button>
+            <button id="setActorContextPenButton" type="button">Pen Animation</button>
+            <button id="setActorContextPhysicsToggleButton" type="button">Physics On</button>
+            <button id="setActorContextPhysicsButton" type="button">Advanced Physics</button>
           </div>
 
           <aside id="setMiniCodePanel" class="set-mini-code-panel hidden" aria-label="Set mini code panel">
@@ -383,7 +402,7 @@
           <header class="scripts-module-header">
             <div>
               <p class="topbar-label">Custom Actor Workshop</p>
-              <h3>Create Character</h3>
+              <h3 id="characterBuilderTitle">Create Character</h3>
               <p id="characterBuilderLabel" class="scripts-copy">Build a reusable character out of props, imported images, textures, and pen drawings.</p>
             </div>
             <div class="scripts-module-actions">
@@ -394,7 +413,7 @@
 
           <div class="character-builder-layout">
             <aside class="character-builder-tools">
-              <label class="set-control-label">Character name <input id="characterBuilderName" type="text" value="Custom Character"></label>
+              <label class="set-control-label"><span id="characterBuilderNameLabel">Character name</span> <input id="characterBuilderName" type="text" value="Custom Character"></label>
               <div class="set-tool-tabs">
                 <button id="characterBuilderSelectButton" type="button" class="set-tool-tab active">Select</button>
                 <button id="characterBuilderPenButton" type="button" class="set-tool-tab">Pen</button>
