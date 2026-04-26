@@ -5477,6 +5477,7 @@ function setSceneLighting(color, strength) {
 function spawnScriptActor(block) {
   const item = createCharacterItem(block.params.actorSubtype || getCharacterDefs()[0].id, Number(block.params.x || state.stageWidth * 0.5), Number(block.params.y || state.stageHeight * 0.5));
   clampItemToStage(item);
+  moveItemToFront(item, state.items, state.stageDrawings);
   state.items.push(item);
   markProjectDirty();
 }
@@ -6194,6 +6195,42 @@ function getCanvasPoint(event) {
   };
 }
 
+function isPrimaryPointerPress(event) {
+  if (!event) {
+    return false;
+  }
+  if (event.pointerType === "touch") {
+    return true;
+  }
+  if (event.button === 0 || event.buttons === 1) {
+    return true;
+  }
+  return event.button === -1 && event.pointerType === "mouse";
+}
+
+function getHighestLayerOrder(items = [], drawings = []) {
+  let highest = 0;
+  for (const item of items) {
+    if (Number.isFinite(item?.layerOrder)) {
+      highest = Math.max(highest, item.layerOrder);
+    }
+  }
+  for (const drawing of drawings) {
+    if (Number.isFinite(drawing?.layerOrder)) {
+      highest = Math.max(highest, drawing.layerOrder);
+    }
+  }
+  return highest;
+}
+
+function moveItemToFront(item, items = [], drawings = []) {
+  if (!item) {
+    return;
+  }
+  item.layerOrder = getHighestLayerOrder(items, drawings) + 1;
+  state.nextLayerOrder = Math.max(state.nextLayerOrder, item.layerOrder + 1);
+}
+
 function getItemBounds(item) {
   const size = getItemSize(item);
   return {
@@ -6556,6 +6593,7 @@ function placeItemFromTool(point) {
 
   pushUndoSnapshot();
   clampItemToStage(item);
+  moveItemToFront(item, state.items, state.stageDrawings);
   state.items.push(item);
   setSelection([item.id]);
   markProjectDirty();
@@ -6974,7 +7012,7 @@ function pasteCharacterBuilderClipboard() {
 }
 
 function onCharacterBuilderPointerDown(event) {
-  if (!state.characterBuilderOpen || event.button !== 0) {
+  if (!state.characterBuilderOpen || !isPrimaryPointerPress(event)) {
     return;
   }
   const point = getCharacterBuilderPoint(event);
@@ -6984,6 +7022,7 @@ function onCharacterBuilderPointerDown(event) {
     pushUndoSnapshot();
     const item = createObjectItem(state.characterBuilder.toolSelection.object, point.x, point.y);
     clampBuilderItem(item);
+    moveItemToFront(item, state.characterBuilder.items, state.characterBuilder.drawings);
     state.characterBuilder.items.push(item);
     state.characterBuilder.selectedItemId = item.id;
     state.characterBuilder.selectedDrawingId = null;
@@ -7690,6 +7729,7 @@ function placeSetItem(point) {
     return;
   }
   clampItemToStage(item);
+  moveItemToFront(item, set.items, set.drawings);
   set.items.push(item);
   setSetSelection([item.id]);
   markProjectDirty();
@@ -7902,7 +7942,7 @@ function fillSetDrawingAtPoint(point) {
 }
 
 function onSetPointerDown(event) {
-  if (!state.stageModuleOpen || event.button !== 0 || !canEditCurrentProject()) {
+  if (!state.stageModuleOpen || !isPrimaryPointerPress(event) || !canEditCurrentProject()) {
     return;
   }
   const point = getSetCanvasPoint(event);
@@ -8281,7 +8321,7 @@ function applyTextureAtPoint(point) {
 }
 
 function onPointerDown(event) {
-  if (state.screen !== "studio" || state.characterBuilderOpen || event.button !== 0) {
+  if (state.screen !== "studio" || state.characterBuilderOpen || !isPrimaryPointerPress(event)) {
     return;
   }
 
@@ -8994,6 +9034,7 @@ function pasteClipboard() {
     }
     item.scripts = Array.isArray(template.scripts) ? template.scripts.map(deserializeBlock) : [];
     clampItemToStage(item);
+    moveItemToFront(item, state.items, state.stageDrawings);
     state.items.push(item);
     newIds.push(item.id);
   }
