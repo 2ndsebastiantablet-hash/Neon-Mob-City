@@ -6199,13 +6199,19 @@ function isPrimaryPointerPress(event) {
   if (!event) {
     return false;
   }
-  if (event.pointerType === "touch") {
+  if (event.button === 2 || event.buttons === 2) {
+    return false;
+  }
+  if (event.isPrimary === false) {
+    return false;
+  }
+  if (["mouse", "pen", "touch"].includes(event.pointerType)) {
+    return event.button == null || event.button === 0 || event.button === -1 || event.buttons === 0 || event.buttons === 1;
+  }
+  if (event.button == null || event.button === 0 || event.button === -1 || event.buttons === 0 || event.buttons === 1) {
     return true;
   }
-  if (event.button === 0 || event.buttons === 1) {
-    return true;
-  }
-  return event.button === -1 && event.pointerType === "mouse";
+  return false;
 }
 
 function getHighestLayerOrder(items = [], drawings = []) {
