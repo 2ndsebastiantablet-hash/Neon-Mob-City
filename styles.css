@@ -1141,6 +1141,7 @@ button:disabled {
 
 .actor-context-menu,
 .pen-animation-panel,
+.rig-panel,
 .texture-editor-panel,
 .object-physics-panel {
   position: absolute;
@@ -1169,6 +1170,93 @@ button:disabled {
   left: auto;
   z-index: 14;
   width: min(28rem, calc(100vw - 2rem));
+}
+
+.rig-panel {
+  top: 1rem;
+  left: 1rem;
+  width: min(24rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  overflow: auto;
+  z-index: 13;
+}
+
+.rig-mode-tabs,
+.rig-actions-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.rig-actions-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rig-mode-tabs button.active,
+.rig-actions-row button.active {
+  color: #fffaf3;
+  background: linear-gradient(135deg, #2f8f83, #247066);
+}
+
+.rig-controls-grid,
+.rig-frame-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.rig-frame-editor {
+  padding: 0.65rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 251, 244, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(82, 47, 18, 0.08);
+}
+
+.rig-dot-list-wrap,
+.rig-dot-list,
+.rig-action-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.rig-dot-card,
+.rig-action-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 12px;
+  background: rgba(255, 253, 250, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(82, 47, 18, 0.08);
+}
+
+.rig-action-card {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.rig-dot-card.active {
+  box-shadow: inset 0 0 0 2px rgba(47, 143, 131, 0.34);
+}
+
+.rig-dot-card strong,
+.rig-action-card strong {
+  display: block;
+  font-size: 0.84rem;
+}
+
+.rig-dot-card span,
+.rig-action-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.rig-dot-card button,
+.rig-action-card button {
+  padding: 0.38rem 0.55rem;
+  font-size: 0.72rem;
 }
 
 .object-physics-panel {

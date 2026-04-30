@@ -112,6 +112,7 @@
           <div id="actorContextMenu" class="actor-context-menu hidden">
             <button id="actorContextCodeButton" type="button">Code</button>
             <button id="actorContextPenButton" type="button">Pen Animation</button>
+            <button id="actorContextRigButton" type="button">Rig / Animate</button>
             <button id="actorContextEditCharacterButton" type="button">Edit Character</button>
             <button id="actorContextPhysicsToggleButton" type="button">Physics On</button>
             <button id="actorContextPhysicsButton" type="button">Advanced Physics</button>
@@ -178,6 +179,55 @@
             <label class="set-control-label">Duration seconds <input id="penAnimationDuration" type="number" min="0.1" max="60" step="0.1" value="2"></label>
             <p id="penAnimationHelp">Pick a tool, then draw a motion path starting from the actor.</p>
           </div>
+          <aside id="rigPanel" class="rig-panel hidden" aria-label="Rig and animation editor">
+            <div class="texture-editor-header">
+              <strong id="rigPanelTitle">Rig / Animate</strong>
+              <button id="closeRigPanelButton" type="button" class="ghost-button">Close</button>
+            </div>
+            <div class="rig-mode-tabs">
+              <button id="rigModeButton" type="button" class="secondary-button">Rig</button>
+              <button id="animateModeButton" type="button" class="ghost-button">Animate</button>
+            </div>
+            <div class="rig-controls-grid">
+              <label class="set-control-label">Global FPS <input id="rigGlobalFps" type="number" min="1" max="60" step="1" value="12"></label>
+              <label class="set-control-label">Duration <input id="rigActionDuration" type="number" min="0.1" max="20" step="0.1" value="1"></label>
+              <label class="set-control-label">Sequence # <input id="rigSequenceNumber" type="number" min="1" max="99" step="1" value="1"></label>
+              <label class="set-control-label">Dot FPS <input id="rigDotFps" type="number" min="0" max="60" step="1" value="0"></label>
+            </div>
+            <div class="rig-actions-row">
+              <button id="saveRigActionButton" type="button" class="primary-button">Save Action</button>
+              <button id="playRigActionButton" type="button" class="ghost-button">Play Action</button>
+              <button id="playRigSequenceButton" type="button" class="secondary-button">Play Sequence</button>
+            </div>
+            <div class="rig-frame-editor">
+              <div class="rig-actions-row">
+                <button id="rigPrevFrameButton" type="button" class="ghost-button">Prev</button>
+                <button id="rigNextFrameButton" type="button" class="ghost-button">Next</button>
+              </div>
+              <label class="set-control-label">Frame <input id="rigFrameInput" type="number" min="0" max="999" step="1" value="0"></label>
+              <label class="set-control-label">Tool
+                <select id="rigFrameTool">
+                  <option value="select">Move Dots</option>
+                  <option value="pen">Pen</option>
+                  <option value="bucket">Paint Bucket</option>
+                  <option value="eraser">Eraser</option>
+                </select>
+              </label>
+              <label class="set-control-label">Pen color <input id="rigPenColor" type="color" value="#2f8f83"></label>
+              <label class="set-control-label">Fill color <input id="rigFillColor" type="color" value="#ffd166"></label>
+              <label class="set-control-label">Eraser size <input id="rigEraserSize" type="range" min="4" max="48" step="2" value="18"></label>
+              <label class="set-control-label">Onion skin <input id="rigOnionSkin" type="checkbox" checked></label>
+              <label class="set-control-label">Onion opacity <input id="rigOnionAlpha" type="range" min="0" max="80" step="5" value="30"></label>
+            </div>
+            <div class="rig-dot-list-wrap">
+              <strong>Rig Dots</strong>
+              <div id="rigDotList" class="rig-dot-list"></div>
+            </div>
+            <div class="rig-dot-list-wrap">
+              <strong>Actions</strong>
+              <div id="rigActionList" class="rig-action-list"></div>
+            </div>
+          </aside>
         </section>
 
         <aside class="sidebar" aria-label="Scene tools">
@@ -195,6 +245,7 @@
             <section id="charactersPanel" class="tool-panel" aria-label="Characters">
               <button id="importCharacterButton" type="button" class="secondary-button full-width import-button">Import Character Image</button>
               <button id="createCharacterButton" type="button" class="primary-button full-width import-button">Create Character</button>
+              <button id="rigSelectedCharacterButton" type="button" class="ghost-button full-width import-button">Rig / Animate Selected</button>
               <div id="characterList" class="tool-grid character-grid"></div>
             </section>
 

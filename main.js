@@ -1112,6 +1112,7 @@ const elements = {
   textureList: document.querySelector("#textureList"),
   objectList: document.querySelector("#objectList"),
   createCharacterButton: document.querySelector("#createCharacterButton"),
+  rigSelectedCharacterButton: document.querySelector("#rigSelectedCharacterButton"),
   createObjectButton: document.querySelector("#createObjectButton"),
   importCharacterButton: document.querySelector("#importCharacterButton"),
   importTextureButton: document.querySelector("#importTextureButton"),
@@ -1154,6 +1155,7 @@ const elements = {
   actorContextMenu: document.querySelector("#actorContextMenu"),
   actorContextCodeButton: document.querySelector("#actorContextCodeButton"),
   actorContextPenButton: document.querySelector("#actorContextPenButton"),
+  actorContextRigButton: document.querySelector("#actorContextRigButton"),
   actorContextEditCharacterButton: document.querySelector("#actorContextEditCharacterButton"),
   actorContextPhysicsToggleButton: document.querySelector("#actorContextPhysicsToggleButton"),
   actorContextPhysicsButton: document.querySelector("#actorContextPhysicsButton"),
@@ -1197,6 +1199,29 @@ const elements = {
   previewPenAnimationButton: document.querySelector("#previewPenAnimationButton"),
   deletePenAnimationButton: document.querySelector("#deletePenAnimationButton"),
   closePenAnimationButton: document.querySelector("#closePenAnimationButton"),
+  rigPanel: document.querySelector("#rigPanel"),
+  rigPanelTitle: document.querySelector("#rigPanelTitle"),
+  closeRigPanelButton: document.querySelector("#closeRigPanelButton"),
+  rigModeButton: document.querySelector("#rigModeButton"),
+  animateModeButton: document.querySelector("#animateModeButton"),
+  rigGlobalFps: document.querySelector("#rigGlobalFps"),
+  rigActionDuration: document.querySelector("#rigActionDuration"),
+  rigSequenceNumber: document.querySelector("#rigSequenceNumber"),
+  rigDotFps: document.querySelector("#rigDotFps"),
+  saveRigActionButton: document.querySelector("#saveRigActionButton"),
+  playRigActionButton: document.querySelector("#playRigActionButton"),
+  playRigSequenceButton: document.querySelector("#playRigSequenceButton"),
+  rigPrevFrameButton: document.querySelector("#rigPrevFrameButton"),
+  rigNextFrameButton: document.querySelector("#rigNextFrameButton"),
+  rigFrameInput: document.querySelector("#rigFrameInput"),
+  rigFrameTool: document.querySelector("#rigFrameTool"),
+  rigPenColor: document.querySelector("#rigPenColor"),
+  rigFillColor: document.querySelector("#rigFillColor"),
+  rigEraserSize: document.querySelector("#rigEraserSize"),
+  rigOnionSkin: document.querySelector("#rigOnionSkin"),
+  rigOnionAlpha: document.querySelector("#rigOnionAlpha"),
+  rigDotList: document.querySelector("#rigDotList"),
+  rigActionList: document.querySelector("#rigActionList"),
   stagePenColor: document.querySelector("#stagePenColor"),
   stageDrawButton: document.querySelector("#stageDrawButton"),
   stageFillColor: document.querySelector("#stageFillColor"),
@@ -1299,6 +1324,7 @@ const characterBuilderCtx = characterBuilderCanvas.getContext("2d");
 let currentRenderFlags = {
   showPhysicsBadges: true,
   showPhysicsDebug: false,
+  showEditorOverlays: true,
 };
 
 function createDefaultPhysicsSettings() {
@@ -1621,6 +1647,15 @@ const state = {
     tool: null,
     drawing: false,
     preview: null,
+  },
+  rigEditor: {
+    actorId: null,
+    mode: "rig",
+    selectedDotId: null,
+    selectedActionId: null,
+    frame: 0,
+    tool: "select",
+    drawingId: null,
   },
   textureEditor: {
     textureId: null,
@@ -2003,6 +2038,11 @@ function createItemRuntime() {
       overlapIds: new Set(),
       initialized: false,
     },
+    rig: {
+      dotOffsets: new Map(),
+      actionRunners: [],
+      sequenceRunner: null,
+    },
   };
 }
 
@@ -2074,6 +2114,98 @@ function serializePenAnimation(animation) {
   };
 }
 
+function normalizeRigDrawing(drawing) {
+  return {
+    id: drawing.id || `rig-drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type: drawing.type === "fill" ? "fill" : drawing.type === "erase" ? "erase" : "pen",
+    color: drawing.color || "#2f8f83",
+    size: clamp(Number(drawing.size || 6), 1, 80),
+    points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: Number(point.x || 0), y: Number(point.y || 0) })) : [],
+  };
+}
+
+function serializeRigDrawing(drawing) {
+  return {
+    id: drawing.id,
+    type: drawing.type,
+    color: drawing.color,
+    size: drawing.size,
+    points: Array.isArray(drawing.points) ? drawing.points.map((point) => ({ x: point.x, y: point.y })) : [],
+  };
+}
+
+function normalizeRigFrame(frame) {
+  return {
+    index: Math.max(0, Math.round(Number(frame.index || 0))),
+    dots: frame.dots && typeof frame.dots === "object"
+      ? Object.fromEntries(Object.entries(frame.dots).map(([dotId, value]) => [dotId, {
+        x: Number(value?.x || 0),
+        y: Number(value?.y || 0),
+      }]))
+      : {},
+    drawings: Array.isArray(frame.drawings) ? frame.drawings.map(normalizeRigDrawing) : [],
+  };
+}
+
+function serializeRigFrame(frame) {
+  return {
+    index: frame.index,
+    dots: Object.fromEntries(Object.entries(frame.dots || {}).map(([dotId, value]) => [dotId, { x: value.x, y: value.y }])),
+    drawings: Array.isArray(frame.drawings) ? frame.drawings.map(serializeRigDrawing) : [],
+  };
+}
+
+function normalizeRigAction(action) {
+  return {
+    id: action.id || `rig-action-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: action.name || "Rig Action",
+    sequence: Math.max(1, Math.round(Number(action.sequence || 1))),
+    duration: clamp(Number(action.duration || 1), 0.1, 20),
+    fps: clamp(Number(action.fps || 12), 1, 60),
+    dotIds: Array.isArray(action.dotIds) ? action.dotIds.map(String) : [],
+    frames: Array.isArray(action.frames) ? action.frames.map(normalizeRigFrame) : [],
+  };
+}
+
+function serializeRigAction(action) {
+  return {
+    id: action.id,
+    name: action.name,
+    sequence: action.sequence,
+    duration: action.duration,
+    fps: action.fps,
+    dotIds: Array.isArray(action.dotIds) ? [...action.dotIds] : [],
+    frames: Array.isArray(action.frames) ? action.frames.map(serializeRigFrame) : [],
+  };
+}
+
+function normalizeCharacterRig(rig) {
+  return {
+    globalFps: clamp(Number(rig?.globalFps || 12), 1, 60),
+    onionSkin: rig?.onionSkin !== false,
+    onionAlpha: clamp(Number(rig?.onionAlpha ?? 0.3), 0, 0.8),
+    dots: Array.isArray(rig?.dots) ? rig.dots.map((dot) => ({
+      id: dot.id || `rig-dot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: dot.name || "Dot",
+      x: Number(dot.x || 0),
+      y: Number(dot.y || 0),
+      fps: clamp(Number(dot.fps || 0), 0, 60),
+    })) : [],
+    actions: Array.isArray(rig?.actions) ? rig.actions.map(normalizeRigAction) : [],
+  };
+}
+
+function serializeCharacterRig(rig) {
+  const normalized = normalizeCharacterRig(rig);
+  return {
+    globalFps: normalized.globalFps,
+    onionSkin: normalized.onionSkin,
+    onionAlpha: normalized.onionAlpha,
+    dots: normalized.dots.map((dot) => ({ id: dot.id, name: dot.name, x: dot.x, y: dot.y, fps: dot.fps })),
+    actions: normalized.actions.map(serializeRigAction),
+  };
+}
+
 function getNextLayerOrder() {
   return state.nextLayerOrder++;
 }
@@ -2098,6 +2230,7 @@ function normalizeItem(item) {
     imageData: item.imageData || null,
     physics,
     penAnimation: item.penAnimation ? normalizePenAnimation(item.penAnimation) : null,
+    rig: item.kind === "character" ? normalizeCharacterRig(item.rig) : null,
     scripts: Array.isArray(item.scripts) ? item.scripts.map(deserializeBlock) : [],
     runtime,
   };
@@ -2165,6 +2298,7 @@ function serializeItem(item) {
     layerOrder: item.layerOrder,
     physics: serializeObjectPhysics(item.physics || normalizeObjectPhysics(null, item.kind)),
     penAnimation: item.penAnimation ? serializePenAnimation(item.penAnimation) : null,
+    rig: item.kind === "character" ? serializeCharacterRig(item.rig) : null,
     scripts: item.scripts.map(serializeBlock),
   };
 }
@@ -3137,10 +3271,12 @@ function applyProjectPermissions() {
     closeStageModule();
     closeCharacterBuilder();
     closeMusicMakerModule();
+    closeRigEditor();
   }
   elements.clearStageButton.disabled = !canEdit;
   elements.recordButton.disabled = !canEdit || Boolean(state.recording) || !window.MediaRecorder;
   elements.globalUndoButton.disabled = !canEdit || state.undoStack.length === 0;
+  elements.rigSelectedCharacterButton.disabled = !canEdit;
 }
 
 function syncProjectMembershipToProfile() {
@@ -5269,6 +5405,7 @@ function clearAllScriptRunners() {
       item.runtime.physics.dragging = false;
       item.runtime.physics.controlledTimer = 0;
     }
+    resetRigRuntime(item);
     clearItemRuntimeVisuals(item);
   }
   for (const item of getAllSetItems()) {
@@ -5279,6 +5416,7 @@ function clearAllScriptRunners() {
       item.runtime.physics.dragging = false;
       item.runtime.physics.controlledTimer = 0;
     }
+    resetRigRuntime(item);
     clearItemRuntimeVisuals(item);
   }
 }
@@ -5406,6 +5544,14 @@ function startPenAnimationRunners() {
   for (const actor of state.items) {
     if (actor.penAnimation?.points?.length >= 2) {
       state.penAnimationRunners.push(createPenAnimationRunner(actor, actor.penAnimation));
+    }
+  }
+}
+
+function startRigAnimationSequences() {
+  for (const actor of getActiveStageActors()) {
+    if (actor.kind === "character" && actor.rig?.actions?.length) {
+      playRigSequence(actor);
     }
   }
 }
@@ -6247,6 +6393,160 @@ function getItemBounds(item) {
   };
 }
 
+function getRigTarget() {
+  const actor = getItemById(state.rigEditor.actorId);
+  return actor?.kind === "character" ? actor : null;
+}
+
+function getRigAction(actor = getRigTarget()) {
+  if (!actor?.rig) {
+    return null;
+  }
+  return actor.rig.actions.find((action) => action.id === state.rigEditor.selectedActionId) || actor.rig.actions[0] || null;
+}
+
+function getRigDot(actor, dotId = state.rigEditor.selectedDotId) {
+  return actor?.rig?.dots.find((dot) => dot.id === dotId) || null;
+}
+
+function getRigTransform(item) {
+  const size = getItemSize(item);
+  const scale = clamp((item.sizePct || 100) / 100, 0.2, 3);
+  const sx = scale * (item.scaleX || 1) * item.facing;
+  const sy = scale * (item.scaleY || 1);
+  return {
+    sx,
+    sy,
+    rotation: item.rotation || 0,
+    centerX: item.x,
+    centerY: item.y,
+    width: size.w,
+    height: size.h,
+  };
+}
+
+function rigLocalToStage(item, localPoint, options = {}) {
+  const transform = getRigTransform(item);
+  const offset = options.includeRuntime !== false ? ensureRigRuntimeOffset(item, options.dotId) : null;
+  const localX = localPoint.x + (offset?.x || 0);
+  const localY = localPoint.y + (offset?.y || 0);
+  const scaledX = localX * transform.sx;
+  const scaledY = localY * transform.sy;
+  const cos = Math.cos(transform.rotation);
+  const sin = Math.sin(transform.rotation);
+  return {
+    x: transform.centerX + scaledX * cos - scaledY * sin,
+    y: transform.centerY + scaledX * sin + scaledY * cos,
+  };
+}
+
+function rigStageToLocal(item, stagePoint) {
+  const transform = getRigTransform(item);
+  const dx = stagePoint.x - transform.centerX;
+  const dy = stagePoint.y - transform.centerY;
+  const cos = Math.cos(-transform.rotation);
+  const sin = Math.sin(-transform.rotation);
+  const unrotatedX = dx * cos - dy * sin;
+  const unrotatedY = dx * sin + dy * cos;
+  return {
+    x: unrotatedX / (transform.sx || 1),
+    y: unrotatedY / (transform.sy || 1),
+  };
+}
+
+function ensureRigRuntimeOffset(actor, dotId) {
+  if (!actor?.runtime?.rig || !dotId) {
+    return { x: 0, y: 0 };
+  }
+  if (!actor.runtime.rig.dotOffsets.has(dotId)) {
+    actor.runtime.rig.dotOffsets.set(dotId, { x: 0, y: 0 });
+  }
+  return actor.runtime.rig.dotOffsets.get(dotId);
+}
+
+function resetRigRuntime(actor) {
+  if (!actor?.runtime?.rig) {
+    return;
+  }
+  actor.runtime.rig.dotOffsets = new Map();
+  actor.runtime.rig.actionRunners = [];
+  actor.runtime.rig.sequenceRunner = null;
+}
+
+function getRigFrameCount(action) {
+  return Math.max(1, Math.round((action?.duration || 1) * (action?.fps || 12)));
+}
+
+function getOrCreateRigAction(actor = getRigTarget()) {
+  if (!actor?.rig) {
+    return null;
+  }
+  let action = getRigAction(actor);
+  if (!action) {
+    action = normalizeRigAction({
+      name: "Action 1",
+      sequence: Number(elements.rigSequenceNumber?.value || 1),
+      duration: Number(elements.rigActionDuration?.value || 1),
+      fps: actor.rig.globalFps,
+      frames: [{ index: 0, dots: {}, drawings: [] }],
+    });
+    actor.rig.actions.push(action);
+    state.rigEditor.selectedActionId = action.id;
+  }
+  return action;
+}
+
+function getOrCreateRigFrame(action, frameIndex = state.rigEditor.frame) {
+  if (!action) {
+    return null;
+  }
+  const safeIndex = Math.max(0, Math.round(frameIndex));
+  let frame = action.frames.find((candidate) => candidate.index === safeIndex);
+  if (!frame) {
+    frame = normalizeRigFrame({ index: safeIndex, dots: {}, drawings: [] });
+    action.frames.push(frame);
+    action.frames.sort((left, right) => left.index - right.index);
+  }
+  return frame;
+}
+
+function getRigFrameAt(action, frameIndex) {
+  return action?.frames.find((frame) => frame.index === frameIndex) || null;
+}
+
+function getInterpolatedRigDot(action, dotId, frameIndex) {
+  const frames = (action?.frames || [])
+    .filter((frame) => frame.dots?.[dotId])
+    .sort((left, right) => left.index - right.index);
+  if (frames.length === 0) {
+    return { x: 0, y: 0 };
+  }
+  const previous = [...frames].reverse().find((frame) => frame.index <= frameIndex) || frames[0];
+  const next = frames.find((frame) => frame.index >= frameIndex) || frames[frames.length - 1];
+  if (previous.index === next.index) {
+    return { ...previous.dots[dotId] };
+  }
+  const t = clamp((frameIndex - previous.index) / (next.index - previous.index), 0, 1);
+  return {
+    x: previous.dots[dotId].x + (next.dots[dotId].x - previous.dots[dotId].x) * t,
+    y: previous.dots[dotId].y + (next.dots[dotId].y - previous.dots[dotId].y) * t,
+  };
+}
+
+function hitTestRigDot(actor, point) {
+  if (!actor?.rig) {
+    return null;
+  }
+  for (let index = actor.rig.dots.length - 1; index >= 0; index -= 1) {
+    const dot = actor.rig.dots[index];
+    const stagePoint = rigLocalToStage(actor, dot, { dotId: dot.id });
+    if (Math.hypot(stagePoint.x - point.x, stagePoint.y - point.y) <= 13) {
+      return dot;
+    }
+  }
+  return null;
+}
+
 function rectContainsPoint(rect, x, y) {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
@@ -6525,6 +6825,7 @@ function showScreen(screenName) {
     closeStageModule();
     closeCharacterBuilder();
     closeMusicMakerModule();
+    closeRigEditor();
     closeProjectMembersPanel();
     closeProjectAddFriendPanel();
     hideProjectCommentPopup();
@@ -8326,6 +8627,129 @@ function applyTextureAtPoint(point) {
   }
 }
 
+function startRigEditorPointer(point, event) {
+  const actor = getRigTarget();
+  if (!actor?.rig || event.button === 2) {
+    return false;
+  }
+  const action = state.rigEditor.mode === "animate" ? getOrCreateRigAction(actor) : null;
+  const localPoint = rigStageToLocal(actor, point);
+
+  if (state.rigEditor.mode === "animate" && ["pen", "eraser"].includes(state.rigEditor.tool)) {
+    pushUndoSnapshot();
+    const frame = getOrCreateRigFrame(action);
+    const drawing = normalizeRigDrawing({
+      type: state.rigEditor.tool === "eraser" ? "erase" : "pen",
+      color: elements.rigPenColor.value,
+      size: state.rigEditor.tool === "eraser" ? Number(elements.rigEraserSize.value || 18) : 6,
+      points: [localPoint],
+    });
+    frame.drawings.push(drawing);
+    state.interaction = { type: "rigFrameDraw", drawingId: drawing.id, actionId: action.id };
+    markProjectDirty();
+    return true;
+  }
+
+  if (state.rigEditor.mode === "animate" && state.rigEditor.tool === "bucket") {
+    pushUndoSnapshot();
+    const frame = getOrCreateRigFrame(action);
+    frame.drawings.push(normalizeRigDrawing({
+      type: "fill",
+      color: elements.rigFillColor.value,
+      size: 1,
+      points: [
+        { x: -actor.w * 0.5, y: -actor.h * 0.5 },
+        { x: actor.w * 0.5, y: -actor.h * 0.5 },
+        { x: actor.w * 0.5, y: actor.h * 0.5 },
+        { x: -actor.w * 0.5, y: actor.h * 0.5 },
+      ],
+    }));
+    markProjectDirty();
+    renderRigEditor();
+    return true;
+  }
+
+  const dot = hitTestRigDot(actor, point);
+  if (dot) {
+    pushUndoSnapshot();
+    state.rigEditor.selectedDotId = dot.id;
+    state.interaction = {
+      type: state.rigEditor.mode === "animate" ? "rigAnimateDot" : "rigMoveDot",
+      dotId: dot.id,
+      startLocal: localPoint,
+      originalDot: { x: dot.x, y: dot.y },
+      originalOffset: { ...ensureRigRuntimeOffset(actor, dot.id) },
+      actionId: action?.id || null,
+    };
+    renderRigEditor();
+    return true;
+  }
+
+  if (state.rigEditor.mode === "rig") {
+    pushUndoSnapshot();
+    const nextIndex = actor.rig.dots.length + 1;
+    const newDot = {
+      id: `rig-dot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: `Dot ${nextIndex}`,
+      x: localPoint.x,
+      y: localPoint.y,
+      fps: 0,
+    };
+    actor.rig.dots.push(newDot);
+    state.rigEditor.selectedDotId = newDot.id;
+    markProjectDirty();
+    renderRigEditor();
+    return true;
+  }
+
+  return true;
+}
+
+function moveRigEditorPointer(point) {
+  const actor = getRigTarget();
+  if (!actor?.rig || !state.interaction) {
+    return false;
+  }
+  const localPoint = rigStageToLocal(actor, point);
+  if (state.interaction.type === "rigMoveDot") {
+    const dot = getRigDot(actor, state.interaction.dotId);
+    if (dot) {
+      dot.x = localPoint.x;
+      dot.y = localPoint.y;
+      markProjectDirty();
+    }
+    return true;
+  }
+  if (state.interaction.type === "rigAnimateDot") {
+    const action = actor.rig.actions.find((candidate) => candidate.id === state.interaction.actionId);
+    const dot = getRigDot(actor, state.interaction.dotId);
+    if (action && dot) {
+      if (!action.dotIds.includes(dot.id)) {
+        action.dotIds.push(dot.id);
+      }
+      const frame = getOrCreateRigFrame(action);
+      frame.dots[dot.id] = {
+        x: localPoint.x - dot.x,
+        y: localPoint.y - dot.y,
+      };
+      actor.runtime.rig.dotOffsets.set(dot.id, { ...frame.dots[dot.id] });
+      markProjectDirty();
+    }
+    return true;
+  }
+  if (state.interaction.type === "rigFrameDraw") {
+    const action = actor.rig.actions.find((candidate) => candidate.id === state.interaction.actionId);
+    const frame = getRigFrameAt(action, state.rigEditor.frame);
+    const drawing = frame?.drawings.find((candidate) => candidate.id === state.interaction.drawingId);
+    if (drawing) {
+      drawing.points.push(localPoint);
+      markProjectDirty();
+    }
+    return true;
+  }
+  return false;
+}
+
 function onPointerDown(event) {
   if (state.screen !== "studio" || state.characterBuilderOpen || !isPrimaryPointerPress(event)) {
     return;
@@ -8347,6 +8771,10 @@ function onPointerDown(event) {
 
   if (!canEditCurrentProject()) {
     clearSelection();
+    return;
+  }
+
+  if (!elements.rigPanel.classList.contains("hidden") && startRigEditorPointer(point, event)) {
     return;
   }
 
@@ -8485,6 +8913,10 @@ function onPointerMove(event) {
   const point = getCanvasPoint(event);
   state.lastPointer = { x: point.x, y: point.y, inside: true };
 
+  if (moveRigEditorPointer(point)) {
+    return;
+  }
+
   if (!state.interaction) {
     return;
   }
@@ -8616,6 +9048,14 @@ function onPointerUp(event) {
     saveDraftPenAnimation();
   }
 
+  if (
+    state.interaction?.type === "rigMoveDot"
+    || state.interaction?.type === "rigAnimateDot"
+    || state.interaction?.type === "rigFrameDraw"
+  ) {
+    renderRigEditor();
+  }
+
   if (state.interaction?.type === "stageDraw") {
     const drawing = state.stageDrawings.find((candidate) => candidate.id === state.interaction.drawingId);
     if (drawing && finalizeDrawingClosure(drawing)) {
@@ -8646,6 +9086,7 @@ function showActorContextMenu(actor, event) {
   const characterDef = actor.kind === "character" ? getCharacterDef(actor.subtype) : null;
   elements.actorContextCodeButton.classList.toggle("hidden", !canCodeSelection);
   elements.actorContextPenButton.classList.toggle("hidden", selectedItems.length !== 1 || !isPhysicsObject(actor));
+  elements.actorContextRigButton.classList.toggle("hidden", selectedItems.length !== 1 || actor.kind !== "character");
   elements.actorContextEditCharacterButton.classList.toggle("hidden", selectedItems.length !== 1 || !characterDef?.builderData);
   elements.actorContextPhysicsToggleButton.classList.toggle("hidden", !(selectedItems.length === 1 && isPhysicsObject(actor)));
   elements.actorContextPhysicsToggleButton.textContent = actor.physics?.enabled ? "Physics Off" : "Physics On";
@@ -8657,8 +9098,9 @@ function showActorContextMenu(actor, event) {
     elements.actorContextColor.value = selectedObject.color || getObjectDef(selectedObject.subtype).baseColor || "#f4a261";
   }
   const panelRect = elements.actorContextMenu.parentElement.getBoundingClientRect();
+  const menuHeight = Math.max(220, elements.actorContextMenu.scrollHeight || 220);
   elements.actorContextMenu.style.left = `${clamp(event.clientX - panelRect.left, 12, panelRect.width - 150)}px`;
-  elements.actorContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - 188)}px`;
+  elements.actorContextMenu.style.top = `${clamp(event.clientY - panelRect.top, 12, panelRect.height - menuHeight - 12)}px`;
   elements.actorContextMenu.classList.remove("hidden");
 }
 
@@ -8725,6 +9167,364 @@ function openPenAnimationEditorForActor(actorId) {
   hideActorContextMenu();
   hideSetActorContextMenu();
   updatePenAnimationUi();
+}
+
+function openRigEditorForActor(actorId) {
+  const actor = getItemById(actorId);
+  if (!actor || actor.kind !== "character") {
+    return;
+  }
+  actor.rig = normalizeCharacterRig(actor.rig);
+  state.rigEditor.actorId = actor.id;
+  state.rigEditor.mode = "rig";
+  state.rigEditor.selectedDotId = actor.rig.dots[0]?.id || null;
+  state.rigEditor.selectedActionId = actor.rig.actions[0]?.id || null;
+  state.rigEditor.frame = 0;
+  state.rigEditor.tool = "select";
+  elements.rigPanel.classList.remove("hidden");
+  hideActorContextMenu();
+  renderRigEditor();
+}
+
+function openContextRigEditor() {
+  openRigEditorForActor(state.contextActorId);
+}
+
+function openSelectedRigEditor() {
+  const selectedCharacter = getSelectedItems().find((item) => item.kind === "character");
+  if (!selectedCharacter || getSelectedItems().length !== 1) {
+    elements.toolLabel.textContent = "Select one character on the stage, then open Rig / Animate.";
+    return;
+  }
+  openRigEditorForActor(selectedCharacter.id);
+}
+
+function closeRigEditor() {
+  state.rigEditor.actorId = null;
+  state.rigEditor.selectedDotId = null;
+  state.rigEditor.selectedActionId = null;
+  state.rigEditor.drawingId = null;
+  elements.rigPanel.classList.add("hidden");
+}
+
+function setRigMode(mode) {
+  state.rigEditor.mode = mode === "animate" ? "animate" : "rig";
+  if (state.rigEditor.mode === "animate") {
+    getOrCreateRigAction();
+  }
+  renderRigEditor();
+}
+
+function updateRigSettingsFromInputs() {
+  const actor = getRigTarget();
+  if (!actor?.rig) {
+    return;
+  }
+  actor.rig.globalFps = clamp(Number(elements.rigGlobalFps.value || 12), 1, 60);
+  actor.rig.onionSkin = elements.rigOnionSkin.checked;
+  actor.rig.onionAlpha = clamp(Number(elements.rigOnionAlpha.value || 30) / 100, 0, 0.8);
+  const selectedDot = getRigDot(actor);
+  if (selectedDot) {
+    selectedDot.fps = clamp(Number(elements.rigDotFps.value || 0), 0, 60);
+  }
+  const action = getRigAction(actor);
+  if (action) {
+    action.duration = clamp(Number(elements.rigActionDuration.value || action.duration || 1), 0.1, 20);
+    action.sequence = Math.max(1, Math.round(Number(elements.rigSequenceNumber.value || action.sequence || 1)));
+    action.fps = actor.rig.globalFps;
+  }
+  markProjectDirty();
+  renderRigEditor();
+}
+
+function setRigEditorFrame(frameIndex) {
+  const action = getRigAction();
+  const frameCount = getRigFrameCount(action);
+  state.rigEditor.frame = clamp(Math.round(Number(frameIndex || 0)), 0, Math.max(0, frameCount - 1));
+  applyRigEditorFrameToRuntime();
+  renderRigEditor();
+}
+
+function setRigFrameTool(tool) {
+  state.rigEditor.tool = ["select", "pen", "bucket", "eraser"].includes(tool) ? tool : "select";
+  renderRigEditor();
+}
+
+function renderRigEditor() {
+  const actor = getRigTarget();
+  if (!actor) {
+    closeRigEditor();
+    return;
+  }
+  actor.rig = normalizeCharacterRig(actor.rig);
+  const action = getRigAction(actor);
+  elements.rigPanelTitle.textContent = `Rig / Animate: ${getActorDisplayName(actor)}`;
+  elements.rigModeButton.classList.toggle("active", state.rigEditor.mode === "rig");
+  elements.animateModeButton.classList.toggle("active", state.rigEditor.mode === "animate");
+  elements.rigModeButton.className = state.rigEditor.mode === "rig" ? "secondary-button active" : "ghost-button";
+  elements.animateModeButton.className = state.rigEditor.mode === "animate" ? "secondary-button active" : "ghost-button";
+  elements.rigGlobalFps.value = String(actor.rig.globalFps);
+  elements.rigActionDuration.value = String(action?.duration || 1);
+  elements.rigSequenceNumber.value = String(action?.sequence || 1);
+  elements.rigFrameInput.value = String(state.rigEditor.frame);
+  elements.rigFrameInput.max = String(Math.max(0, getRigFrameCount(action) - 1));
+  elements.rigFrameTool.value = state.rigEditor.tool;
+  elements.rigOnionSkin.checked = actor.rig.onionSkin;
+  elements.rigOnionAlpha.value = String(Math.round(actor.rig.onionAlpha * 100));
+  const selectedDot = getRigDot(actor);
+  elements.rigDotFps.value = String(selectedDot?.fps || 0);
+
+  elements.rigDotList.innerHTML = "";
+  if (actor.rig.dots.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "script-empty";
+    empty.textContent = "Click the character to place rig dots.";
+    elements.rigDotList.append(empty);
+  }
+  actor.rig.dots.forEach((dot, index) => {
+    const card = document.createElement("div");
+    card.className = "rig-dot-card";
+    card.classList.toggle("active", dot.id === state.rigEditor.selectedDotId);
+    const text = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = dot.name || `Dot ${index + 1}`;
+    const meta = document.createElement("span");
+    meta.textContent = `FPS ${dot.fps || "global"} | ${Math.round(dot.x)}, ${Math.round(dot.y)}`;
+    text.append(title, meta);
+    const del = document.createElement("button");
+      del.type = "button";
+      del.className = "ghost-button";
+      del.textContent = "Delete";
+    del.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteRigDot(dot.id);
+    });
+    card.addEventListener("click", () => {
+      state.rigEditor.selectedDotId = dot.id;
+      renderRigEditor();
+    });
+    card.append(text, del);
+    elements.rigDotList.append(card);
+  });
+
+  elements.rigActionList.innerHTML = "";
+  if (actor.rig.actions.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "script-empty";
+    empty.textContent = "Create an action in Animate mode.";
+    elements.rigActionList.append(empty);
+  }
+  [...actor.rig.actions]
+    .sort((left, right) => left.sequence - right.sequence || left.name.localeCompare(right.name))
+    .forEach((rigAction) => {
+      const card = document.createElement("div");
+      card.className = "rig-action-card";
+      card.classList.toggle("active", rigAction.id === state.rigEditor.selectedActionId);
+      const text = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = rigAction.name;
+      const meta = document.createElement("span");
+      meta.textContent = `Seq ${rigAction.sequence} | ${rigAction.duration}s | ${rigAction.fps} FPS | ${rigAction.dotIds.length} dots`;
+      text.append(title, meta);
+      const duplicate = document.createElement("button");
+      duplicate.type = "button";
+      duplicate.className = "ghost-button";
+      duplicate.textContent = "Copy";
+      duplicate.addEventListener("click", (event) => {
+        event.stopPropagation();
+        pushUndoSnapshot();
+        const copy = duplicateRigAction(rigAction);
+        actor.rig.actions.push(copy);
+        state.rigEditor.selectedActionId = copy.id;
+        markProjectDirty();
+        renderRigEditor();
+      });
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "ghost-button";
+      del.textContent = "Delete";
+      del.addEventListener("click", (event) => {
+        event.stopPropagation();
+        deleteRigAction(rigAction.id);
+      });
+      card.addEventListener("click", () => {
+        state.rigEditor.selectedActionId = rigAction.id;
+        state.rigEditor.frame = 0;
+        applyRigEditorFrameToRuntime();
+        renderRigEditor();
+      });
+      card.append(text, duplicate, del);
+      elements.rigActionList.append(card);
+    });
+}
+
+function deleteRigDot(dotId) {
+  const actor = getRigTarget();
+  if (!actor?.rig) {
+    return;
+  }
+  pushUndoSnapshot();
+  actor.rig.dots = actor.rig.dots.filter((dot) => dot.id !== dotId);
+  for (const action of actor.rig.actions) {
+    action.dotIds = action.dotIds.filter((id) => id !== dotId);
+    for (const frame of action.frames) {
+      delete frame.dots[dotId];
+    }
+  }
+  actor.runtime.rig.dotOffsets.delete(dotId);
+  if (state.rigEditor.selectedDotId === dotId) {
+    state.rigEditor.selectedDotId = actor.rig.dots[0]?.id || null;
+  }
+  markProjectDirty();
+  renderRigEditor();
+}
+
+function deleteRigAction(actionId) {
+  const actor = getRigTarget();
+  if (!actor?.rig) {
+    return;
+  }
+  pushUndoSnapshot();
+  actor.rig.actions = actor.rig.actions.filter((action) => action.id !== actionId);
+  if (state.rigEditor.selectedActionId === actionId) {
+    state.rigEditor.selectedActionId = actor.rig.actions[0]?.id || null;
+    state.rigEditor.frame = 0;
+  }
+  resetRigRuntime(actor);
+  markProjectDirty();
+  renderRigEditor();
+}
+
+function applyRigEditorFrameToRuntime() {
+  const actor = getRigTarget();
+  const action = getRigAction(actor);
+  if (!actor?.rig || !action) {
+    return;
+  }
+  actor.runtime.rig.dotOffsets = new Map();
+  for (const dot of actor.rig.dots) {
+    const offset = getInterpolatedRigDot(action, dot.id, state.rigEditor.frame);
+    actor.runtime.rig.dotOffsets.set(dot.id, offset);
+  }
+}
+
+function saveRigActionFromEditor() {
+  const actor = getRigTarget();
+  if (!actor?.rig) {
+    return;
+  }
+  pushUndoSnapshot();
+  const action = getOrCreateRigAction(actor);
+  const sequence = Math.max(1, Math.round(Number(elements.rigSequenceNumber.value || 1)));
+  const duration = clamp(Number(elements.rigActionDuration.value || 1), 0.1, 20);
+  const fps = clamp(Number(elements.rigGlobalFps.value || actor.rig.globalFps || 12), 1, 60);
+  action.sequence = sequence;
+  action.duration = duration;
+  action.fps = fps;
+  action.name = window.prompt("Name this animation action:", action.name || `Action ${actor.rig.actions.length}`)?.trim() || action.name || `Action ${actor.rig.actions.length}`;
+  action.dotIds = actor.rig.dots.map((dot) => dot.id);
+  getOrCreateRigFrame(action, 0);
+  getOrCreateRigFrame(action, Math.max(0, getRigFrameCount(action) - 1));
+  markProjectDirty();
+  renderRigEditor();
+}
+
+function duplicateRigAction(action) {
+  return normalizeRigAction({
+    ...serializeRigAction(action),
+    id: `rig-action-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: `${action.name} Copy`,
+  });
+}
+
+function createRigActionRunner(actor, action, options = {}) {
+  return {
+    actorId: actor.id,
+    actionId: action.id,
+    elapsed: 0,
+    action,
+    preview: Boolean(options.preview),
+    done: false,
+  };
+}
+
+function playRigAction(actionId = state.rigEditor.selectedActionId) {
+  const actor = getRigTarget();
+  const action = actor?.rig?.actions.find((candidate) => candidate.id === actionId);
+  if (!actor || !action) {
+    return;
+  }
+  resetRigRuntime(actor);
+  actor.runtime.rig.actionRunners = [createRigActionRunner(actor, action, { preview: true })];
+}
+
+function playRigSequence(actor = getRigTarget(), options = {}) {
+  if (!actor?.rig?.actions?.length) {
+    return;
+  }
+  resetRigRuntime(actor);
+  actor.runtime.rig.sequenceRunner = {
+    groups: [...new Set(actor.rig.actions.map((action) => action.sequence))].sort((left, right) => left - right),
+    index: 0,
+    active: [],
+    preview: Boolean(options.preview),
+  };
+  startNextRigSequenceGroup(actor);
+}
+
+function startNextRigSequenceGroup(actor) {
+  const sequenceRunner = actor?.runtime?.rig?.sequenceRunner;
+  if (!actor?.rig || !sequenceRunner) {
+    return;
+  }
+  if (sequenceRunner.index >= sequenceRunner.groups.length) {
+    actor.runtime.rig.sequenceRunner = null;
+    return;
+  }
+  const sequence = sequenceRunner.groups[sequenceRunner.index];
+  sequenceRunner.index += 1;
+  sequenceRunner.active = actor.rig.actions
+    .filter((action) => action.sequence === sequence)
+    .map((action) => createRigActionRunner(actor, action, { preview: sequenceRunner.preview }));
+}
+
+function updateRigActionRunner(actor, runner, deltaSeconds) {
+  runner.elapsed += deltaSeconds;
+  const action = runner.action;
+  const fps = action.fps || actor.rig.globalFps || 12;
+  const progressFrame = Math.min(getRigFrameCount(action) - 1, runner.elapsed * fps);
+  for (const dotId of action.dotIds) {
+    const dot = getRigDot(actor, dotId);
+    if (!dot) {
+      continue;
+    }
+    const effectiveFps = dot.fps || fps;
+    const frame = dot.fps ? Math.min(getRigFrameCount(action) - 1, runner.elapsed * effectiveFps) : progressFrame;
+    actor.runtime.rig.dotOffsets.set(dotId, getInterpolatedRigDot(action, dotId, frame));
+  }
+  runner.done = runner.elapsed >= action.duration;
+}
+
+function updateRigAnimations(deltaSeconds) {
+  for (const actor of getActiveStageActors()) {
+    if (actor.kind !== "character" || !actor.rig) {
+      continue;
+    }
+    const rigRuntime = actor.runtime.rig;
+    if (rigRuntime.sequenceRunner) {
+      for (const runner of rigRuntime.sequenceRunner.active) {
+        updateRigActionRunner(actor, runner, deltaSeconds);
+      }
+      rigRuntime.sequenceRunner.active = rigRuntime.sequenceRunner.active.filter((runner) => !runner.done);
+      if (rigRuntime.sequenceRunner.active.length === 0) {
+        startNextRigSequenceGroup(actor);
+      }
+    }
+    for (const runner of rigRuntime.actionRunners) {
+      updateRigActionRunner(actor, runner, deltaSeconds);
+    }
+    rigRuntime.actionRunners = rigRuntime.actionRunners.filter((runner) => !runner.done);
+  }
 }
 
 function onStageContextMenu(event) {
@@ -9070,9 +9870,13 @@ function deleteSelection() {
   }
 
   const deletingPhysicsEditorItem = state.selection.has(state.physics.objectEditorItemId);
+  const deletingRigEditorItem = state.selection.has(state.rigEditor.actorId);
   state.items = state.items.filter((item) => !state.selection.has(item.id));
   if (deletingPhysicsEditorItem) {
     state.physics.objectEditorItemId = null;
+  }
+  if (deletingRigEditorItem) {
+    closeRigEditor();
   }
   clearSelection();
   elements.toolLabel.textContent = "Selection deleted.";
@@ -9139,13 +9943,21 @@ function handleKeyDown(event) {
       return;
     }
     if (!deleteSelectedScriptBlock()) {
-      if (state.stageModuleOpen) {
-        deleteSelectedSetThing();
-        return;
-      }
-      deleteSelection();
+    if (state.stageModuleOpen) {
+      deleteSelectedSetThing();
+      return;
     }
-    return;
+    if (!elements.rigPanel.classList.contains("hidden") && state.rigEditor.selectedDotId && state.rigEditor.mode === "rig") {
+      deleteRigDot(state.rigEditor.selectedDotId);
+      return;
+    }
+    if (!elements.rigPanel.classList.contains("hidden") && state.rigEditor.selectedActionId && state.rigEditor.mode === "animate") {
+      deleteRigAction(state.rigEditor.selectedActionId);
+      return;
+    }
+    deleteSelection();
+  }
+  return;
   }
 
   if (key === "escape") {
@@ -9153,6 +9965,10 @@ function handleKeyDown(event) {
     hideActorContextMenu();
     if (!elements.penAnimationPanel.classList.contains("hidden")) {
       closePenAnimationEditor();
+      return;
+    }
+    if (!elements.rigPanel.classList.contains("hidden")) {
+      closeRigEditor();
       return;
     }
     if (state.stageModuleOpen && state.setMiniCodeItemId != null) {
@@ -9240,6 +10056,8 @@ function prepareStageForRecording() {
       wakePhysicsItem(item);
     }
   }
+  startPenAnimationRunners();
+  startRigAnimationSequences();
 }
 
 function ensureCanvasSize() {
@@ -9601,16 +10419,177 @@ function drawPhysicsDebugOverlay() {
   ctx.restore();
 }
 
+function getRigAverageOffset(item) {
+  if (item.kind !== "character" || !item.runtime?.rig?.dotOffsets?.size) {
+    return { x: 0, y: 0 };
+  }
+  let x = 0;
+  let y = 0;
+  let count = 0;
+  for (const dot of item.rig?.dots || []) {
+    const offset = item.runtime.rig.dotOffsets.get(dot.id);
+    if (!offset) {
+      continue;
+    }
+    x += offset.x;
+    y += offset.y;
+    count += 1;
+  }
+  return count ? { x: x / count, y: y / count } : { x: 0, y: 0 };
+}
+
+function getRigActionDisplayFrame(action, elapsed, actor) {
+  const fps = action?.fps || actor?.rig?.globalFps || 12;
+  return Math.min(getRigFrameCount(action) - 1, Math.max(0, Math.floor((elapsed || 0) * fps)));
+}
+
+function drawRigFrameDrawing(item, drawing, alpha = 1) {
+  if (!drawing?.points?.length) {
+    return;
+  }
+  const points = drawing.points.map((point) => rigLocalToStage(item, point, { includeRuntime: false }));
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  if (drawing.type === "fill") {
+    ctx.fillStyle = drawing.color || "#ffd166";
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) {
+        ctx.moveTo(point.x, point.y);
+      } else {
+        ctx.lineTo(point.x, point.y);
+      }
+    });
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = drawing.type === "erase" ? "rgba(255, 253, 250, 0.96)" : drawing.color || "#2f8f83";
+    ctx.lineWidth = drawing.size || 6;
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) {
+        ctx.moveTo(point.x, point.y);
+      } else {
+        ctx.lineTo(point.x, point.y);
+      }
+    });
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawRigActionFrame(item, action, frameIndex, alpha = 1) {
+  const frame = getRigFrameAt(action, Math.max(0, Math.round(frameIndex)));
+  if (!frame) {
+    return;
+  }
+  for (const drawing of frame.drawings) {
+    drawRigFrameDrawing(item, drawing, alpha);
+  }
+}
+
+function drawActiveRigActionFrames(item) {
+  if (item.kind !== "character" || !item.rig) {
+    return;
+  }
+  const rigRuntime = item.runtime?.rig;
+  const activeRunners = [
+    ...(rigRuntime?.sequenceRunner?.active || []),
+    ...(rigRuntime?.actionRunners || []),
+  ];
+  for (const runner of activeRunners) {
+    drawRigActionFrame(item, runner.action, getRigActionDisplayFrame(runner.action, runner.elapsed, item), 1);
+  }
+}
+
+function drawRigEditorFrames(item) {
+  if (!currentRenderFlags.showEditorOverlays || state.rigEditor.actorId !== item.id) {
+    return;
+  }
+  const action = getRigAction(item);
+  if (!action) {
+    return;
+  }
+  if (item.rig?.onionSkin) {
+    const onionAlpha = item.rig.onionAlpha || 0.3;
+    drawRigActionFrame(item, action, state.rigEditor.frame - 1, onionAlpha);
+    drawRigActionFrame(item, action, state.rigEditor.frame + 1, onionAlpha);
+  }
+  drawRigActionFrame(item, action, state.rigEditor.frame, 1);
+}
+
+function drawRigEditorDots(item) {
+  if (!currentRenderFlags.showEditorOverlays || state.rigEditor.actorId !== item.id || !item.rig) {
+    return;
+  }
+  ctx.save();
+  for (const dot of item.rig.dots) {
+    const point = rigLocalToStage(item, dot, { dotId: dot.id });
+    const selected = dot.id === state.rigEditor.selectedDotId;
+    ctx.fillStyle = selected ? "#ffd166" : "#2f8f83";
+    ctx.strokeStyle = selected ? "#2c1d14" : "#fffdfa";
+    ctx.lineWidth = selected ? 3 : 2;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, selected ? 9 : 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#2c1d14";
+    ctx.font = "800 10px Trebuchet MS";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(dot.fps ? `${dot.fps}` : "G", point.x, point.y + 0.5);
+  }
+  ctx.restore();
+}
+
+function drawRigDeformationGuides(item) {
+  if (item.kind !== "character" || !item.rig?.dots?.length || !item.runtime?.rig?.dotOffsets?.size) {
+    return;
+  }
+  ctx.save();
+  ctx.lineCap = "round";
+  for (const dot of item.rig.dots) {
+    const offset = item.runtime.rig.dotOffsets.get(dot.id);
+    if (!offset || (Math.abs(offset.x) < 0.1 && Math.abs(offset.y) < 0.1)) {
+      continue;
+    }
+    const base = rigLocalToStage(item, dot, { includeRuntime: false });
+    const moved = rigLocalToStage(item, dot, { dotId: dot.id });
+    ctx.strokeStyle = "rgba(47, 143, 131, 0.42)";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(base.x, base.y);
+    ctx.lineTo(moved.x, moved.y);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 209, 102, 0.32)";
+    ctx.beginPath();
+    ctx.arc(moved.x, moved.y, 18, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawRigOverlays(item) {
+  drawActiveRigActionFrames(item);
+  drawRigEditorFrames(item);
+  drawRigDeformationGuides(item);
+  drawRigEditorDots(item);
+}
+
 function drawImportedImageItem(item, imageData, fallbackColor) {
   const image = getImportedImage(imageData);
   const size = getItemSize(item);
   const visual = item.runtime?.visual ?? createItemRuntime().visual;
+  const rigOffset = getRigAverageOffset(item);
   drawShadow(item);
 
   ctx.save();
   ctx.translate(item.x + visual.offsetX, item.y + visual.offsetY);
   ctx.rotate((item.rotation || 0) + visual.rotation);
   ctx.scale(item.facing * visual.scaleX, visual.scaleY);
+  ctx.translate(rigOffset.x * 0.35, rigOffset.y * 0.35);
   if (image?.complete && image.naturalWidth > 0) {
     ctx.drawImage(image, -size.w * 0.5, -size.h * 0.5, size.w, size.h);
   } else {
@@ -9623,6 +10602,7 @@ function drawImportedImageItem(item, imageData, fallbackColor) {
     ctx.fillRect(-size.w * 0.5, -size.h * 0.5, size.w, size.h);
   }
   ctx.restore();
+  drawRigOverlays(item);
   drawPhysicsBadge(item);
 }
 
@@ -9655,12 +10635,14 @@ function drawCharacter(item) {
   const bodyFill = resolveFill(item, character.bodyColor);
   const scale = (item.sizePct || 100) / 100;
   const visual = item.runtime?.visual ?? createItemRuntime().visual;
+  const rigOffset = getRigAverageOffset(item);
   drawShadow(item);
 
   ctx.save();
   ctx.translate(item.x + visual.offsetX, item.y + visual.offsetY);
   ctx.rotate((item.rotation || 0) + visual.rotation);
   ctx.scale(scale * (item.scaleX || 1) * item.facing * visual.scaleX, scale * (item.scaleY || 1) * visual.scaleY);
+  ctx.translate(rigOffset.x * 0.35, rigOffset.y * 0.35);
 
   if (character.variant === "ghost") {
     ctx.fillStyle = bodyFill;
@@ -9689,6 +10671,7 @@ function drawCharacter(item) {
     ctx.lineWidth = 3;
     ctx.stroke();
     ctx.restore();
+    drawRigOverlays(item);
     drawPhysicsBadge(item);
     return;
   }
@@ -9811,6 +10794,7 @@ function drawCharacter(item) {
   }
 
   ctx.restore();
+  drawRigOverlays(item);
   drawPhysicsBadge(item);
 }
 
@@ -10297,6 +11281,7 @@ function drawStage(now, options = {}) {
   } = options;
   currentRenderFlags = {
     showPhysicsBadges: showEditorOverlays,
+    showEditorOverlays,
     showPhysicsDebug: showEditorOverlays && (
       state.physics.settings.debugView
       || state.physics.settings.triggerDebugView
@@ -10463,6 +11448,7 @@ function animate(now) {
   if (state.screen === "studio") {
     moveSelectionByKeys(deltaSeconds);
     updateScripts(deltaSeconds);
+    updateRigAnimations(deltaSeconds);
     if (!state.scriptsModuleOpen && !state.stageModuleOpen && !state.characterBuilderOpen) {
       updatePhysics(deltaSeconds);
       flushTriggerScriptEvents();
@@ -10711,11 +11697,13 @@ async function stopRecording() {
     item.runtime.animation = null;
     item.runtime.flip = null;
     item.runtime.jump = null;
+    resetRigRuntime(item);
   }
   for (const item of getAllSetItems()) {
     item.runtime.animation = null;
     item.runtime.flip = null;
     item.runtime.jump = null;
+    resetRigRuntime(item);
   }
   for (const item of state.items) {
     if (isPhysicsObject(item)) {
@@ -11780,6 +12768,7 @@ function bindEvents() {
   elements.scriptsModuleCloseButton.addEventListener("click", closeScriptsModule);
   elements.actorContextCodeButton.addEventListener("click", openContextActorCode);
   elements.actorContextPenButton.addEventListener("click", openPenAnimationEditor);
+  elements.actorContextRigButton.addEventListener("click", openContextRigEditor);
   elements.actorContextEditCharacterButton.addEventListener("click", openContextCharacterBuilder);
   elements.actorContextPhysicsToggleButton.addEventListener("click", () => {
     toggleActorPhysicsEnabled(state.contextActorId);
@@ -11880,6 +12869,24 @@ function bindEvents() {
   elements.previewPenAnimationButton.addEventListener("click", previewPenAnimation);
   elements.deletePenAnimationButton.addEventListener("click", deletePenAnimation);
   elements.closePenAnimationButton.addEventListener("click", closePenAnimationEditor);
+  elements.closeRigPanelButton.addEventListener("click", closeRigEditor);
+  elements.rigModeButton.addEventListener("click", () => setRigMode("rig"));
+  elements.animateModeButton.addEventListener("click", () => setRigMode("animate"));
+  elements.saveRigActionButton.addEventListener("click", saveRigActionFromEditor);
+  elements.playRigActionButton.addEventListener("click", () => playRigAction());
+  elements.playRigSequenceButton.addEventListener("click", () => playRigSequence());
+  elements.rigPrevFrameButton.addEventListener("click", () => setRigEditorFrame(state.rigEditor.frame - 1));
+  elements.rigNextFrameButton.addEventListener("click", () => setRigEditorFrame(state.rigEditor.frame + 1));
+  elements.rigFrameInput.addEventListener("input", () => setRigEditorFrame(elements.rigFrameInput.value));
+  elements.rigFrameTool.addEventListener("input", () => setRigFrameTool(elements.rigFrameTool.value));
+  [
+    elements.rigGlobalFps,
+    elements.rigActionDuration,
+    elements.rigSequenceNumber,
+    elements.rigDotFps,
+    elements.rigOnionSkin,
+    elements.rigOnionAlpha,
+  ].forEach((input) => input.addEventListener("input", updateRigSettingsFromInputs));
   elements.penAnimationDuration.addEventListener("input", () => {
     const actor = getItemById(state.penAnimation.actorId);
     if (actor?.penAnimation) {
@@ -11911,6 +12918,7 @@ function bindEvents() {
   elements.previewMusicMakerButton.addEventListener("click", () => playMusicPattern(cloneMusicPattern()));
   elements.saveMusicMakerButton.addEventListener("click", saveMusicMakerLoop);
   elements.createCharacterButton.addEventListener("click", () => openCharacterBuilder());
+  elements.rigSelectedCharacterButton.addEventListener("click", openSelectedRigEditor);
   elements.createObjectButton.addEventListener("click", () => openCharacterBuilder(null, "object"));
   elements.closeCharacterBuilderButton.addEventListener("click", closeCharacterBuilder);
   elements.saveCharacterBuilderButton.addEventListener("click", saveCharacterBuilder);
