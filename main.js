@@ -1201,9 +1201,13 @@ const elements = {
   closePenAnimationButton: document.querySelector("#closePenAnimationButton"),
   rigPanel: document.querySelector("#rigPanel"),
   rigPanelTitle: document.querySelector("#rigPanelTitle"),
+  rigHelpText: document.querySelector("#rigHelpText"),
+  rigCanvas: document.querySelector("#rigCanvas"),
+  rigCharacterList: document.querySelector("#rigCharacterList"),
   closeRigPanelButton: document.querySelector("#closeRigPanelButton"),
   rigModeButton: document.querySelector("#rigModeButton"),
   animateModeButton: document.querySelector("#animateModeButton"),
+  rigEditModeButton: document.querySelector("#rigEditModeButton"),
   rigGlobalFps: document.querySelector("#rigGlobalFps"),
   rigActionDuration: document.querySelector("#rigActionDuration"),
   rigSequenceNumber: document.querySelector("#rigSequenceNumber"),
@@ -1321,6 +1325,8 @@ const setCtx = setCanvas.getContext("2d");
 const textureEditorCtx = elements.textureEditorCanvas.getContext("2d");
 const characterBuilderCanvas = elements.characterBuilderCanvas;
 const characterBuilderCtx = characterBuilderCanvas.getContext("2d");
+const rigCanvas = elements.rigCanvas;
+const rigCtx = rigCanvas.getContext("2d");
 let currentRenderFlags = {
   showPhysicsBadges: true,
   showPhysicsDebug: false,
@@ -1607,6 +1613,8 @@ const state = {
     activeTool: "select",
     selectedItemId: null,
     selectedDrawingId: null,
+    selectedItemIds: new Set(),
+    selectedDrawingIds: new Set(),
     interaction: null,
     items: [],
     drawings: [],
@@ -1656,6 +1664,7 @@ const state = {
     frame: 0,
     tool: "select",
     drawingId: null,
+    pathDraft: null,
   },
   textureEditor: {
     textureId: null,
@@ -6514,6 +6523,20 @@ function getRigFrameAt(action, frameIndex) {
   return action?.frames.find((frame) => frame.index === frameIndex) || null;
 }
 
+function getRigActionDotPath(action, dotId, actor) {
+  const dot = getRigDot(actor, dotId);
+  if (!dot || !action) {
+    return [];
+  }
+  return [...(action.frames || [])]
+    .filter((frame) => frame.dots?.[dotId])
+    .sort((left, right) => left.index - right.index)
+    .map((frame) => ({
+      x: dot.x + frame.dots[dotId].x,
+      y: dot.y + frame.dots[dotId].y,
+    }));
+}
+
 function getInterpolatedRigDot(action, dotId, frameIndex) {
   const frames = (action?.frames || [])
     .filter((frame) => frame.dots?.[dotId])
@@ -6948,6 +6971,63 @@ function hitTestBuilderDrawing(point) {
   return null;
 }
 
+function syncCharacterBuilderLegacySelection() {
+  const builder = state.characterBuilder;
+  builder.selectedItemId = builder.selectedItemIds.size === 1 ? [...builder.selectedItemIds][0] : null;
+  builder.selectedDrawingId = builder.selectedDrawingIds.size === 1 ? [...builder.selectedDrawingIds][0] : null;
+}
+
+function clearCharacterBuilderSelection() {
+  const builder = state.characterBuilder;
+  builder.selectedItemIds.clear();
+  builder.selectedDrawingIds.clear();
+  syncCharacterBuilderLegacySelection();
+}
+
+function setCharacterBuilderSelection({ itemIds = [], drawingIds = [] } = {}) {
+  const builder = state.characterBuilder;
+  builder.selectedItemIds = new Set(itemIds);
+  builder.selectedDrawingIds = new Set(drawingIds);
+  syncCharacterBuilderLegacySelection();
+}
+
+function toggleCharacterBuilderSelection(kind, id) {
+  const builder = state.characterBuilder;
+  const target = kind === "drawing" ? builder.selectedDrawingIds : builder.selectedItemIds;
+  if (target.has(id)) {
+    target.delete(id);
+  } else {
+    target.add(id);
+  }
+  syncCharacterBuilderLegacySelection();
+}
+
+function getSelectedCharacterBuilderItems() {
+  const ids = state.characterBuilder.selectedItemIds;
+  return state.characterBuilder.items.filter((item) => ids.has(item.id));
+}
+
+function getSelectedCharacterBuilderDrawings() {
+  const ids = state.characterBuilder.selectedDrawingIds;
+  return state.characterBuilder.drawings.filter((drawing) => ids.has(drawing.id));
+}
+
+function getCharacterBuilderSelectionBounds() {
+  const selectedItems = getSelectedCharacterBuilderItems();
+  const selectedDrawings = getSelectedCharacterBuilderDrawings();
+  const bounds = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+  const include = (rect) => {
+    if (!rect) return;
+    bounds.left = Math.min(bounds.left, rect.left);
+    bounds.top = Math.min(bounds.top, rect.top);
+    bounds.right = Math.max(bounds.right, rect.right);
+    bounds.bottom = Math.max(bounds.bottom, rect.bottom);
+  };
+  selectedItems.forEach((item) => include(getItemBounds(item)));
+  selectedDrawings.forEach((drawing) => include(getDrawingBounds(drawing)));
+  return Number.isFinite(bounds.left) ? bounds : null;
+}
+
 function setCharacterBuilderTool(tool, id = null) {
   state.characterBuilder.activeTool = tool;
   if (tool === "object" && id) {
@@ -7023,8 +7103,7 @@ function openCharacterBuilder(characterId = null, assetType = "character") {
   state.characterBuilder.assetType = assetType;
   state.characterBuilder.editingId = asset?.id || null;
   state.characterBuilder.activeTool = "select";
-  state.characterBuilder.selectedItemId = null;
-  state.characterBuilder.selectedDrawingId = null;
+  clearCharacterBuilderSelection();
   state.characterBuilder.interaction = null;
   state.characterBuilder.penColor = elements.characterBuilderPenColor.value;
   state.characterBuilder.fillColor = elements.characterBuilderFillColor.value;
@@ -7065,8 +7144,7 @@ function openCharacterBuilder(characterId = null, assetType = "character") {
 function closeCharacterBuilder() {
   state.characterBuilderOpen = false;
   state.characterBuilder.interaction = null;
-  state.characterBuilder.selectedItemId = null;
-  state.characterBuilder.selectedDrawingId = null;
+  clearCharacterBuilderSelection();
   elements.characterBuilderModule.classList.add("hidden");
 }
 
@@ -7112,16 +7190,44 @@ function drawCharacterBuilderContent(options = {}) {
     return;
   }
 
-  const selectedItem = state.characterBuilder.items.find((item) => item.id === state.characterBuilder.selectedItemId);
-  if (selectedItem) {
+  const selectedItems = getSelectedCharacterBuilderItems();
+  for (const selectedItem of selectedItems) {
     drawSelectionOutline(selectedItem);
-    drawResizeHandles(selectedItem);
-    drawRotationHandle(selectedItem);
   }
-  const selectedDrawing = state.characterBuilder.drawings.find((drawing) => drawing.id === state.characterBuilder.selectedDrawingId);
-  if (selectedDrawing) {
+  if (selectedItems.length === 1) {
+    drawResizeHandles(selectedItems[0]);
+    drawRotationHandle(selectedItems[0]);
+  } else if (selectedItems.length > 1) {
+    const bounds = getCharacterBuilderSelectionBounds();
+    if (bounds) {
+      ctx.save();
+      ctx.strokeStyle = "#2f8f83";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([10, 7]);
+      ctx.strokeRect(bounds.left - 8, bounds.top - 8, bounds.right - bounds.left + 16, bounds.bottom - bounds.top + 16);
+      ctx.restore();
+    }
+  }
+  for (const selectedDrawing of getSelectedCharacterBuilderDrawings()) {
     drawDrawingSelection(selectedDrawing);
-    drawDrawingResizeHandles(selectedDrawing);
+    if (state.characterBuilder.selectedDrawingIds.size === 1 && state.characterBuilder.selectedItemIds.size === 0) {
+      drawDrawingResizeHandles(selectedDrawing);
+    }
+  }
+  if (state.characterBuilder.interaction?.type === "builderMarquee") {
+    const { start, current } = state.characterBuilder.interaction;
+    const left = Math.min(start.x, current.x);
+    const top = Math.min(start.y, current.y);
+    const width = Math.abs(current.x - start.x);
+    const height = Math.abs(current.y - start.y);
+    ctx.save();
+    ctx.fillStyle = "rgba(47, 143, 131, 0.12)";
+    ctx.strokeStyle = "rgba(47, 143, 131, 0.95)";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([8, 5]);
+    ctx.fillRect(left, top, width, height);
+    ctx.strokeRect(left, top, width, height);
+    ctx.restore();
   }
 }
 
@@ -7244,8 +7350,7 @@ function addImportedImageToCharacterBuilder(imageData) {
     h: CHARACTER_BUILDER_HEIGHT * 0.36,
     points: [],
   }));
-  state.characterBuilder.selectedDrawingId = state.characterBuilder.drawings.at(-1).id;
-  state.characterBuilder.selectedItemId = null;
+  setCharacterBuilderSelection({ drawingIds: [state.characterBuilder.drawings.at(-1).id] });
   markProjectDirty();
 }
 
@@ -7268,23 +7373,15 @@ function applyBuilderTexture(point) {
     return;
   }
   hit.textureId = state.characterBuilder.toolSelection.texture;
-  state.characterBuilder.selectedItemId = hit.id;
-  state.characterBuilder.selectedDrawingId = null;
+  setCharacterBuilderSelection({ itemIds: [hit.id] });
   markProjectDirty();
 }
 
 function copyCharacterBuilderSelection() {
   const builder = state.characterBuilder;
   builder.clipboard = { items: [], drawings: [] };
-  const selectedItem = builder.items.find((item) => item.id === builder.selectedItemId);
-  if (selectedItem) {
-    builder.clipboard.items = [serializeItem(selectedItem)];
-    return;
-  }
-  const selectedDrawing = builder.drawings.find((drawing) => drawing.id === builder.selectedDrawingId);
-  if (selectedDrawing) {
-    builder.clipboard.drawings = [cloneDrawingForClipboard(selectedDrawing)];
-  }
+  builder.clipboard.items = getSelectedCharacterBuilderItems().map(serializeItem);
+  builder.clipboard.drawings = getSelectedCharacterBuilderDrawings().map(cloneDrawingForClipboard);
 }
 
 function pasteCharacterBuilderClipboard() {
@@ -7294,27 +7391,43 @@ function pasteCharacterBuilderClipboard() {
   }
   pushUndoSnapshot();
 
+  const pastedItemIds = [];
+  const pastedDrawingIds = [];
+  let nextLayerOrder = getHighestLayerOrder(builder.items, builder.drawings) + 1;
+
   if (builder.clipboard.items.length > 0) {
-    const template = builder.clipboard.items[0];
-    const item = normalizeItem({
-      ...template,
-      id: state.nextId++,
-      x: template.x + 24,
-      y: template.y + 24,
-      scripts: Array.isArray(template.scripts) ? template.scripts.map(deserializeBlock) : [],
-    });
-    clampBuilderItem(item);
-    builder.items.push(item);
-    builder.selectedItemId = item.id;
-    builder.selectedDrawingId = null;
-  } else {
-    const drawing = normalizeDrawing(builder.clipboard.drawings[0]);
-    drawing.id = `builder-drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    offsetDrawing(drawing, 24, 24);
-    builder.drawings.push(drawing);
-    builder.selectedDrawingId = drawing.id;
-    builder.selectedItemId = null;
+    const orderedItems = [...builder.clipboard.items].sort((left, right) => (left.layerOrder || 0) - (right.layerOrder || 0));
+    for (const template of orderedItems) {
+      const item = normalizeItem({
+        ...template,
+        id: state.nextId++,
+        x: template.x + 24,
+        y: template.y + 24,
+        layerOrder: nextLayerOrder,
+      });
+      nextLayerOrder += 1;
+      clampBuilderItem(item);
+      builder.items.push(item);
+      pastedItemIds.push(item.id);
+    }
   }
+
+  if (builder.clipboard.drawings.length > 0) {
+    const orderedDrawings = [...builder.clipboard.drawings].sort((left, right) => (left.layerOrder || 0) - (right.layerOrder || 0));
+    for (const template of orderedDrawings) {
+      const drawing = normalizeDrawing({
+        ...template,
+        layerOrder: nextLayerOrder,
+      });
+      nextLayerOrder += 1;
+      drawing.id = `builder-drawing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      offsetDrawing(drawing, 24, 24);
+      builder.drawings.push(drawing);
+      pastedDrawingIds.push(drawing.id);
+    }
+  }
+
+  setCharacterBuilderSelection({ itemIds: pastedItemIds, drawingIds: pastedDrawingIds });
   markProjectDirty();
 }
 
@@ -7331,8 +7444,7 @@ function onCharacterBuilderPointerDown(event) {
     clampBuilderItem(item);
     moveItemToFront(item, state.characterBuilder.items, state.characterBuilder.drawings);
     state.characterBuilder.items.push(item);
-    state.characterBuilder.selectedItemId = item.id;
-    state.characterBuilder.selectedDrawingId = null;
+    setCharacterBuilderSelection({ itemIds: [item.id] });
     markProjectDirty();
     return;
   }
@@ -7348,15 +7460,13 @@ function onCharacterBuilderPointerDown(event) {
     pushUndoSnapshot();
     const item = hitTestBuilderItem(point);
     if (fillObjectColor(item, state.characterBuilder.fillColor)) {
-      state.characterBuilder.selectedItemId = item.id;
-      state.characterBuilder.selectedDrawingId = null;
+      setCharacterBuilderSelection({ itemIds: [item.id] });
       return;
     }
     const drawing = hitTestBuilderDrawing(point);
     if (drawing?.closed) {
       drawing.fillColor = state.characterBuilder.fillColor;
-      state.characterBuilder.selectedDrawingId = drawing.id;
-      state.characterBuilder.selectedItemId = null;
+      setCharacterBuilderSelection({ drawingIds: [drawing.id] });
       markProjectDirty();
     }
     return;
@@ -7373,14 +7483,15 @@ function onCharacterBuilderPointerDown(event) {
       points: [point],
     });
     state.characterBuilder.drawings.push(drawing);
-    state.characterBuilder.selectedDrawingId = drawing.id;
-    state.characterBuilder.selectedItemId = null;
+    setCharacterBuilderSelection({ drawingIds: [drawing.id] });
     state.characterBuilder.interaction = { type: "draw", drawingId: drawing.id };
     markProjectDirty();
     return;
   }
 
-  const selectedItem = state.characterBuilder.items.find((item) => item.id === state.characterBuilder.selectedItemId);
+  const selectedItem = state.characterBuilder.selectedItemIds.size === 1
+    ? state.characterBuilder.items.find((item) => item.id === state.characterBuilder.selectedItemId)
+    : null;
   const rotateHandle = hitTestRotationHandle(selectedItem, point);
   if (rotateHandle) {
     pushUndoSnapshot();
@@ -7399,7 +7510,9 @@ function onCharacterBuilderPointerDown(event) {
     return;
   }
 
-  const selectedDrawing = state.characterBuilder.drawings.find((drawing) => drawing.id === state.characterBuilder.selectedDrawingId);
+  const selectedDrawing = state.characterBuilder.selectedDrawingIds.size === 1 && state.characterBuilder.selectedItemIds.size === 0
+    ? state.characterBuilder.drawings.find((drawing) => drawing.id === state.characterBuilder.selectedDrawingId)
+    : null;
   const drawingResizeHandle = hitTestDrawingResizeHandle(selectedDrawing, point);
   if (drawingResizeHandle) {
     pushUndoSnapshot();
@@ -7415,30 +7528,45 @@ function onCharacterBuilderPointerDown(event) {
   const hitItem = hitTestBuilderItem(point);
   if (hitItem) {
     pushUndoSnapshot();
-    state.characterBuilder.selectedItemId = hitItem.id;
-    state.characterBuilder.selectedDrawingId = null;
-    state.characterBuilder.interaction = { type: "dragItem", itemId: hitItem.id, start: point, x: hitItem.x, y: hitItem.y };
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      toggleCharacterBuilderSelection("item", hitItem.id);
+    } else if (!state.characterBuilder.selectedItemIds.has(hitItem.id)) {
+      setCharacterBuilderSelection({ itemIds: [hitItem.id] });
+    }
+    const itemSnapshots = new Map(getSelectedCharacterBuilderItems().map((item) => [item.id, { x: item.x, y: item.y }]));
+    const drawingSnapshots = new Map(getSelectedCharacterBuilderDrawings().map((drawing) => [drawing.id, {
+      x: drawing.x,
+      y: drawing.y,
+      points: drawing.points?.map((drawingPoint) => ({ ...drawingPoint })) || [],
+    }]));
+    state.characterBuilder.interaction = { type: "dragSelection", start: point, itemSnapshots, drawingSnapshots };
     return;
   }
 
   const hitDrawing = hitTestBuilderDrawing(point);
   if (hitDrawing) {
     pushUndoSnapshot();
-    state.characterBuilder.selectedDrawingId = hitDrawing.id;
-    state.characterBuilder.selectedItemId = null;
-    state.characterBuilder.interaction = {
-      type: "dragDrawing",
-      drawingId: hitDrawing.id,
-      start: point,
-      x: hitDrawing.x,
-      y: hitDrawing.y,
-      points: hitDrawing.points?.map((drawingPoint) => ({ ...drawingPoint })) || [],
-    };
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+      toggleCharacterBuilderSelection("drawing", hitDrawing.id);
+    } else if (!state.characterBuilder.selectedDrawingIds.has(hitDrawing.id)) {
+      setCharacterBuilderSelection({ drawingIds: [hitDrawing.id] });
+    }
+    const itemSnapshots = new Map(getSelectedCharacterBuilderItems().map((item) => [item.id, { x: item.x, y: item.y }]));
+    const drawingSnapshots = new Map(getSelectedCharacterBuilderDrawings().map((drawing) => [drawing.id, {
+      x: drawing.x,
+      y: drawing.y,
+      points: drawing.points?.map((drawingPoint) => ({ ...drawingPoint })) || [],
+    }]));
+    state.characterBuilder.interaction = { type: "dragSelection", start: point, itemSnapshots, drawingSnapshots };
     return;
   }
 
-  state.characterBuilder.selectedItemId = null;
-  state.characterBuilder.selectedDrawingId = null;
+  clearCharacterBuilderSelection();
+  state.characterBuilder.interaction = {
+    type: "builderMarquee",
+    start: point,
+    current: point,
+  };
 }
 
 function onCharacterBuilderPointerMove(event) {
@@ -7450,6 +7578,11 @@ function onCharacterBuilderPointerMove(event) {
 
   if (interaction.type === "paintTexture") {
     applyBuilderTexture(point);
+    return;
+  }
+
+  if (interaction.type === "builderMarquee") {
+    interaction.current = point;
     return;
   }
 
@@ -7470,6 +7603,33 @@ function onCharacterBuilderPointerMove(event) {
       clampBuilderItem(item);
       markProjectDirty();
     }
+    return;
+  }
+
+  if (interaction.type === "dragSelection") {
+    const dx = point.x - interaction.start.x;
+    const dy = point.y - interaction.start.y;
+    for (const [itemId, snapshot] of interaction.itemSnapshots) {
+      const item = state.characterBuilder.items.find((candidate) => candidate.id === itemId);
+      if (item) {
+        item.x = snapshot.x + dx;
+        item.y = snapshot.y + dy;
+        clampBuilderItem(item);
+      }
+    }
+    for (const [drawingId, snapshot] of interaction.drawingSnapshots) {
+      const drawing = state.characterBuilder.drawings.find((candidate) => candidate.id === drawingId);
+      if (drawing?.type === "image") {
+        drawing.x = snapshot.x + dx;
+        drawing.y = snapshot.y + dy;
+      } else if (drawing) {
+        drawing.points = snapshot.points.map((drawingPoint) => ({
+          x: drawingPoint.x + dx,
+          y: drawingPoint.y + dy,
+        }));
+      }
+    }
+    markProjectDirty();
     return;
   }
 
@@ -7517,10 +7677,31 @@ function onCharacterBuilderPointerMove(event) {
 }
 
 function onCharacterBuilderPointerUp(event) {
+  if (state.characterBuilder.interaction?.type === "builderMarquee") {
+    const { start, current } = state.characterBuilder.interaction;
+    const marquee = {
+      left: Math.min(start.x, current.x),
+      top: Math.min(start.y, current.y),
+      right: Math.max(start.x, current.x),
+      bottom: Math.max(start.y, current.y),
+    };
+    if (Math.abs(current.x - start.x) > 4 || Math.abs(current.y - start.y) > 4) {
+      const itemIds = state.characterBuilder.items
+        .filter((item) => rectContainsRect(marquee, getItemBounds(item)))
+        .map((item) => item.id);
+      const drawingIds = state.characterBuilder.drawings
+        .filter((drawing) => {
+          const bounds = getDrawingBounds(drawing);
+          return bounds && rectContainsRect(marquee, bounds);
+        })
+        .map((drawing) => drawing.id);
+      setCharacterBuilderSelection({ itemIds, drawingIds });
+    }
+  }
   if (state.characterBuilder.interaction?.type === "draw") {
     const drawing = state.characterBuilder.drawings.find((candidate) => candidate.id === state.characterBuilder.interaction.drawingId);
     if (drawing && finalizeDrawingClosure(drawing)) {
-      state.characterBuilder.selectedDrawingId = drawing.id;
+      setCharacterBuilderSelection({ drawingIds: [drawing.id] });
     }
   }
   state.characterBuilder.interaction = null;
@@ -7532,15 +7713,10 @@ function onCharacterBuilderPointerUp(event) {
 function deleteCharacterBuilderSelection() {
   pushUndoSnapshot();
   const builder = state.characterBuilder;
-  if (builder.selectedItemId != null) {
-    builder.items = builder.items.filter((item) => item.id !== builder.selectedItemId);
-    builder.selectedItemId = null;
-    markProjectDirty();
-    return true;
-  }
-  if (builder.selectedDrawingId != null) {
-    builder.drawings = builder.drawings.filter((drawing) => drawing.id !== builder.selectedDrawingId);
-    builder.selectedDrawingId = null;
+  if (builder.selectedItemIds.size > 0 || builder.selectedDrawingIds.size > 0) {
+    builder.items = builder.items.filter((item) => !builder.selectedItemIds.has(item.id));
+    builder.drawings = builder.drawings.filter((drawing) => !builder.selectedDrawingIds.has(drawing.id));
+    clearCharacterBuilderSelection();
     markProjectDirty();
     return true;
   }
@@ -8750,6 +8926,189 @@ function moveRigEditorPointer(point) {
   return false;
 }
 
+function startRigCanvasPointer(event) {
+  if (elements.rigPanel.classList.contains("hidden") || !isPrimaryPointerPress(event)) {
+    return;
+  }
+  const actor = getRigTarget();
+  if (!actor?.rig) {
+    return;
+  }
+  const point = getRigCanvasPoint(event);
+  const localPoint = rigCanvasToLocal(point);
+  rigCanvas.setPointerCapture?.(event.pointerId);
+  const hitDot = hitTestRigCanvasDot(point);
+
+  if (state.rigEditor.mode === "rig") {
+    if (hitDot) {
+      pushUndoSnapshot();
+      state.rigEditor.selectedDotId = hitDot.id;
+      state.interaction = { type: "rigCanvasMoveDot", dotId: hitDot.id };
+    } else {
+      pushUndoSnapshot();
+      const nextIndex = actor.rig.dots.length + 1;
+      const newDot = {
+        id: `rig-dot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: `Point ${nextIndex}`,
+        x: localPoint.x,
+        y: localPoint.y,
+        fps: 0,
+      };
+      actor.rig.dots.push(newDot);
+      state.rigEditor.selectedDotId = newDot.id;
+      markProjectDirty();
+      renderRigEditor();
+    }
+    return;
+  }
+
+  if (state.rigEditor.mode === "animate") {
+    if (hitDot) {
+      pushUndoSnapshot();
+      state.rigEditor.selectedDotId = hitDot.id;
+      const existingAction = actor.rig.actions.find((action) => action.dotIds?.includes(hitDot.id));
+      if (existingAction) {
+        state.rigEditor.selectedActionId = existingAction.id;
+        elements.rigSequenceNumber.value = String(existingAction.sequence || 1);
+      }
+      state.rigEditor.pathDraft = null;
+      state.interaction = {
+        type: "rigCanvasPath",
+        dotId: hitDot.id,
+        started: false,
+        startLocal: { x: hitDot.x, y: hitDot.y },
+      };
+      renderRigEditor();
+    }
+    return;
+  }
+
+  if (state.rigEditor.mode === "edit") {
+    const action = getOrCreateRigAction(actor);
+    if (["pen", "eraser"].includes(state.rigEditor.tool)) {
+      pushUndoSnapshot();
+      const frame = getOrCreateRigFrame(action);
+      const drawing = normalizeRigDrawing({
+        type: state.rigEditor.tool === "eraser" ? "erase" : "pen",
+        color: elements.rigPenColor.value,
+        size: state.rigEditor.tool === "eraser" ? Number(elements.rigEraserSize.value || 18) : 6,
+        points: [localPoint],
+      });
+      frame.drawings.push(drawing);
+      state.interaction = { type: "rigCanvasFrameDraw", drawingId: drawing.id, actionId: action.id };
+      markProjectDirty();
+      renderRigCanvas();
+      return;
+    }
+    if (state.rigEditor.tool === "bucket") {
+      pushUndoSnapshot();
+      const frame = getOrCreateRigFrame(action);
+      frame.drawings.push(normalizeRigDrawing({
+        type: "fill",
+        color: elements.rigFillColor.value,
+        size: 1,
+        points: [
+          { x: -actor.w * 0.5, y: -actor.h * 0.5 },
+          { x: actor.w * 0.5, y: -actor.h * 0.5 },
+          { x: actor.w * 0.5, y: actor.h * 0.5 },
+          { x: -actor.w * 0.5, y: actor.h * 0.5 },
+        ],
+      }));
+      markProjectDirty();
+      renderRigEditor();
+      return;
+    }
+    if (hitDot) {
+      pushUndoSnapshot();
+      state.rigEditor.selectedDotId = hitDot.id;
+      state.interaction = { type: "rigCanvasAnimateDot", dotId: hitDot.id, actionId: action.id };
+      renderRigEditor();
+    }
+  }
+}
+
+function moveRigCanvasPointer(event) {
+  if (!state.interaction || !state.interaction.type?.startsWith("rigCanvas")) {
+    return;
+  }
+  const actor = getRigTarget();
+  if (!actor?.rig) {
+    return;
+  }
+  const point = getRigCanvasPoint(event);
+  const localPoint = rigCanvasToLocal(point);
+  if (state.interaction.type === "rigCanvasMoveDot") {
+    const dot = getRigDot(actor, state.interaction.dotId);
+    if (dot) {
+      dot.x = localPoint.x;
+      dot.y = localPoint.y;
+      markProjectDirty();
+      renderRigEditor();
+    }
+    return;
+  }
+  if (state.interaction.type === "rigCanvasPath") {
+    if (!state.interaction.started) {
+      const distance = Math.hypot(localPoint.x - state.interaction.startLocal.x, localPoint.y - state.interaction.startLocal.y);
+      if (distance < 3) {
+        return;
+      }
+      state.interaction.started = true;
+      state.rigEditor.pathDraft = [state.interaction.startLocal, localPoint];
+    } else {
+      state.rigEditor.pathDraft.push(localPoint);
+    }
+    renderRigCanvas();
+    return;
+  }
+  if (state.interaction.type === "rigCanvasAnimateDot") {
+    const action = actor.rig.actions.find((candidate) => candidate.id === state.interaction.actionId);
+    const dot = getRigDot(actor, state.interaction.dotId);
+    if (action && dot) {
+      if (!action.dotIds.includes(dot.id)) {
+        action.dotIds.push(dot.id);
+      }
+      const frame = getOrCreateRigFrame(action);
+      frame.dots[dot.id] = {
+        x: localPoint.x - dot.x,
+        y: localPoint.y - dot.y,
+      };
+      actor.runtime.rig.dotOffsets.set(dot.id, { ...frame.dots[dot.id] });
+      markProjectDirty();
+      renderRigCanvas();
+    }
+    return;
+  }
+  if (state.interaction.type === "rigCanvasFrameDraw") {
+    const action = actor.rig.actions.find((candidate) => candidate.id === state.interaction.actionId);
+    const frame = getRigFrameAt(action, state.rigEditor.frame);
+    const drawing = frame?.drawings.find((candidate) => candidate.id === state.interaction.drawingId);
+    if (drawing) {
+      drawing.points.push(localPoint);
+      markProjectDirty();
+      renderRigCanvas();
+    }
+  }
+}
+
+function endRigCanvasPointer(event) {
+  if (!state.interaction?.type?.startsWith("rigCanvas")) {
+    return;
+  }
+  const actor = getRigTarget();
+  if (state.interaction.type === "rigCanvasPath" && actor?.rig && state.rigEditor.pathDraft?.length >= 2) {
+    const dot = getRigDot(actor, state.interaction.dotId);
+    createRigPathActionForDot(actor, dot, state.rigEditor.pathDraft);
+    state.rigEditor.pathDraft = null;
+    markProjectDirty();
+  }
+  state.interaction = null;
+  renderRigEditor();
+  if (event?.pointerId != null) {
+    rigCanvas.releasePointerCapture?.(event.pointerId);
+  }
+}
+
 function onPointerDown(event) {
   if (state.screen !== "studio" || state.characterBuilderOpen || !isPrimaryPointerPress(event)) {
     return;
@@ -9204,12 +9563,16 @@ function closeRigEditor() {
   state.rigEditor.selectedDotId = null;
   state.rigEditor.selectedActionId = null;
   state.rigEditor.drawingId = null;
+  state.rigEditor.pathDraft = null;
   elements.rigPanel.classList.add("hidden");
 }
 
 function setRigMode(mode) {
-  state.rigEditor.mode = mode === "animate" ? "animate" : "rig";
+  state.rigEditor.mode = ["rig", "animate", "edit"].includes(mode) ? mode : "rig";
   if (state.rigEditor.mode === "animate") {
+    getOrCreateRigAction();
+  }
+  if (state.rigEditor.mode === "edit") {
     getOrCreateRigAction();
   }
   renderRigEditor();
@@ -9261,8 +9624,15 @@ function renderRigEditor() {
   elements.rigPanelTitle.textContent = `Rig / Animate: ${getActorDisplayName(actor)}`;
   elements.rigModeButton.classList.toggle("active", state.rigEditor.mode === "rig");
   elements.animateModeButton.classList.toggle("active", state.rigEditor.mode === "animate");
+  elements.rigEditModeButton.classList.toggle("active", state.rigEditor.mode === "edit");
   elements.rigModeButton.className = state.rigEditor.mode === "rig" ? "secondary-button active" : "ghost-button";
   elements.animateModeButton.className = state.rigEditor.mode === "animate" ? "secondary-button active" : "ghost-button";
+  elements.rigEditModeButton.className = state.rigEditor.mode === "edit" ? "secondary-button active" : "ghost-button";
+  elements.rigHelpText.textContent = state.rigEditor.mode === "rig"
+    ? "Rig tab: click the character to place rig points. Drag points to move them."
+    : state.rigEditor.mode === "animate"
+      ? "Animate tab: pick a rig point, then draw its motion path. The playback order number controls when it plays."
+      : "Edit tab: step through frames and draw frame details with pen, bucket, or eraser.";
   elements.rigGlobalFps.value = String(actor.rig.globalFps);
   elements.rigActionDuration.value = String(action?.duration || 1);
   elements.rigSequenceNumber.value = String(action?.sequence || 1);
@@ -9356,6 +9726,182 @@ function renderRigEditor() {
       card.append(text, duplicate, del);
       elements.rigActionList.append(card);
     });
+  renderRigCharacterList();
+  renderRigCanvas();
+}
+
+function renderRigCharacterList() {
+  elements.rigCharacterList.innerHTML = "";
+  const characters = state.items.filter((item) => item.kind === "character");
+  if (characters.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "script-empty";
+    empty.textContent = "Place a character on the stage first.";
+    elements.rigCharacterList.append(empty);
+    return;
+  }
+  for (const character of characters) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "set-card";
+    button.classList.toggle("active", character.id === state.rigEditor.actorId);
+    const title = document.createElement("strong");
+    title.textContent = getActorDisplayName(character);
+    const meta = document.createElement("span");
+    meta.textContent = `${character.rig?.dots?.length || 0} points | ${character.rig?.actions?.length || 0} paths`;
+    button.append(title, meta);
+    button.addEventListener("click", () => {
+      openRigEditorForActor(character.id);
+    });
+    elements.rigCharacterList.append(button);
+  }
+}
+
+function ensureRigCanvasSize() {
+  const rect = rigCanvas.getBoundingClientRect();
+  const width = Math.max(1, Math.floor(rect.width));
+  const height = Math.max(1, Math.floor(rect.height));
+  const dpr = window.devicePixelRatio || 1;
+  if (rigCanvas.width !== Math.floor(width * dpr) || rigCanvas.height !== Math.floor(height * dpr)) {
+    rigCanvas.width = Math.floor(width * dpr);
+    rigCanvas.height = Math.floor(height * dpr);
+    rigCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  return { width, height };
+}
+
+function createRigPreviewActor(actor, size = ensureRigCanvasSize()) {
+  const zoom = clamp(Math.min(size.width * 0.5 / Math.max(1, actor.w), size.height * 0.66 / Math.max(1, actor.h)), 0.8, 2.4);
+  return {
+    ...actor,
+    x: size.width * 0.5,
+    y: size.height * 0.54,
+    scaleX: (actor.scaleX || 1) * zoom,
+    scaleY: (actor.scaleY || 1) * zoom,
+    runtime: actor.runtime,
+    rig: actor.rig,
+  };
+}
+
+function rigCanvasToLocal(point) {
+  const actor = getRigTarget();
+  if (!actor) {
+    return point;
+  }
+  return rigStageToLocal(createRigPreviewActor(actor), point);
+}
+
+function rigLocalToCanvasPoint(localPoint, options = {}) {
+  const actor = getRigTarget();
+  if (!actor) {
+    return localPoint;
+  }
+  return rigLocalToStage(createRigPreviewActor(actor), localPoint, options);
+}
+
+function getRigCanvasPoint(event) {
+  const rect = rigCanvas.getBoundingClientRect();
+  const size = ensureRigCanvasSize();
+  return {
+    x: clamp((event.clientX - rect.left) * (size.width / Math.max(1, rect.width)), 0, size.width),
+    y: clamp((event.clientY - rect.top) * (size.height / Math.max(1, rect.height)), 0, size.height),
+  };
+}
+
+function hitTestRigCanvasDot(point) {
+  const actor = getRigTarget();
+  if (!actor?.rig) {
+    return null;
+  }
+  for (let index = actor.rig.dots.length - 1; index >= 0; index -= 1) {
+    const dot = actor.rig.dots[index];
+    const dotPoint = rigLocalToCanvasPoint(dot, { dotId: dot.id });
+    if (Math.hypot(dotPoint.x - point.x, dotPoint.y - point.y) <= 13) {
+      return dot;
+    }
+  }
+  return null;
+}
+
+function drawRigCanvasPath(points, color, alpha = 1) {
+  if (!points || points.length < 2) {
+    return;
+  }
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.setLineDash([10, 7]);
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const canvasPoint = rigLocalToCanvasPoint(point, { includeRuntime: false });
+    if (index === 0) {
+      ctx.moveTo(canvasPoint.x, canvasPoint.y);
+    } else {
+      ctx.lineTo(canvasPoint.x, canvasPoint.y);
+    }
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function renderRigCanvas() {
+  if (elements.rigPanel.classList.contains("hidden")) {
+    return;
+  }
+  const actor = getRigTarget();
+  const size = ensureRigCanvasSize();
+  withRenderTarget(rigCtx, patternCaches.stage, () => {
+    currentRenderFlags = {
+      showPhysicsBadges: false,
+      showPhysicsDebug: false,
+      showEditorOverlays: true,
+    };
+    ctx.clearRect(0, 0, size.width, size.height);
+    ctx.fillStyle = "#fffdfa";
+    ctx.fillRect(0, 0, size.width, size.height);
+    ctx.save();
+    ctx.strokeStyle = "rgba(189, 150, 114, 0.16)";
+    ctx.lineWidth = 1;
+    for (let x = 36; x < size.width; x += 36) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, size.height);
+      ctx.stroke();
+    }
+    for (let y = 36; y < size.height; y += 36) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(size.width, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+    if (!actor) {
+      ctx.fillStyle = "rgba(120, 86, 58, 0.7)";
+      ctx.font = "800 22px Trebuchet MS";
+      ctx.textAlign = "center";
+      ctx.fillText("Select a stage character to start rigging.", size.width * 0.5, size.height * 0.48);
+      return;
+    }
+    const previewActor = createRigPreviewActor(actor, size);
+    const originalEditorActorId = state.rigEditor.actorId;
+    if (previewActor.kind === "character") {
+      drawCharacter(previewActor);
+    }
+    for (const action of actor.rig?.actions || []) {
+      for (const dotId of action.dotIds || []) {
+        const path = getRigActionDotPath(action, dotId, actor);
+        drawRigCanvasPath(path, action.id === state.rigEditor.selectedActionId ? "#e56c3f" : "rgba(47, 143, 131, 0.62)", 0.86);
+      }
+    }
+    if (state.rigEditor.pathDraft?.length >= 2) {
+      drawRigCanvasPath(state.rigEditor.pathDraft, "#ffd166", 1);
+    }
+    state.rigEditor.actorId = originalEditorActorId;
+    drawRigEditorDots(previewActor);
+  });
 }
 
 function deleteRigDot(dotId) {
@@ -9395,6 +9941,43 @@ function deleteRigAction(actionId) {
   renderRigEditor();
 }
 
+function createRigPathActionForDot(actor, dot, path) {
+  if (!actor?.rig || !dot || path.length < 2) {
+    return null;
+  }
+  const sequence = Math.max(1, Math.round(Number(elements.rigSequenceNumber.value || 1)));
+  const duration = clamp(Number(elements.rigActionDuration.value || 1), 0.1, 20);
+  const fps = clamp(Number(elements.rigGlobalFps.value || actor.rig.globalFps || 12), 1, 60);
+  const frameCount = Math.max(2, Math.round(duration * fps));
+  const frames = [];
+  for (let index = 0; index < frameCount; index += 1) {
+    const sourceIndex = Math.round((index / Math.max(1, frameCount - 1)) * (path.length - 1));
+    const point = path[sourceIndex];
+    frames.push(normalizeRigFrame({
+      index,
+      dots: {
+        [dot.id]: {
+          x: point.x - dot.x,
+          y: point.y - dot.y,
+        },
+      },
+      drawings: [],
+    }));
+  }
+  const action = normalizeRigAction({
+    name: `${dot.name || "Point"} path ${sequence}`,
+    sequence,
+    duration,
+    fps,
+    dotIds: [dot.id],
+    frames,
+  });
+  actor.rig.actions = actor.rig.actions.filter((candidate) => !(candidate.dotIds?.length === 1 && candidate.dotIds[0] === dot.id && candidate.sequence === sequence));
+  actor.rig.actions.push(action);
+  state.rigEditor.selectedActionId = action.id;
+  return action;
+}
+
 function applyRigEditorFrameToRuntime() {
   const actor = getRigTarget();
   const action = getRigAction(actor);
@@ -9422,7 +10005,9 @@ function saveRigActionFromEditor() {
   action.duration = duration;
   action.fps = fps;
   action.name = window.prompt("Name this animation action:", action.name || `Action ${actor.rig.actions.length}`)?.trim() || action.name || `Action ${actor.rig.actions.length}`;
-  action.dotIds = actor.rig.dots.map((dot) => dot.id);
+  if (!action.dotIds?.length) {
+    action.dotIds = state.rigEditor.selectedDotId ? [state.rigEditor.selectedDotId] : actor.rig.dots.map((dot) => dot.id);
+  }
   getOrCreateRigFrame(action, 0);
   getOrCreateRigFrame(action, Math.max(0, getRigFrameCount(action) - 1));
   markProjectDirty();
@@ -11455,6 +12040,7 @@ function animate(now) {
     }
     refreshPhysicsStatusLabel();
     renderStageViews(now);
+    renderRigCanvas();
   }
 
   if (state.projectDirty && now - state.lastProjectSaveTime > 250) {
@@ -12872,6 +13458,7 @@ function bindEvents() {
   elements.closeRigPanelButton.addEventListener("click", closeRigEditor);
   elements.rigModeButton.addEventListener("click", () => setRigMode("rig"));
   elements.animateModeButton.addEventListener("click", () => setRigMode("animate"));
+  elements.rigEditModeButton.addEventListener("click", () => setRigMode("edit"));
   elements.saveRigActionButton.addEventListener("click", saveRigActionFromEditor);
   elements.playRigActionButton.addEventListener("click", () => playRigAction());
   elements.playRigSequenceButton.addEventListener("click", () => playRigSequence());
@@ -13026,6 +13613,10 @@ function bindEvents() {
   characterBuilderCanvas.addEventListener("pointermove", onCharacterBuilderPointerMove);
   characterBuilderCanvas.addEventListener("pointerup", onCharacterBuilderPointerUp);
   characterBuilderCanvas.addEventListener("pointercancel", onCharacterBuilderPointerUp);
+  rigCanvas.addEventListener("pointerdown", startRigCanvasPointer);
+  rigCanvas.addEventListener("pointermove", moveRigCanvasPointer);
+  rigCanvas.addEventListener("pointerup", endRigCanvasPointer);
+  rigCanvas.addEventListener("pointercancel", endRigCanvasPointer);
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("pointercancel", onPointerUp);
   stageCanvas.addEventListener("pointerleave", () => {
@@ -13074,6 +13665,7 @@ function bindEvents() {
   });
   window.addEventListener("resize", () => {
     ensureCanvasSize();
+    renderRigCanvas();
   });
   window.addEventListener("beforeunload", () => {
     saveProjectState();

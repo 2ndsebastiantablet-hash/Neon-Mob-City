@@ -1173,18 +1173,111 @@ button:disabled {
 }
 
 .rig-panel {
-  top: 1rem;
-  left: 1rem;
-  width: min(24rem, calc(100% - 2rem));
-  max-height: calc(100% - 2rem);
-  overflow: auto;
-  z-index: 13;
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  display: block;
+  width: auto;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.rig-mode-tabs,
+.rig-panel.hidden {
+  display: none;
+}
+
+.rig-editor-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr) minmax(17rem, 22rem);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 1rem;
+  width: calc(100vw - 2rem);
+  height: calc(100vh - 2rem);
+  margin: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at top left, rgba(255, 209, 102, 0.24), transparent 30%),
+    linear-gradient(135deg, rgba(255, 249, 239, 0.98), rgba(244, 252, 246, 0.98));
+  box-shadow: 0 26px 60px rgba(54, 27, 12, 0.24);
+}
+
+.rig-character-panel,
+.rig-editor-main,
+.rig-inspector-panel {
+  min-height: 0;
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 250, 242, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(82, 47, 18, 0.08);
+}
+
+.rig-character-panel,
+.rig-inspector-panel {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  overflow: auto;
+}
+
+.rig-editor-main {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 0.85rem;
+}
+
+.rig-editor-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rig-editor-header h3 {
+  margin: 0 0 0.25rem;
+}
+
+.rig-character-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.rig-top-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.rig-workspace-frame {
+  min-height: 0;
+  border: 1px solid rgba(82, 47, 18, 0.11);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(45deg, rgba(47, 143, 131, 0.08) 25%, transparent 25% 75%, rgba(47, 143, 131, 0.08) 75%),
+    linear-gradient(45deg, rgba(47, 143, 131, 0.08) 25%, transparent 25% 75%, rgba(47, 143, 131, 0.08) 75%),
+    #fffdfa;
+  background-position: 0 0, 18px 18px;
+  background-size: 36px 36px;
+  overflow: hidden;
+}
+
+#rigCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
 .rig-actions-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.45rem;
 }
 
@@ -1192,7 +1285,7 @@ button:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.rig-mode-tabs button.active,
+.rig-top-tabs button.active,
 .rig-actions-row button.active {
   color: #fffaf3;
   background: linear-gradient(135deg, #2f8f83, #247066);
@@ -1742,6 +1835,7 @@ button:disabled {
   .scripts-module-layout,
   .stage-module-layout,
   .character-builder-layout,
+  .rig-editor-shell,
   .music-maker-module-layout,
   .friends-layout {
     grid-template-columns: 1fr;
@@ -1750,10 +1844,16 @@ button:disabled {
   .scripts-module-shell,
   .stage-module-shell,
   .character-builder-shell,
+  .rig-editor-shell,
   .music-maker-module-shell {
     height: calc(100vh - 1.2rem);
     width: calc(100vw - 1.2rem);
     margin: 0.6rem;
+  }
+
+  .rig-editor-shell {
+    grid-template-rows: auto minmax(24rem, 1fr) auto;
+    overflow: auto;
   }
 
   .set-mini-code-panel {

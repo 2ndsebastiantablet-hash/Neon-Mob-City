@@ -180,52 +180,71 @@
             <p id="penAnimationHelp">Pick a tool, then draw a motion path starting from the actor.</p>
           </div>
           <aside id="rigPanel" class="rig-panel hidden" aria-label="Rig and animation editor">
-            <div class="texture-editor-header">
-              <strong id="rigPanelTitle">Rig / Animate</strong>
-              <button id="closeRigPanelButton" type="button" class="ghost-button">Close</button>
-            </div>
-            <div class="rig-mode-tabs">
-              <button id="rigModeButton" type="button" class="secondary-button">Rig</button>
-              <button id="animateModeButton" type="button" class="ghost-button">Animate</button>
-            </div>
-            <div class="rig-controls-grid">
-              <label class="set-control-label">Global FPS <input id="rigGlobalFps" type="number" min="1" max="60" step="1" value="12"></label>
-              <label class="set-control-label">Duration <input id="rigActionDuration" type="number" min="0.1" max="20" step="0.1" value="1"></label>
-              <label class="set-control-label">Sequence # <input id="rigSequenceNumber" type="number" min="1" max="99" step="1" value="1"></label>
-              <label class="set-control-label">Dot FPS <input id="rigDotFps" type="number" min="0" max="60" step="1" value="0"></label>
-            </div>
-            <div class="rig-actions-row">
-              <button id="saveRigActionButton" type="button" class="primary-button">Save Action</button>
-              <button id="playRigActionButton" type="button" class="ghost-button">Play Action</button>
-              <button id="playRigSequenceButton" type="button" class="secondary-button">Play Sequence</button>
-            </div>
-            <div class="rig-frame-editor">
-              <div class="rig-actions-row">
-                <button id="rigPrevFrameButton" type="button" class="ghost-button">Prev</button>
-                <button id="rigNextFrameButton" type="button" class="ghost-button">Next</button>
-              </div>
-              <label class="set-control-label">Frame <input id="rigFrameInput" type="number" min="0" max="999" step="1" value="0"></label>
-              <label class="set-control-label">Tool
-                <select id="rigFrameTool">
-                  <option value="select">Move Dots</option>
-                  <option value="pen">Pen</option>
-                  <option value="bucket">Paint Bucket</option>
-                  <option value="eraser">Eraser</option>
-                </select>
-              </label>
-              <label class="set-control-label">Pen color <input id="rigPenColor" type="color" value="#2f8f83"></label>
-              <label class="set-control-label">Fill color <input id="rigFillColor" type="color" value="#ffd166"></label>
-              <label class="set-control-label">Eraser size <input id="rigEraserSize" type="range" min="4" max="48" step="2" value="18"></label>
-              <label class="set-control-label">Onion skin <input id="rigOnionSkin" type="checkbox" checked></label>
-              <label class="set-control-label">Onion opacity <input id="rigOnionAlpha" type="range" min="0" max="80" step="5" value="30"></label>
-            </div>
-            <div class="rig-dot-list-wrap">
-              <strong>Rig Dots</strong>
-              <div id="rigDotList" class="rig-dot-list"></div>
-            </div>
-            <div class="rig-dot-list-wrap">
-              <strong>Actions</strong>
-              <div id="rigActionList" class="rig-action-list"></div>
+            <div class="scripts-module-backdrop"></div>
+            <div class="rig-editor-shell">
+              <aside class="rig-character-panel">
+                <p class="topbar-label">Character Select</p>
+                <div id="rigCharacterList" class="rig-character-list"></div>
+              </aside>
+              <section class="rig-editor-main">
+                <header class="rig-editor-header">
+                  <div>
+                    <p class="topbar-label">Animation Workshop</p>
+                    <h3 id="rigPanelTitle">Rig / Animate</h3>
+                    <p id="rigHelpText" class="scripts-copy">Choose a character, place rig points, draw point motion paths, then edit frames.</p>
+                  </div>
+                  <button id="closeRigPanelButton" type="button" class="ghost-button">Back To Studio</button>
+                </header>
+                <div class="rig-top-tabs">
+                  <button id="rigModeButton" type="button" class="secondary-button">Rig</button>
+                  <button id="animateModeButton" type="button" class="ghost-button">Animate</button>
+                  <button id="rigEditModeButton" type="button" class="ghost-button">Edit</button>
+                </div>
+                <div class="rig-workspace-frame">
+                  <canvas id="rigCanvas" aria-label="Rig animation workspace"></canvas>
+                </div>
+              </section>
+              <aside class="rig-inspector-panel">
+                <div class="rig-controls-grid">
+                  <label class="set-control-label">FPS <input id="rigGlobalFps" type="number" min="1" max="60" step="1" value="12"></label>
+                  <label class="set-control-label">Duration <input id="rigActionDuration" type="number" min="0.1" max="20" step="0.1" value="1"></label>
+                  <label class="set-control-label">Playback order # <input id="rigSequenceNumber" type="number" min="1" max="99" step="1" value="1"></label>
+                  <label class="set-control-label">Dot FPS <input id="rigDotFps" type="number" min="0" max="60" step="1" value="0"></label>
+                </div>
+                <div class="rig-actions-row">
+                  <button id="saveRigActionButton" type="button" class="primary-button">Save Action</button>
+                  <button id="playRigActionButton" type="button" class="ghost-button">Play Action</button>
+                  <button id="playRigSequenceButton" type="button" class="secondary-button">Play All</button>
+                </div>
+                <div class="rig-frame-editor">
+                  <div class="rig-actions-row">
+                    <button id="rigPrevFrameButton" type="button" class="ghost-button">Prev</button>
+                    <button id="rigNextFrameButton" type="button" class="ghost-button">Next</button>
+                  </div>
+                  <label class="set-control-label">Frame <input id="rigFrameInput" type="number" min="0" max="999" step="1" value="0"></label>
+                  <label class="set-control-label">Edit tool
+                    <select id="rigFrameTool">
+                      <option value="select">Move Dots</option>
+                      <option value="pen">Pen</option>
+                      <option value="bucket">Paint Bucket</option>
+                      <option value="eraser">Eraser</option>
+                    </select>
+                  </label>
+                  <label class="set-control-label">Pen color <input id="rigPenColor" type="color" value="#2f8f83"></label>
+                  <label class="set-control-label">Fill color <input id="rigFillColor" type="color" value="#ffd166"></label>
+                  <label class="set-control-label">Eraser size <input id="rigEraserSize" type="range" min="4" max="48" step="2" value="18"></label>
+                  <label class="set-control-label">Onion skin <input id="rigOnionSkin" type="checkbox" checked></label>
+                  <label class="set-control-label">Onion opacity <input id="rigOnionAlpha" type="range" min="0" max="80" step="5" value="30"></label>
+                </div>
+                <div class="rig-dot-list-wrap">
+                  <strong>Rig Points</strong>
+                  <div id="rigDotList" class="rig-dot-list"></div>
+                </div>
+                <div class="rig-dot-list-wrap">
+                  <strong>Animated Paths</strong>
+                  <div id="rigActionList" class="rig-action-list"></div>
+                </div>
+              </aside>
             </div>
           </aside>
         </section>
