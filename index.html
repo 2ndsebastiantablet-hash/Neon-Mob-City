@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta
     name="description"
-    content="Neon Mob City is a Phase 1 Meta Quest WebXR prototype: a retro neon cyberpunk VR hub, one robot factory base, simple enemies, and raycast shooting."
+    content="Neon Mob City is a Phase 1 Meta Quest WebXR prototype: a retro neon cyberpunk VR hub, one robot factory base, simple enemies, physical pickup gun, and neon bullet shooting."
   />
   <title>Neon Mob City</title>
 
@@ -18,7 +18,7 @@
   <div id="note">
     <strong id="noteTitle">Neon Mob City</strong>
     <span id="noteMessage">Open in Meta Quest Browser, press Enter VR, then enter the Robot Factory.</span>
-    <span id="hudHealth">Health: 100</span>
+    <span id="hudHealth">Health: ♥ ♥ ♥ ♥ ♥</span>
     <span id="hudObjective">Objective: Choose a mob base</span>
     <span id="hudEnemies">Enemies: Hub patrols</span>
     <span id="hudCityState">City State: Untouched</span>
@@ -26,6 +26,8 @@
 
   <a-scene
     id="scene"
+    game-state
+    bullet-system
     renderer="antialias: true; colorManagement: true"
     vr-mode-ui="enabled: true"
     background="color: #090018"
@@ -40,9 +42,9 @@
 
     <a-sky color="#090018"></a-sky>
 
-    <!-- Simple player rig from the base template, extended with tiny thumbstick/WASD locomotion in main.js. -->
-    <a-entity id="player-rig" position="0 0 6">
-      <a-camera id="player-camera" position="0 1.6 0" wasd-controls-enabled="false">
+    <!-- Simple player rig from the base template, now driven by A-Frame tick components for VR-safe updates. -->
+    <a-entity id="playerRig" position="0 0 6" player-movement snap-turn player-health>
+      <a-camera id="camera" position="0 1.6 0" wasd-controls-enabled="false">
         <a-cursor
           id="desktop-cursor"
           fuse="false"
@@ -57,20 +59,22 @@
       </a-camera>
 
       <a-entity
-        id="left-controller"
-        laser-controls="hand: left"
-        raycaster="objects: .clickable; far: 22"
-        line="color: #00F5FF; opacity: 0.75"
+        id="leftHand"
+        oculus-touch-controls="hand: left"
+        raycaster="objects: .clickable; far: 22; showLine: true; lineColor: #00F5FF; lineOpacity: 0.75"
       ></a-entity>
       <a-entity
-        id="right-controller"
-        laser-controls="hand: right"
-        raycaster="objects: .clickable; far: 22"
-        line="color: #FF2BD6; opacity: 0.9"
-      >
-        <a-box id="gun-body" position="0 -0.05 -0.18" width="0.12" height="0.12" depth="0.36" color="#FF2BD6"></a-box>
-        <a-box position="0 -0.01 -0.4" width="0.07" height="0.07" depth="0.2" color="#00F5FF"></a-box>
-      </a-entity>
+        id="rightHand"
+        oculus-touch-controls="hand: right"
+        raycaster="objects: .clickable; far: 22; showLine: true; lineColor: #FF2BD6; lineOpacity: 0.9"
+      ></a-entity>
+    </a-entity>
+
+    <a-entity id="gun" grabbable-gun gun-shooter position="0 1.15 4.25" rotation="0 0 0">
+      <a-box position="0 0 -0.18" width="0.16" height="0.16" depth="0.42" color="#FF2BD6" material="color: #FF2BD6; emissive: #FF2BD6; emissiveIntensity: 0.8"></a-box>
+      <a-box position="0 -0.08 -0.04" width="0.13" height="0.24" depth="0.12" color="#28374B"></a-box>
+      <a-box position="0 0 -0.48" width="0.08" height="0.08" depth="0.24" color="#00F5FF" material="color: #00F5FF; emissive: #00F5FF; emissiveIntensity: 0.9"></a-box>
+      <a-sphere id="gunMuzzle" position="0 0 -0.64" radius="0.035" color="#FFF07A" material="color: #FFF07A; emissive: #FFF07A; emissiveIntensity: 0.9"></a-sphere>
     </a-entity>
 
     <a-entity id="world-root"></a-entity>

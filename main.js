@@ -1,6 +1,6 @@
 // Neon Mob City Phase 1
 // Static A-Frame/WebXR prototype: city hub, one robot factory base, simple AI,
-// raycast shooting, clear choices, and return-to-city flow.
+// physical pickup gun, visible bullets, clear choices, and return-to-city flow.
 
 const COLORS = {
   black: "#04030B",
@@ -24,7 +24,7 @@ const ENEMY_DEFS = {
     speed: 0.95,
     range: 8,
     cooldown: 1.9,
-    damage: 8,
+    damage: 1,
     color: COLORS.pink,
   },
   robot: {
@@ -33,7 +33,7 @@ const ENEMY_DEFS = {
     speed: 0.62,
     range: 9,
     cooldown: 2.35,
-    damage: 10,
+    damage: 1,
     color: COLORS.cyan,
   },
 };
@@ -41,7 +41,10 @@ const ENEMY_DEFS = {
 const state = {
   mode: "city",
   seed: Date.now() % 100000,
-  playerHealth: 100,
+  playerHealth: 5,
+  maxHealth: 5,
+  invulnerableUntil: 0,
+  dead: false,
   cityState: "Untouched",
   baseCleared: false,
   activeChoice: "",
@@ -49,12 +52,20 @@ const state = {
   patrols: [],
   targets: [],
   enemyShots: [],
+  bullets: [],
   portalZones: [],
   keyState: {},
-  moveAxis: { x: 0, y: 0 },
+  leftStick: { x: 0, y: 0 },
+  rightStick: { x: 0, y: 0 },
+  snapTurnReadyAt: 0,
+  gun: {
+    heldBy: null,
+    el: null,
+    muzzle: null,
+  },
   lastMessageAt: 0,
-  lastTime: 0,
   nextEnemyId: 1,
+  ready: false,
 };
 
 let refs = {};
@@ -68,10 +79,12 @@ function init() {
     scene: document.getElementById("scene"),
     world: document.getElementById("world-root"),
     effects: document.getElementById("effects-root"),
-    rig: document.getElementById("player-rig"),
-    camera: document.getElementById("player-camera"),
-    rightController: document.getElementById("right-controller"),
-    leftController: document.getElementById("left-controller"),
+    rig: document.getElementById("playerRig") || document.getElementById("player-rig"),
+    camera: document.getElementById("camera") || document.getElementById("player-camera"),
+    rightController: document.getElementById("rightHand") || document.getElementById("right-controller"),
+    leftController: document.getElementById("leftHand") || document.getElementById("left-controller"),
+    gun: document.getElementById("gun"),
+    gunMuzzle: document.getElementById("gunMuzzle"),
     noteTitle: document.getElementById("noteTitle"),
     noteMessage: document.getElementById("noteMessage"),
     hudHealth: document.getElementById("hudHealth"),
@@ -87,46 +100,124 @@ function init() {
 
   raycaster = new THREE.Raycaster();
   registerComponents();
+  ensureComponentWiring();
   createPixelTextures();
   bindInput();
+  state.gun.el = refs.gun;
+  state.gun.muzzle = refs.gunMuzzle;
   buildCityHub();
+  state.ready = true;
 
   refs.scene.addEventListener("enter-vr", () => {
-    setMessage("VR session active", "Use a thumbstick to move. Trigger fires the ray gun.");
+    setMessage("VR session active", "Left stick moves. Right stick snap turns. Grip the gun, then trigger fires.");
   });
 
   refs.scene.addEventListener("exit-vr", () => {
     setMessage("Neon Mob City", "Open in Meta Quest Browser, press Enter VR, then enter the Robot Factory.");
   });
+}
 
-  requestAnimationFrame(gameLoop);
+function ensureComponentWiring() {
+  refs.scene.setAttribute("game-state", "");
+  refs.scene.setAttribute("bullet-system", "");
+  refs.rig.setAttribute("player-movement", "");
+  refs.rig.setAttribute("snap-turn", "");
+  refs.rig.setAttribute("player-health", "");
+
+  if (refs.gun) {
+    refs.gun.setAttribute("grabbable-gun", "");
+    refs.gun.setAttribute("gun-shooter", "");
+  }
 }
 
 function registerComponents() {
-  if (AFRAME.components.billboard) {
-    return;
+  if (!AFRAME.components.billboard) {
+    AFRAME.registerComponent("billboard", {
+      tick() {
+        if (!refs.camera) {
+          return;
+        }
+
+        const cameraWorld = new THREE.Vector3();
+        refs.camera.object3D.getWorldPosition(cameraWorld);
+        const target = cameraWorld.clone();
+        target.y = this.el.object3D.getWorldPosition(new THREE.Vector3()).y;
+        this.el.object3D.lookAt(target);
+      },
+    });
   }
 
-  AFRAME.registerComponent("billboard", {
-    tick() {
-      if (!refs.camera) {
-        return;
-      }
+  if (!AFRAME.components["game-state"]) {
+    AFRAME.registerComponent("game-state", {
+      tick(time, delta) {
+        if (!state.ready) {
+          return;
+        }
 
-      const cameraWorld = new THREE.Vector3();
-      refs.camera.object3D.getWorldPosition(cameraWorld);
-      const target = cameraWorld.clone();
-      target.y = this.el.object3D.getWorldPosition(new THREE.Vector3()).y;
-      this.el.object3D.lookAt(target);
-    },
-  });
+        const dt = Math.min((delta || 0) / 1000, 0.05);
+        updatePatrols(dt, time);
+        updateEnemies(dt, time);
+        updateEnemyShots(dt);
+        updatePortalZones(time);
+        updateGunDrop();
+        updateHud();
+      },
+    });
+  }
+
+  if (!AFRAME.components["player-movement"]) {
+    AFRAME.registerComponent("player-movement", {
+      tick(time, delta) {
+        if (!state.ready || state.dead) {
+          return;
+        }
+
+        updatePlayerMove(Math.min((delta || 0) / 1000, 0.05));
+      },
+    });
+  }
+
+  if (!AFRAME.components["snap-turn"]) {
+    AFRAME.registerComponent("snap-turn", {});
+  }
+
+  if (!AFRAME.components["grabbable-gun"]) {
+    AFRAME.registerComponent("grabbable-gun", {});
+  }
+
+  if (!AFRAME.components["gun-shooter"]) {
+    AFRAME.registerComponent("gun-shooter", {});
+  }
+
+  if (!AFRAME.components["bullet-system"]) {
+    AFRAME.registerComponent("bullet-system", {
+      tick(time, delta) {
+        if (!state.ready || state.dead) {
+          return;
+        }
+
+        updateBullets(Math.min((delta || 0) / 1000, 0.05));
+      },
+    });
+  }
+
+  if (!AFRAME.components["enemy-health"]) {
+    AFRAME.registerComponent("enemy-health", {});
+  }
+
+  if (!AFRAME.components["player-health"]) {
+    AFRAME.registerComponent("player-health", {});
+  }
 }
 
 function bindInput() {
   window.addEventListener("keydown", (event) => {
     state.keyState[event.code] = true;
     if (event.code === "Space") {
-      fireWeapon(refs.camera);
+      fireDesktopBullet();
+    }
+    if (event.code === "KeyR" && state.dead) {
+      restartGame();
     }
   });
 
@@ -136,37 +227,63 @@ function bindInput() {
 
   window.addEventListener("pointerdown", (event) => {
     if (event.target && event.target.tagName === "CANVAS") {
-      fireWeapon(refs.camera, event);
+      fireInteractionRay(refs.camera, event);
     }
   });
 
-  [refs.leftController, refs.rightController].forEach((controller) => {
-    if (!controller) {
-      return;
-    }
+  if (refs.leftController) {
+    refs.leftController.addEventListener("thumbstickmoved", (event) => updateStick("left", event));
+    refs.leftController.addEventListener("axismove", (event) => updateStick("left", event));
+    refs.leftController.addEventListener("triggerdown", () => shootHeldGun(refs.leftController));
+    refs.leftController.addEventListener("gripdown", () => tryGrabGun(refs.leftController));
+    refs.leftController.addEventListener("gripup", () => releaseGun(refs.leftController));
+  }
 
-    controller.addEventListener("triggerdown", () => fireWeapon(controller));
-    controller.addEventListener("gripdown", () => fireWeapon(controller));
-    controller.addEventListener("axismove", (event) => {
-      const axis = event.detail.axis || [0, 0];
-      state.moveAxis.x = Math.abs(axis[0]) > 0.12 ? axis[0] : 0;
-      state.moveAxis.y = Math.abs(axis[1]) > 0.12 ? axis[1] : 0;
-    });
-  });
+  if (refs.rightController) {
+    refs.rightController.addEventListener("thumbstickmoved", (event) => updateStick("right", event));
+    refs.rightController.addEventListener("axismove", (event) => updateStick("right", event));
+    refs.rightController.addEventListener("triggerdown", () => shootHeldGun(refs.rightController));
+    refs.rightController.addEventListener("gripdown", () => tryGrabGun(refs.rightController));
+    refs.rightController.addEventListener("gripup", () => releaseGun(refs.rightController));
+  }
 }
 
-function gameLoop(time) {
-  const dt = Math.min((time - state.lastTime) / 1000 || 0, 0.05);
-  state.lastTime = time;
+function updateStick(hand, event) {
+  const stick = getStickVector(event);
+  if (hand === "left") {
+    state.leftStick.x = Math.abs(stick.x) > 0.15 ? stick.x : 0;
+    state.leftStick.y = Math.abs(stick.y) > 0.15 ? stick.y : 0;
+    return;
+  }
 
-  updatePlayerMove(dt);
-  updatePatrols(dt, time);
-  updateEnemies(dt, time);
-  updateEnemyShots(dt);
-  updatePortalZones(time);
-  updateHud();
+  state.rightStick.x = Math.abs(stick.x) > 0.15 ? stick.x : 0;
+  state.rightStick.y = Math.abs(stick.y) > 0.15 ? stick.y : 0;
+  attemptSnapTurn(performance.now());
+}
 
-  requestAnimationFrame(gameLoop);
+function getStickVector(event) {
+  if (typeof event.detail.x === "number" || typeof event.detail.y === "number") {
+    return {
+      x: event.detail.x || 0,
+      y: event.detail.y || 0,
+    };
+  }
+
+  const axis = event.detail.axis || [0, 0];
+  return {
+    x: axis[0] || 0,
+    y: axis[1] || 0,
+  };
+}
+
+function attemptSnapTurn(time) {
+  if (!refs.rig || time < state.snapTurnReadyAt || Math.abs(state.rightStick.x) <= 0.75) {
+    return;
+  }
+
+  const direction = state.rightStick.x > 0 ? -1 : 1;
+  refs.rig.object3D.rotation.y += THREE.MathUtils.degToRad(30 * direction);
+  state.snapTurnReadyAt = time + 250;
 }
 
 function updatePlayerMove(dt) {
@@ -174,8 +291,8 @@ function updatePlayerMove(dt) {
     return;
   }
 
-  let x = state.moveAxis.x;
-  let y = state.moveAxis.y;
+  let x = state.leftStick.x;
+  let y = state.leftStick.y;
 
   if (state.keyState.KeyA) x -= 1;
   if (state.keyState.KeyD) x += 1;
@@ -198,7 +315,7 @@ function updatePlayerMove(dt) {
 
   if (move.lengthSq() > 0) {
     move.normalize();
-    refs.rig.object3D.position.addScaledVector(move, 3.2 * dt);
+    refs.rig.object3D.position.addScaledVector(move, 3.0 * dt);
   }
 }
 
@@ -211,7 +328,7 @@ function updatePatrols(dt, time) {
 }
 
 function updateEnemies(dt, time) {
-  if (state.mode !== "base" || state.baseCleared) {
+  if (state.mode !== "base" || state.baseCleared || state.dead) {
     return;
   }
 
@@ -246,6 +363,10 @@ function updateEnemies(dt, time) {
 }
 
 function updateEnemyShots(dt) {
+  if (state.dead) {
+    return;
+  }
+
   const cameraPos = new THREE.Vector3();
   refs.camera.object3D.getWorldPosition(cameraPos);
 
@@ -303,13 +424,31 @@ function updatePortalZones(time) {
 }
 
 function damagePlayer(amount) {
+  const now = performance.now();
+  if (state.dead || now < state.invulnerableUntil) {
+    return;
+  }
+
+  state.invulnerableUntil = now + 1000;
   state.playerHealth = Math.max(0, state.playerHealth - amount);
-  flashScreenMessage(`Hit for ${amount}. Health ${state.playerHealth}.`);
+  flashScreenMessage(`Hit. ${heartsLabel()}`);
 
   if (state.playerHealth <= 0) {
-    state.playerHealth = 100;
-    setMessage("Emergency reboot", "Health restored for Phase 1 testing.");
+    state.dead = true;
+    setMessage("You Died", "Press R to restart the run.");
   }
+}
+
+function restartGame() {
+  state.playerHealth = state.maxHealth;
+  state.invulnerableUntil = 0;
+  state.dead = false;
+  state.cityState = "Untouched";
+  state.activeChoice = "";
+  state.baseCleared = false;
+  clearBullets();
+  buildCityHub();
+  setMessage("Neon Mob City", "Run restarted. Grip the gun, then choose the Robot Factory.");
 }
 
 // City hub generation: blocky roads, randomized building heights/windows,
@@ -319,6 +458,7 @@ function buildCityHub() {
   state.enemies = [];
   state.patrols = [];
   state.enemyShots = [];
+  state.bullets = [];
   state.portalZones = [];
   state.targets = [];
   clearEntity(refs.world);
@@ -326,6 +466,7 @@ function buildCityHub() {
   rand = seededRandom(state.seed);
 
   refs.rig.object3D.position.set(0, 0, 6);
+  placeGunInFrontOfPlayer(1.75);
   refs.scene.setAttribute("background", "color: #090018");
   refs.scene.setAttribute("fog", "type: exponential; color: #150020; density: 0.035");
 
@@ -561,6 +702,7 @@ function enterRobotFactory() {
   state.enemies = [];
   state.patrols = [];
   state.enemyShots = [];
+  state.bullets = [];
   state.portalZones = [];
   state.targets = [];
   clearEntity(refs.world);
@@ -568,6 +710,7 @@ function enterRobotFactory() {
 
   const accent = rand() > 0.5 ? COLORS.cyan : "#5A7DFF";
   refs.rig.object3D.position.set(0, 0, 3.25);
+  placeGunInFrontOfPlayer(1.25);
   refs.scene.setAttribute("background", "color: #05060F");
   refs.scene.setAttribute("fog", "type: exponential; color: #05060F; density: 0.018");
 
@@ -706,7 +849,7 @@ function createReturnPortal(active) {
 function createEnemy(type, x, z, options) {
   const def = ENEMY_DEFS[type];
   const id = state.nextEnemyId++;
-  const group = makeEntity("a-entity", { position: `${x} 0 ${z}` });
+  const group = makeEntity("a-entity", { position: `${x} 0 ${z}`, "enemy-health": "" });
   const enemy = {
     id,
     type,
@@ -785,9 +928,183 @@ function spawnEnemyShot(enemy, playerPos) {
   });
 }
 
-// Shooting system: a tiny raycast weapon using controller trigger, desktop
-// click, or Space. It hits enemies, portals, and clear-choice buttons.
-function fireWeapon(sourceEl, event) {
+function tryGrabGun(hand) {
+  if (state.dead || !state.gun.el || state.gun.heldBy) {
+    return;
+  }
+
+  const handPosition = new THREE.Vector3();
+  const gunPosition = new THREE.Vector3();
+  hand.object3D.getWorldPosition(handPosition);
+  state.gun.el.object3D.getWorldPosition(gunPosition);
+
+  if (handPosition.distanceTo(gunPosition) > 0.75) {
+    setMessage("Gun out of reach", "Move a hand closer, then press side grip.");
+    return;
+  }
+
+  state.gun.heldBy = hand;
+  hand.appendChild(state.gun.el);
+  state.gun.el.setAttribute("position", "0 -0.04 -0.34");
+  state.gun.el.setAttribute("rotation", "0 0 0");
+  setMessage("Gun grabbed", "Trigger fires neon bullets. Release grip to drop it.");
+}
+
+function releaseGun(hand) {
+  if (!state.gun.el || state.gun.heldBy !== hand) {
+    return;
+  }
+
+  const worldPosition = new THREE.Vector3();
+  const worldQuaternion = new THREE.Quaternion();
+  state.gun.el.object3D.getWorldPosition(worldPosition);
+  state.gun.el.object3D.getWorldQuaternion(worldQuaternion);
+
+  refs.scene.appendChild(state.gun.el);
+  worldPosition.y = Math.max(worldPosition.y, 0.65);
+  state.gun.el.setAttribute("position", vecToAttr(worldPosition));
+  state.gun.el.setAttribute("rotation", quatToRotationAttr(worldQuaternion));
+  state.gun.heldBy = null;
+  setMessage("Gun dropped", "Grip near the gun with either hand to pick it up again.");
+}
+
+function placeGunInFrontOfPlayer(distance) {
+  if (!state.gun.el || state.gun.heldBy || !refs.rig || !refs.camera) {
+    return;
+  }
+
+  refs.scene.appendChild(state.gun.el);
+
+  const rigPosition = refs.rig.object3D.position;
+  const forward = new THREE.Vector3();
+  refs.camera.object3D.getWorldDirection(forward);
+  forward.y = 0;
+  if (forward.lengthSq() === 0) {
+    forward.set(0, 0, -1);
+  }
+  forward.normalize();
+
+  const position = new THREE.Vector3(rigPosition.x, 1.15, rigPosition.z).addScaledVector(forward, distance);
+  const yaw = THREE.MathUtils.radToDeg(Math.atan2(-forward.x, -forward.z));
+  state.gun.el.setAttribute("position", vecToAttr(position));
+  state.gun.el.setAttribute("rotation", `0 ${yaw.toFixed(2)} 0`);
+}
+
+function updateGunDrop() {
+  if (!state.gun.el || state.gun.heldBy) {
+    return;
+  }
+
+  const pos = state.gun.el.object3D.position;
+  if (pos.y < 0.65) {
+    pos.y = 0.65;
+  }
+}
+
+function shootHeldGun(hand) {
+  if (state.dead || !state.gun.el || state.gun.heldBy !== hand) {
+    return;
+  }
+
+  spawnBullet();
+}
+
+function fireDesktopBullet() {
+  if (state.dead || !state.gun.heldBy) {
+    return;
+  }
+
+  spawnBullet();
+}
+
+function spawnBullet() {
+  const source = state.gun.muzzle || state.gun.el;
+  const origin = new THREE.Vector3();
+  const direction = new THREE.Vector3(0, 0, -1);
+  const quaternion = new THREE.Quaternion();
+
+  source.object3D.getWorldPosition(origin);
+  source.object3D.getWorldQuaternion(quaternion);
+  direction.applyQuaternion(quaternion).normalize();
+
+  const bullet = makeEntity("a-sphere", {
+    position: vecToAttr(origin),
+    radius: "0.055",
+    color: COLORS.yellow,
+    material: neonMaterial(COLORS.yellow),
+  }, refs.effects);
+
+  state.bullets.push({
+    el: bullet,
+    position: origin,
+    velocity: direction.multiplyScalar(13),
+    age: 0,
+  });
+}
+
+function updateBullets(dt) {
+  state.bullets = state.bullets.filter((bullet) => {
+    if (!bullet.el.isConnected) {
+      return false;
+    }
+
+    bullet.age += dt;
+    bullet.position.addScaledVector(bullet.velocity, dt);
+    bullet.el.object3D.position.copy(bullet.position);
+
+    const hitEnemy = state.enemies.find((enemy) => {
+      if (!enemy.el.isConnected || enemy.health <= 0) {
+        return false;
+      }
+
+      const enemyPosition = enemy.el.object3D.position.clone();
+      enemyPosition.y = 0.9;
+      return enemyPosition.distanceTo(bullet.position) < 0.9;
+    });
+
+    if (hitEnemy) {
+      damageEnemy(hitEnemy.id, bullet.position);
+      safeRemove(bullet.el);
+      return false;
+    }
+
+    const hitTarget = findBulletTarget(bullet.position);
+    if (hitTarget) {
+      handleTarget(hitTarget.data, bullet.position);
+      spawnHitEffect(bullet.position, COLORS.yellow);
+      safeRemove(bullet.el);
+      return false;
+    }
+
+    if (bullet.age > 2) {
+      safeRemove(bullet.el);
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function clearBullets() {
+  state.bullets.forEach((bullet) => safeRemove(bullet.el));
+  state.bullets = [];
+}
+
+function findBulletTarget(position) {
+  return state.targets.find((target) => {
+    if (!target.el.isConnected || target.data.type === "enemy") {
+      return false;
+    }
+
+    const bounds = new THREE.Box3().setFromObject(target.el.object3D);
+    bounds.expandByScalar(target.data.type === "choice" ? 0.22 : 0.35);
+    return bounds.containsPoint(position);
+  });
+}
+
+// Interaction ray for desktop cursor clicks. Combat damage now comes from
+// visible bullets fired by a held gun.
+function fireInteractionRay(sourceEl, event) {
   if (!sourceEl || !raycaster) {
     return;
   }
@@ -839,7 +1156,7 @@ function fireWeapon(sourceEl, event) {
 
 function handleTarget(target, point) {
   if (target.type === "enemy") {
-    damageEnemy(target.enemyId, point);
+    return;
   } else if (target.type === "portal") {
     if (target.portalId === "robot") {
       enterRobotFactory();
@@ -978,7 +1295,7 @@ function updateHud() {
       : "Objective: Clear the Robot Factory"
     : "Objective: Choose a mob base";
 
-  refs.hudHealth.textContent = `Health: ${state.playerHealth}`;
+  refs.hudHealth.textContent = heartsLabel();
   refs.hudObjective.textContent = objective;
   refs.hudEnemies.textContent = enemyLabel;
   refs.hudCityState.textContent = `City State: ${state.cityState}`;
@@ -986,7 +1303,7 @@ function updateHud() {
   if (refs.vrHudText) {
     refs.vrHudText.setAttribute(
       "value",
-      `NEON MOB CITY\nHealth ${state.playerHealth}\n${enemyLabel}\n${state.cityState}`
+      `NEON MOB CITY\n${heartsLabel()}\n${enemyLabel}\n${state.dead ? "YOU DIED" : state.cityState}`
     );
   }
 
@@ -998,6 +1315,12 @@ function updateHud() {
 function setMessage(title, message) {
   refs.noteTitle.textContent = title;
   refs.noteMessage.textContent = message;
+}
+
+function heartsLabel() {
+  const full = "♥ ".repeat(state.playerHealth).trim();
+  const empty = "♡ ".repeat(Math.max(0, state.maxHealth - state.playerHealth)).trim();
+  return `Health: ${[full, empty].filter(Boolean).join(" ")}`;
 }
 
 function flashScreenMessage(message) {
@@ -1281,4 +1604,13 @@ function shuffle(items, random) {
 
 function vecToAttr(vec) {
   return `${vec.x.toFixed(3)} ${vec.y.toFixed(3)} ${vec.z.toFixed(3)}`;
+}
+
+function quatToRotationAttr(quaternion) {
+  const euler = new THREE.Euler().setFromQuaternion(quaternion, "YXZ");
+  return [
+    THREE.MathUtils.radToDeg(euler.x).toFixed(2),
+    THREE.MathUtils.radToDeg(euler.y).toFixed(2),
+    THREE.MathUtils.radToDeg(euler.z).toFixed(2),
+  ].join(" ");
 }

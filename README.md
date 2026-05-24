@@ -20,7 +20,11 @@ The project keeps the basic static A-Frame/WebXR setup from the previous
 - One playable Robot Factory interior
 - Simple room/hallway layout with cover blocks
 - Mob Soldier and Robot Guard enemy placeholders
-- Basic raycast shooting from the right VR controller, desktop click, or Space
+- Physical pickup gun that can be grabbed with either Quest side grip
+- Visible neon bullets fired from the held gun
+- Left-stick smooth locomotion
+- Right-stick 30 degree snap turning
+- Five-heart player health with a simple death/restart state
 - Base clear condition
 - Choice panel after clearing the Robot Factory
 - Return portal back to the city
@@ -29,9 +33,15 @@ The project keeps the basic static A-Frame/WebXR setup from the previous
 ## Controls
 
 - Meta Quest Browser: press the A-Frame `Enter VR` button.
-- Move: left thumbstick, right thumbstick, or desktop `W A S D`.
-- Shoot/interact: controller trigger, desktop click, or Space.
-- Enter/return portals: walk into the glowing doorway/portal or shoot/click it.
+- Move: left thumbstick or desktop `W A S D`.
+- Snap turn: right thumbstick left/right.
+- Pick up gun: press side grip near the gun with either hand.
+- Drop gun: release side grip.
+- Shoot: hold the gun, then press that hand's trigger.
+- Enter/return portals: walk into the glowing doorway/portal, or desktop-click it while testing.
+- Restart after death: press `R` on desktop, or reload the page in Quest Browser.
+
+The gun starts in front of the player. It is not attached to a hand until grabbed.
 
 ## Hosting
 
