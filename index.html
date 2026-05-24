@@ -1,650 +1,205 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta
     name="description"
-    content="Worms is a playful 2D movie-making sandbox where you place characters, texture props, animate scenes, record takes, and replay them in a built-in library."
-  >
-  <title>Worms</title>
-  <link rel="stylesheet" href="styles.css">
+    content="Worms VR Stage is a simple static A-Frame/WebXR scene for Meta Quest Browser."
+  />
+  <title>Worms VR Stage</title>
+
+  <!-- A-Frame includes WebXR support and automatically shows the Enter VR button. -->
+  <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+  <script type="module" src="./main.js"></script>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="app-shell">
-    <section id="menuScreen" class="screen menu-screen" aria-label="Main menu">
-      <div class="menu-card">
-        <p class="menu-kicker">2D Movie-Making Sandbox</p>
-        <h1>Worms</h1>
-        <p class="menu-copy">
-          Build tiny scenes, move your cast around with drag controls or <strong>W A S D</strong>,
-          record the action, and replay every take in your in-game library.
-        </p>
-        <div class="menu-actions">
-          <button id="playButton" type="button" class="primary-button">Play</button>
-          <button id="libraryButton" type="button" class="secondary-button">Library</button>
-          <button id="friendsButton" type="button" class="ghost-button">Friends</button>
-        </div>
-      </div>
-    </section>
+  <div id="note">
+    <strong id="noteTitle">Worms VR Stage</strong>
+    <span id="noteMessage">Open this page in Meta Quest Browser and press Enter VR.</span>
+    <span id="scoreText">Story sparks: 0 / 5</span>
+    <button id="resetButton" type="button">Reset sparks</button>
+  </div>
 
-    <section id="projectSelectScreen" class="screen menu-screen hidden" aria-label="Project select">
-      <div class="menu-card menu-card-wide">
-        <p class="menu-kicker">Select Project</p>
-        <h2>Your Projects</h2>
-        <p class="menu-copy">Each project keeps its own scenes, stage state, scripts, comments, and collaborators.</p>
-        <div class="menu-actions project-select-actions">
-          <button id="createProjectButton" type="button" class="primary-button">+ New Project</button>
-          <button id="projectSelectMenuButton" type="button" class="ghost-button">Back To Menu</button>
-        </div>
-        <div id="projectList" class="project-list"></div>
-      </div>
-    </section>
+  <a-scene
+    renderer="antialias: true; colorManagement: true"
+    vr-mode-ui="enabled: true"
+    background="color: #CFE8FF"
+  >
+    <a-entity light="type: ambient; intensity: 0.7"></a-entity>
+    <a-entity light="type: directional; intensity: 0.9" position="3 6 2"></a-entity>
 
-    <section id="friendsScreen" class="screen menu-screen hidden" aria-label="Friends">
-      <div class="menu-card menu-card-wide friends-card">
-        <div class="friends-header">
-          <div>
-            <p class="menu-kicker">Friends</p>
-            <h2>Profile & Friend Codes</h2>
-          </div>
-          <button id="friendsBackButton" type="button" class="ghost-button">Back To Menu</button>
-        </div>
-        <div class="friends-layout">
-          <section class="friends-panel">
-            <h3>Your Profile</h3>
-            <div class="profile-row">
-              <button id="profileAvatarButton" type="button" class="profile-avatar">W</button>
-              <div class="profile-copy">
-                <button id="profileNameButton" type="button" class="profile-name-button">Worm Director</button>
-                <p id="profileFriendCode" class="profile-friend-code">Friend code: WRM-000000</p>
-              </div>
-            </div>
-            <input id="profileColorInput" class="hidden" type="color" value="#2f8f83">
-            <label class="set-control-label">Add friend by code <input id="friendCodeInput" type="text" placeholder="WRM-123456"></label>
-            <button id="sendFriendRequestButton" type="button" class="primary-button full-width">Send Friend Request</button>
-          </section>
+    <a-sky color="#CFE8FF"></a-sky>
 
-          <section class="friends-panel">
-            <h3>Friend Requests</h3>
-            <div id="friendRequestsList" class="friends-list"></div>
-          </section>
+    <!-- Simple player rig with a camera at normal standing height. -->
+    <a-entity id="player-rig" position="0 0 4">
+      <a-camera id="player-camera" position="0 1.6 0" wasd-controls-enabled="false">
+        <a-cursor
+          id="desktop-cursor"
+          fuse="true"
+          fuse-timeout="900"
+          raycaster="objects: .clickable"
+          material="color: #111111; shader: flat"
+        ></a-cursor>
+      </a-camera>
+      <a-entity
+        id="left-controller"
+        laser-controls="hand: left"
+        raycaster="objects: .clickable; far: 12"
+        line="color: #5AF2FF; opacity: 0.75"
+      ></a-entity>
+      <a-entity
+        id="right-controller"
+        laser-controls="hand: right"
+        raycaster="objects: .clickable; far: 12"
+        line="color: #5AF2FF; opacity: 0.75"
+      ></a-entity>
+    </a-entity>
 
-          <section class="friends-panel">
-            <h3>Friends</h3>
-            <div id="friendsList" class="friends-list"></div>
-          </section>
-        </div>
-      </div>
-    </section>
+    <a-plane
+      position="0 0 0"
+      rotation="-90 0 0"
+      width="24"
+      height="24"
+      color="#4FAD5B"
+    ></a-plane>
 
-    <section id="studioScreen" class="screen studio-screen hidden" aria-label="Movie studio">
-      <header class="topbar studio-topbar">
-        <div class="studio-topbar-left">
-          <button id="leaveProjectButton" type="button" class="ghost-button">Leave</button>
-          <button id="globalUndoButton" type="button" class="ghost-button">Undo</button>
-          <button id="projectAddFriendButton" type="button" class="ghost-button">Add Friend</button>
-        </div>
-        <div class="studio-project-heading">
-          <p class="topbar-label">Director Mode</p>
-          <h2 id="projectTitle">Worms Studio</h2>
-          <p id="projectRoleLabel" class="studio-role-label">Owner</p>
-        </div>
-        <div class="topbar-actions">
-          <div id="projectPresenceRow" class="project-presence-row"></div>
-          <button id="projectMembersButton" type="button" class="ghost-button">Friends List</button>
-          <span id="recordingBadge" class="recording-badge">Idle</span>
-          <button id="clearStageButton" type="button" class="ghost-button">Clear Stage</button>
-          <button id="studioLibraryButton" type="button" class="ghost-button">Library</button>
-        </div>
-      </header>
+    <a-plane
+      position="0 1.8 -6.2"
+      width="9"
+      height="3.6"
+      color="#FFF6E5"
+    ></a-plane>
 
-      <div class="studio-layout">
-        <section class="stage-panel" aria-label="Stage">
-          <div class="stage-frame">
-            <canvas id="stageCanvas" aria-label="Movie stage"></canvas>
-            <div id="projectCommentPopup" class="project-comment-popup hidden"></div>
-          </div>
-          <div class="stage-footer">
-            <p id="selectionLabel" class="stage-status">No selection.</p>
-            <p id="toolLabel" class="stage-status subtle">Choose a tool on the right, then click on the stage.</p>
-          </div>
-          <div id="actorContextMenu" class="actor-context-menu hidden">
-            <button id="actorContextCodeButton" type="button">Code</button>
-            <button id="actorContextPenButton" type="button">Pen Animation</button>
-            <button id="actorContextRigButton" type="button">Rig / Animate</button>
-            <button id="actorContextEditCharacterButton" type="button">Edit Character</button>
-            <button id="actorContextPhysicsToggleButton" type="button">Physics On</button>
-            <button id="actorContextPhysicsButton" type="button">Advanced Physics</button>
-            <button id="actorContextGroupButton" type="button">Group</button>
-            <button id="actorContextUngroupButton" type="button">Ungroup</button>
-            <label class="set-control-label">Object color <input id="actorContextColor" type="color" value="#f4a261"></label>
-          </div>
-          <div id="drawingContextMenu" class="actor-context-menu hidden">
-            <button id="drawingContextDeleteButton" type="button">Delete Drawing</button>
-          </div>
-          <div id="commentContextMenu" class="actor-context-menu hidden">
-            <button id="addCommentButton" type="button">Add Comment</button>
-          </div>
-          <aside id="objectPhysicsPanel" class="object-physics-panel hidden" aria-label="Object physics editor">
-            <div class="texture-editor-header">
-              <strong id="objectPhysicsTitle">Object Physics</strong>
-              <button id="closeObjectPhysicsButton" type="button" class="ghost-button">Close</button>
-            </div>
-            <div class="object-physics-grid">
-              <label class="set-control-label">Physics enabled <input id="objectPhysicsEnabled" type="checkbox" checked></label>
-              <label class="set-control-label">Gravity affected <input id="objectPhysicsGravity" type="checkbox" checked></label>
-              <label class="set-control-label">Body mode
-                <select id="objectPhysicsBodyType">
-                  <option value="dynamic">Dynamic</option>
-                  <option value="kinematic">Kinematic</option>
-                  <option value="static">Static</option>
-                </select>
-              </label>
-              <label class="set-control-label">Mass <input id="objectPhysicsMass" type="number" min="0.1" max="100" step="0.1" value="1"></label>
-              <label class="set-control-label">Density <input id="objectPhysicsDensity" type="number" min="0.1" max="10" step="0.1" value="1"></label>
-              <label class="set-control-label">Friction <input id="objectPhysicsFriction" type="number" min="0" max="1" step="0.05" value="0.55"></label>
-              <label class="set-control-label">Bounce <input id="objectPhysicsBounce" type="number" min="0" max="1" step="0.05" value="0.18"></label>
-              <label class="set-control-label">Linear drag <input id="objectPhysicsLinearDrag" type="number" min="0" max="6" step="0.05" value="0.08"></label>
-              <label class="set-control-label">Angular drag <input id="objectPhysicsAngularDrag" type="number" min="0" max="12" step="0.1" value="0.6"></label>
-              <label class="set-control-label">Rotation locked <input id="objectPhysicsLockRotation" type="checkbox"></label>
-              <label class="set-control-label">Lock X movement <input id="objectPhysicsLockX" type="checkbox"></label>
-              <label class="set-control-label">Lock Y movement <input id="objectPhysicsLockY" type="checkbox"></label>
-              <label class="set-control-label">Collision enabled <input id="objectPhysicsCollision" type="checkbox" checked></label>
-              <label class="set-control-label" title="Sensor bodies detect overlap but do not push or block.">Trigger / sensor mode <input id="objectPhysicsTrigger" type="checkbox"></label>
-              <label class="set-control-label">Collision layer
-                <select id="objectPhysicsLayer"></select>
-              </label>
-              <label class="set-control-label">Manual grab <input id="objectPhysicsCanGrab" type="checkbox" checked></label>
-              <label class="set-control-label">Start asleep <input id="objectPhysicsStartAsleep" type="checkbox"></label>
-              <label class="set-control-label">Gravity scale <input id="objectPhysicsGravityScale" type="number" min="0" max="4" step="0.1" value="1"></label>
-            </div>
-            <div class="set-control-card compact-card">
-              <strong>Allowed Collision Mask</strong>
-              <div id="objectPhysicsMask" class="physics-mask-list"></div>
-            </div>
-            <p id="objectPhysicsSummary" class="stage-status subtle">Actor collision shapes update automatically when stage actors are resized.</p>
-          </aside>
-          <div id="penAnimationPanel" class="pen-animation-panel hidden">
-            <div class="texture-editor-header">
-              <strong id="penAnimationTitle">Pen Animation</strong>
-              <button id="closePenAnimationButton" type="button" class="ghost-button">Close</button>
-            </div>
-            <div class="pen-animation-actions">
-              <button id="penLineToolButton" type="button" class="secondary-button">Straight Line</button>
-              <button id="penFreehandToolButton" type="button" class="secondary-button">Freehand Pen</button>
-              <button id="previewPenAnimationButton" type="button" class="ghost-button">Preview</button>
-              <button id="deletePenAnimationButton" type="button" class="ghost-button">Delete</button>
-            </div>
-            <label class="set-control-label">Duration seconds <input id="penAnimationDuration" type="number" min="0.1" max="60" step="0.1" value="2"></label>
-            <p id="penAnimationHelp">Pick a tool, then draw a motion path starting from the actor.</p>
-          </div>
-          <aside id="rigPanel" class="rig-panel hidden" aria-label="Rig and animation editor">
-            <div class="scripts-module-backdrop"></div>
-            <div class="rig-editor-shell">
-              <aside class="rig-character-panel">
-                <p class="topbar-label">Character Select</p>
-                <div id="rigCharacterList" class="rig-character-list"></div>
-              </aside>
-              <section class="rig-editor-main">
-                <header class="rig-editor-header">
-                  <div>
-                    <p class="topbar-label">Animation Workshop</p>
-                    <h3 id="rigPanelTitle">Rig / Animate</h3>
-                    <p id="rigHelpText" class="scripts-copy">Choose a character, place rig points, draw point motion paths, then edit frames.</p>
-                  </div>
-                  <button id="closeRigPanelButton" type="button" class="ghost-button">Back To Studio</button>
-                </header>
-                <div class="rig-top-tabs">
-                  <button id="rigModeButton" type="button" class="secondary-button">Rig</button>
-                  <button id="animateModeButton" type="button" class="ghost-button">Animate</button>
-                  <button id="rigEditModeButton" type="button" class="ghost-button">Edit</button>
-                </div>
-                <div class="rig-workspace-frame">
-                  <canvas id="rigCanvas" aria-label="Rig animation workspace"></canvas>
-                </div>
-              </section>
-              <aside class="rig-inspector-panel">
-                <div class="rig-controls-grid">
-                  <label class="set-control-label">FPS <input id="rigGlobalFps" type="number" min="1" max="60" step="1" value="12"></label>
-                  <label class="set-control-label">Duration <input id="rigActionDuration" type="number" min="0.1" max="20" step="0.1" value="1"></label>
-                  <label class="set-control-label">Playback order # <input id="rigSequenceNumber" type="number" min="1" max="99" step="1" value="1"></label>
-                  <label class="set-control-label">Dot FPS <input id="rigDotFps" type="number" min="0" max="60" step="1" value="0"></label>
-                </div>
-                <div class="rig-actions-row">
-                  <button id="saveRigActionButton" type="button" class="primary-button">Save Action</button>
-                  <button id="playRigActionButton" type="button" class="ghost-button">Play Action</button>
-                  <button id="playRigSequenceButton" type="button" class="secondary-button">Play All</button>
-                </div>
-                <div class="rig-frame-editor">
-                  <div class="rig-actions-row">
-                    <button id="rigPrevFrameButton" type="button" class="ghost-button">Prev</button>
-                    <button id="rigNextFrameButton" type="button" class="ghost-button">Next</button>
-                  </div>
-                  <label class="set-control-label">Frame <input id="rigFrameInput" type="number" min="0" max="999" step="1" value="0"></label>
-                  <label class="set-control-label">Edit tool
-                    <select id="rigFrameTool">
-                      <option value="select">Move Dots</option>
-                      <option value="pen">Pen</option>
-                      <option value="bucket">Paint Bucket</option>
-                      <option value="eraser">Eraser</option>
-                    </select>
-                  </label>
-                  <label class="set-control-label">Pen color <input id="rigPenColor" type="color" value="#2f8f83"></label>
-                  <label class="set-control-label">Fill color <input id="rigFillColor" type="color" value="#ffd166"></label>
-                  <label class="set-control-label">Eraser size <input id="rigEraserSize" type="range" min="4" max="48" step="2" value="18"></label>
-                  <label class="set-control-label">Onion skin <input id="rigOnionSkin" type="checkbox" checked></label>
-                  <label class="set-control-label">Onion opacity <input id="rigOnionAlpha" type="range" min="0" max="80" step="5" value="30"></label>
-                </div>
-                <div class="rig-dot-list-wrap">
-                  <strong>Rig Points</strong>
-                  <div id="rigDotList" class="rig-dot-list"></div>
-                </div>
-                <div class="rig-dot-list-wrap">
-                  <strong>Animated Paths</strong>
-                  <div id="rigActionList" class="rig-action-list"></div>
-                </div>
-              </aside>
-            </div>
-          </aside>
-        </section>
+    <a-plane
+      position="0 0.02 -3"
+      rotation="-90 0 0"
+      width="7"
+      height="5"
+      color="#E56C3F"
+    ></a-plane>
 
-        <aside class="sidebar" aria-label="Scene tools">
-          <div class="sidebar-tabs">
-            <button type="button" class="sidebar-tab active" data-panel="characters">Characters</button>
-            <button type="button" class="sidebar-tab" data-panel="textures">Textures</button>
-            <button type="button" class="sidebar-tab" data-panel="objects">Objects</button>
-            <button type="button" class="sidebar-tab" data-panel="audio">Audio</button>
-            <button type="button" class="sidebar-tab" data-panel="camera">Camera</button>
-            <button type="button" class="sidebar-tab" data-panel="stage">Stage</button>
-            <button type="button" class="sidebar-tab" data-panel="scripts">Scripts</button>
-          </div>
+    <a-cylinder
+      position="-3.8 0.35 -3"
+      radius="0.18"
+      height="0.7"
+      color="#2C1D14"
+    ></a-cylinder>
+    <a-cylinder
+      position="3.8 0.35 -3"
+      radius="0.18"
+      height="0.7"
+      color="#2C1D14"
+    ></a-cylinder>
 
-          <div class="sidebar-card">
-            <section id="charactersPanel" class="tool-panel" aria-label="Characters">
-              <button id="importCharacterButton" type="button" class="secondary-button full-width import-button">Import Character Image</button>
-              <button id="createCharacterButton" type="button" class="primary-button full-width import-button">Create Character</button>
-              <button id="rigSelectedCharacterButton" type="button" class="ghost-button full-width import-button">Rig / Animate Selected</button>
-              <div id="characterList" class="tool-grid character-grid"></div>
-            </section>
+    <a-box
+      position="-1.55 0.75 -3.4"
+      rotation="0 28 0"
+      width="0.9"
+      height="1.5"
+      depth="0.45"
+      color="#F28749"
+    ></a-box>
+    <a-sphere
+      position="-1.55 1.65 -3.4"
+      radius="0.42"
+      color="#FFD166"
+    ></a-sphere>
+    <a-cylinder
+      position="-1.55 0.35 -3.4"
+      radius="0.28"
+      height="0.7"
+      color="#6A7BFF"
+    ></a-cylinder>
 
-            <section id="texturesPanel" class="tool-panel hidden" aria-label="Textures">
-              <button id="importTextureButton" type="button" class="secondary-button full-width import-button">Import Texture Image</button>
-              <button id="createTextureButton" type="button" class="primary-button full-width import-button">Create Texture</button>
-              <button id="editTextureButton" type="button" class="ghost-button full-width import-button">Edit Selected Texture</button>
-              <div id="textureList" class="tool-grid texture-grid"></div>
-              <div id="textureEditorPanel" class="texture-editor-panel hidden">
-                <div class="texture-editor-header">
-                  <strong id="textureEditorTitle">Texture Editor</strong>
-                  <button id="closeTextureEditorButton" type="button" class="ghost-button">Close</button>
-                </div>
-                <canvas id="textureEditorCanvas" aria-label="Texture drawing editor"></canvas>
-                <label class="set-control-label">Pen color <input id="textureEditorColor" type="color" value="#2f8f83"></label>
-                <button id="saveTextureEditorButton" type="button" class="secondary-button full-width">Save Texture Drawing</button>
-              </div>
-            </section>
+    <a-box
+      position="1.55 0.65 -3.9"
+      rotation="0 -24 0"
+      width="0.8"
+      height="1.3"
+      depth="0.4"
+      color="#6A7BFF"
+    ></a-box>
+    <a-sphere
+      position="1.55 1.45 -3.9"
+      radius="0.38"
+      color="#F5CDB0"
+    ></a-sphere>
+    <a-cone
+      position="1.55 1.95 -3.9"
+      radius-bottom="0.36"
+      radius-top="0.06"
+      height="0.48"
+      color="#E56C3F"
+    ></a-cone>
 
-            <section id="objectsPanel" class="tool-panel hidden" aria-label="Objects">
-              <button id="importObjectButton" type="button" class="secondary-button full-width import-button">Import Object Image</button>
-              <button id="createObjectButton" type="button" class="primary-button full-width import-button">Create Object</button>
-              <div class="set-control-card">
-                <button id="physicsToggleButton" type="button" class="secondary-button full-width">Turn World Physics On</button>
-                <button id="gravityToggleButton" type="button" class="ghost-button full-width">Gravity: On</button>
-                <button id="physicsSettingsButton" type="button" class="ghost-button full-width">Advanced World Physics Settings</button>
-                <p id="physicsStatusLabel">Physics is off. Turn it on to enable collisions, pushing, and gravity for stage actors.</p>
-              </div>
-              <div id="physicsSettingsPanel" class="set-control-card hidden">
-                <label class="set-control-label" title="How strongly physics-enabled objects are pulled.">Gravity strength <input id="physicsGravityStrength" type="range" min="0" max="3000" step="25" value="1200"></label>
-                <label class="set-control-label" title="Choose which direction gravity points.">Gravity direction
-                  <select id="physicsGravityDirection">
-                    <option value="down">Down</option>
-                    <option value="up">Up</option>
-                    <option value="left">Left</option>
-                    <option value="right">Right</option>
-                  </select>
-                </label>
-                <label class="set-control-label" title="Global drag that slows moving objects over time.">Air resistance / drag <input id="physicsAirDrag" type="number" min="0" max="4" step="0.05" value="0.08"></label>
-                <label class="set-control-label" title="Default rebound level for new or reset objects.">Default bounce <input id="physicsBounceDefault" type="number" min="0" max="1" step="0.05" value="0.18"></label>
-                <label class="set-control-label" title="Default sliding resistance for new or reset objects.">Default friction <input id="physicsFrictionDefault" type="number" min="0" max="1" step="0.05" value="0.55"></label>
-                <label class="set-control-label" title="Speed multiplier for the whole simulation.">Physics time scale <input id="physicsTimeScale" type="number" min="0.25" max="2" step="0.05" value="1"></label>
-                <label class="set-control-label" title="More solver passes improve collision stability but cost more performance.">Collision precision <input id="physicsSolverIterations" type="number" min="1" max="8" step="1" value="3"></label>
-                <label class="set-control-label" title="Allows resting objects to go inactive for better performance.">Enable sleeping <input id="physicsSleeping" type="checkbox" checked></label>
-                <label class="set-control-label" title="Keep physics objects inside the stage edges.">World bounds / edge collisions <input id="physicsWorldBounds" type="checkbox" checked></label>
-                <label class="set-control-label" title="Show collision shapes while editing the stage.">Debug collision view <input id="physicsDebugView" type="checkbox"></label>
-                <label class="set-control-label" title="Show trigger sensor zones while editing the stage.">Debug trigger zones <input id="physicsTriggerDebugView" type="checkbox"></label>
-                <label class="set-control-label" title="Tint actors by their collision layer for easier authoring.">Layer debug colors <input id="physicsLayerDebugView" type="checkbox"></label>
-                <label class="set-control-label" title="Highlight overlapping trigger pairs while editing the stage.">Overlap highlight view <input id="physicsOverlapDebugView" type="checkbox"></label>
-                <div class="set-control-card compact-card full-span">
-                  <strong>Layer Collision Rules</strong>
-                  <div id="physicsLayerMatrix" class="physics-layer-matrix"></div>
-                </div>
-              </div>
-              <div id="objectList" class="tool-grid object-grid"></div>
-            </section>
+    <a-cylinder
+      position="0 0.9 -5.35"
+      radius="0.5"
+      height="1.8"
+      color="#FFD166"
+    ></a-cylinder>
 
-            <section id="audioPanel" class="tool-panel hidden" aria-label="Audio">
-              <div class="audio-panel">
-                <button id="importAudioButton" type="button" class="secondary-button full-width import-button">Import Audio</button>
-                <button id="openMusicMakerButton" type="button" class="primary-button full-width import-button">Open Music Maker</button>
-                <div class="set-control-card">
-                  <p>Record from your microphone. A 3-second countdown starts before capture.</p>
-                  <button id="recordMicButton" type="button" class="primary-button full-width">Microphone</button>
-                  <button id="stopMicButton" type="button" class="secondary-button full-width" disabled>Stop Mic Recording</button>
-                  <p id="audioCountdownLabel" class="audio-countdown">Mic idle.</p>
-                </div>
-                <div class="set-control-card">
-                  <h4>Audio Library</h4>
-                  <div id="audioLibraryList" class="audio-library-list"></div>
-                </div>
-              </div>
-            </section>
+    <a-plane position="0 2.85 -5.95" width="5.6" height="0.9" color="#FFFFFF">
+      <a-text
+        id="sceneTitle"
+        value="Worms VR Stage"
+        position="0 0.12 0.01"
+        color="#111111"
+        width="4.8"
+        align="center"
+      ></a-text>
+      <a-text
+        id="sceneStatusText"
+        value="Story sparks: 0 / 5"
+        position="0 -0.22 0.01"
+        color="#6B3B1F"
+        width="4.4"
+        align="center"
+      ></a-text>
+    </a-plane>
 
-            <section id="cameraPanel" class="tool-panel hidden" aria-label="Camera">
-              <div class="camera-panel">
-                <button id="recordButton" type="button" class="primary-button full-width">Start Recording</button>
-                <button id="stopButton" type="button" class="secondary-button full-width" disabled>Stop Recording</button>
-                <button id="openLibraryButton" type="button" class="ghost-button full-width">Open Library</button>
-                <div class="camera-notes">
-                  <p>Record the stage exactly as you see it.</p>
-                  <p>Move selected actors with drag controls or <strong>W A S D</strong>.</p>
-                  <p>Use <strong>Ctrl+C</strong> and <strong>Ctrl+V</strong> to duplicate a single item or a whole marquee selection.</p>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <div class="sidebar-help">
-            <p><strong>Selection:</strong> Click an item to select it, or drag across empty space to marquee-select multiple items.</p>
-            <p><strong>Textures:</strong> Pick a texture and drag across items on the stage to apply it.</p>
-            <p><strong>Deselect:</strong> Click an active sidebar option again, or press <strong>Escape</strong>.</p>
-          </div>
-        </aside>
-      </div>
-
-      <section id="scriptsModule" class="scripts-module hidden" aria-label="Block Scripts module">
-        <div class="scripts-module-backdrop"></div>
-        <div class="scripts-module-shell">
-          <header class="scripts-module-header">
-            <div>
-              <p class="topbar-label">Full Script Module</p>
-              <h3>Block Scripts</h3>
-              <p id="scriptActorLabel" class="scripts-copy">Select one character or object on the stage to script it.</p>
-            </div>
-            <div class="scripts-module-actions">
-              <button id="scriptsModuleCloseButton" type="button" class="ghost-button">Back To Studio</button>
-            </div>
-          </header>
-
-          <div class="scripts-module-layout">
-            <aside class="scripts-actor-panel">
-              <h4>Actors</h4>
-              <p>Pick who this script belongs to.</p>
-              <div id="scriptActorList" class="script-actor-list"></div>
-            </aside>
-
-            <aside class="scripts-palette-panel">
-              <div class="script-category-panel">
-                <h4>Block Groups</h4>
-                <div id="scriptCategoryTabs" class="script-category-tabs"></div>
-              </div>
-              <div class="script-library-panel">
-                <h4>Blocks</h4>
-                <p>Drag blocks into the workspace. Right-click any block for help.</p>
-                <div id="scriptPalette" class="script-palette"></div>
-              </div>
-            </aside>
-
-            <section class="scripts-workspace-panel">
-              <div class="script-stack-header">
-                <div>
-                  <h4>Workspace</h4>
-                  <p>Drag blocks to reorder them. Drop inside container blocks to snap them together.</p>
-                </div>
-              </div>
-              <div id="scriptWorkspace" class="script-workspace"></div>
-            </section>
-          </div>
-        </div>
-        <div id="scriptBlockInfo" class="script-block-info hidden" role="dialog" aria-live="polite"></div>
-      </section>
-
-      <section id="musicMakerModule" class="scripts-module hidden" aria-label="Music Maker">
-        <div class="scripts-module-backdrop"></div>
-        <div class="music-maker-module-shell">
-          <header class="scripts-module-header">
-            <div>
-              <p class="topbar-label">Audio Workshop</p>
-              <h3>Music Maker</h3>
-              <p class="scripts-copy">Compose loops in a dedicated workspace, preview the whole pattern, then save it into your audio library.</p>
-            </div>
-            <div class="scripts-module-actions">
-              <button id="closeMusicMakerButton" type="button" class="ghost-button">Back To Audio</button>
-            </div>
-          </header>
-          <div class="music-maker-module-layout">
-            <section class="music-maker-main-panel">
-              <label class="set-control-label">Song name <input id="musicMakerName" type="text" value="My Loop"></label>
-              <div id="musicMakerGrid" class="music-maker-grid music-maker-grid-large" aria-label="Music maker note grid"></div>
-            </section>
-            <aside class="music-maker-side-panel">
-              <div class="set-control-card">
-                <p>Click cells to place notes. Each row is a different pitch or drum lane, and preview plays the full loop.</p>
-                <div class="audio-actions">
-                  <button id="previewMusicMakerButton" type="button" class="ghost-button">Preview</button>
-                  <button id="saveMusicMakerButton" type="button" class="secondary-button">Save Loop</button>
-                </div>
-              </div>
-            </aside>
-          </div>
-        </div>
-      </section>
-
-      <section id="stageModule" class="stage-module hidden" aria-label="Stage set editor">
-        <div class="scripts-module-backdrop"></div>
-        <div class="stage-module-shell">
-          <header class="scripts-module-header">
-            <div>
-              <p class="topbar-label">Set Builder</p>
-              <h3>Stage</h3>
-              <p id="setEditorLabel" class="scripts-copy">Create sets, draw scenery, add lights, and build set-only action scripts.</p>
-            </div>
-            <div class="scripts-module-actions">
-              <button id="stageModuleCloseButton" type="button" class="ghost-button">Back To Studio</button>
-            </div>
-          </header>
-
-          <div class="stage-module-layout">
-            <aside class="set-list-panel">
-              <div class="set-list-heading">
-                <h4>Scenes</h4>
-                <button id="addSceneButton" type="button" class="secondary-button compact-button">+</button>
-              </div>
-              <div id="sceneList" class="set-list"></div>
-              <div class="set-list-heading">
-                <h4>Sets</h4>
-                <button id="addSetButton" type="button" class="secondary-button compact-button">+</button>
-              </div>
-              <div id="setList" class="set-list"></div>
-            </aside>
-
-            <section class="set-canvas-panel">
-              <div class="set-canvas-frame">
-                <canvas id="setCanvas" aria-label="Set editor canvas"></canvas>
-              </div>
-              <p class="stage-status subtle">Right-click a character or object to open its set-only mini code panel.</p>
-            </section>
-
-            <aside class="set-tools-panel">
-              <h4>Set Tools</h4>
-              <div class="set-tool-tabs">
-                <button type="button" class="set-tool-tab active" data-set-tool="select">Select</button>
-                <button type="button" class="set-tool-tab" data-set-tool="character">Characters</button>
-                <button type="button" class="set-tool-tab" data-set-tool="object">Objects</button>
-                <button type="button" class="set-tool-tab" data-set-tool="texture">Textures</button>
-                <button type="button" class="set-tool-tab" data-set-tool="pen">Pen</button>
-                <button type="button" class="set-tool-tab" data-set-tool="light">Lights</button>
-              </div>
-              <div id="setCharacterList" class="set-tool-grid"></div>
-              <div id="setObjectList" class="set-tool-grid hidden"></div>
-              <div id="setTextureList" class="set-tool-grid hidden"></div>
-              <div id="setPenControls" class="set-control-card hidden">
-                <p>Draw directly onto this set.</p>
-                <div id="setBaseColors" class="set-color-row"></div>
-                <label class="set-control-label">Custom color <input id="setPenColor" type="color" value="#2f8f83"></label>
-                <label class="set-control-label">Fill color <input id="setFillColor" type="color" value="#ffd166"></label>
-                <div class="audio-actions">
-                  <button id="setUsePenButton" type="button" class="secondary-button">Use Pen</button>
-                  <button id="setUseBucketButton" type="button" class="secondary-button">Use Bucket</button>
-                </div>
-              </div>
-              <div id="setLightControls" class="set-control-card hidden">
-                <button id="setAddLightButton" type="button" class="secondary-button full-width">Add Light Source</button>
-                <label class="set-control-label">Type
-                  <select id="setLightType">
-                    <option value="sun">Sun</option>
-                    <option value="moon">Moon</option>
-                  </select>
-                </label>
-                <label class="set-control-label">Tint <input id="setLightColor" type="color" value="#fff2a6"></label>
-                <label class="set-control-label">Brightness <input id="setLightBrightness" type="range" min="0" max="100" value="55"></label>
-              </div>
-              <button id="importStageButton" type="button" class="secondary-button full-width import-button">Import Stage Image</button>
-            </aside>
-          </div>
-
-          <div id="setActorContextMenu" class="actor-context-menu hidden">
-            <button id="setActorContextCodeButton" type="button">Code</button>
-            <button id="setActorContextPenButton" type="button">Pen Animation</button>
-            <button id="setActorContextPhysicsToggleButton" type="button">Physics On</button>
-            <button id="setActorContextPhysicsButton" type="button">Advanced Physics</button>
-          </div>
-          <div id="setDrawingContextMenu" class="actor-context-menu hidden">
-            <button id="setDrawingContextDeleteButton" type="button">Delete Drawing</button>
-          </div>
-
-          <aside id="setMiniCodePanel" class="set-mini-code-panel hidden" aria-label="Set mini code panel">
-            <div class="set-mini-code-header">
-              <div>
-                <p class="topbar-label">Set-Only Script</p>
-                <h4 id="setMiniCodeTitle">Actor Script</h4>
-              </div>
-              <button id="setMiniCodeCloseButton" type="button" class="ghost-button">Close</button>
-            </div>
-            <div class="set-mini-code-layout">
-              <div>
-                <h5>Blocks</h5>
-                <p>Drag or click blocks into this actor's set-only stack.</p>
-                <div id="setMiniCodePalette" class="script-palette"></div>
-              </div>
-              <div>
-                <h5>Workspace</h5>
-                <div id="setMiniCodeWorkspace" class="script-workspace compact-workspace"></div>
-              </div>
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      <section id="characterBuilderModule" class="character-builder-module hidden" aria-label="Character creator">
-        <div class="scripts-module-backdrop"></div>
-        <div class="character-builder-shell">
-          <header class="scripts-module-header">
-            <div>
-              <p class="topbar-label">Custom Actor Workshop</p>
-              <h3 id="characterBuilderTitle">Create Character</h3>
-              <p id="characterBuilderLabel" class="scripts-copy">Build a reusable character out of props, imported images, textures, and pen drawings.</p>
-            </div>
-            <div class="scripts-module-actions">
-              <button id="saveCharacterBuilderButton" type="button" class="primary-button">Save Character</button>
-              <button id="closeCharacterBuilderButton" type="button" class="ghost-button">Back To Studio</button>
-            </div>
-          </header>
-
-          <div class="character-builder-layout">
-            <aside class="character-builder-tools">
-              <label class="set-control-label"><span id="characterBuilderNameLabel">Character name</span> <input id="characterBuilderName" type="text" value="Custom Character"></label>
-              <div class="set-tool-tabs">
-                <button id="characterBuilderSelectButton" type="button" class="set-tool-tab active">Select</button>
-                <button id="characterBuilderPenButton" type="button" class="set-tool-tab">Pen</button>
-              </div>
-              <button id="characterBuilderImportButton" type="button" class="secondary-button full-width import-button">Import Image</button>
-              <label class="set-control-label">Pen color <input id="characterBuilderPenColor" type="color" value="#2f8f83"></label>
-              <label class="set-control-label">Fill color <input id="characterBuilderFillColor" type="color" value="#ffd166"></label>
-              <button id="characterBuilderBucketButton" type="button" class="secondary-button full-width">Paint Bucket</button>
-              <h4>Objects</h4>
-              <div id="characterBuilderObjectList" class="set-tool-grid compact-builder-grid"></div>
-              <h4>Textures</h4>
-              <div id="characterBuilderTextureList" class="set-tool-grid compact-builder-grid"></div>
-            </aside>
-
-            <section class="character-builder-canvas-panel">
-              <div class="character-builder-canvas-frame">
-                <canvas id="characterBuilderCanvas" aria-label="Character builder canvas"></canvas>
-              </div>
-              <p class="stage-status subtle">Place objects, paint textures, import images, draw details, then save the result into the Characters menu.</p>
-            </section>
-          </div>
-        </div>
-      </section>
-
-      <aside id="projectMembersPanel" class="project-side-panel hidden" aria-label="Project members">
-        <div class="texture-editor-header">
-          <strong>Project Friends</strong>
-          <button id="closeProjectMembersButton" type="button" class="ghost-button">Close</button>
-        </div>
-        <div id="projectMembersList" class="friends-list"></div>
-      </aside>
-
-      <aside id="projectAddFriendPanel" class="project-side-panel hidden" aria-label="Add friend to project">
-        <div class="texture-editor-header">
-          <strong>Add Friend To Project</strong>
-          <button id="closeProjectAddFriendButton" type="button" class="ghost-button">Close</button>
-        </div>
-        <div id="projectFriendPickerList" class="friends-list"></div>
-      </aside>
-    </section>
-
-    <input id="importCharacterInput" class="hidden" type="file" accept="image/*">
-    <input id="importTextureInput" class="hidden" type="file" accept="image/*">
-    <input id="importObjectInput" class="hidden" type="file" accept="image/*">
-    <input id="importStageInput" class="hidden" type="file" accept="image/*">
-    <input id="importMusicInput" class="hidden" type="file" accept="audio/*">
-    <input id="importAudioInput" class="hidden" type="file" accept="audio/*">
-    <input id="characterBuilderImportInput" class="hidden" type="file" accept="image/*">
-
-    <section id="libraryScreen" class="screen library-screen hidden" aria-label="Recording library">
-      <header class="topbar">
-        <div>
-          <p class="topbar-label">Playback Room</p>
-          <h2>Worms Library</h2>
-        </div>
-        <div class="topbar-actions">
-          <button id="libraryToStudioButton" type="button" class="ghost-button">Studio</button>
-          <button id="libraryMenuButton" type="button" class="ghost-button">Menu</button>
-        </div>
-      </header>
-
-      <div class="library-layout">
-        <section class="library-list-panel">
-          <div class="panel-heading">
-            <h3>Takes</h3>
-            <p>Every recording is saved in your browser so you can replay it later.</p>
-          </div>
-          <div id="libraryList" class="library-list"></div>
-        </section>
-
-        <section class="library-player-panel">
-          <div class="panel-heading">
-            <h3>Preview</h3>
-            <p id="libraryMeta">Select a take to watch it here.</p>
-          </div>
-          <video id="libraryVideo" class="library-video" controls playsinline></video>
-          <p id="emptyLibraryState" class="empty-library-state">No takes yet. Record something in the studio and it will appear here.</p>
-        </section>
-      </div>
-    </section>
-  </main>
-
-  <script src="main.js"></script>
+    <a-sphere
+      class="clickable"
+      data-token
+      position="-3 1.2 -4.8"
+      radius="0.18"
+      color="#FFF07A"
+      animation="property: position; dir: alternate; dur: 1800; loop: true; to: -3 1.55 -4.8"
+    ></a-sphere>
+    <a-sphere
+      class="clickable"
+      data-token
+      position="-0.8 1.7 -4.5"
+      radius="0.18"
+      color="#FFF07A"
+      animation="property: position; dir: alternate; dur: 1500; loop: true; to: -0.8 2.08 -4.5"
+    ></a-sphere>
+    <a-sphere
+      class="clickable"
+      data-token
+      position="2.7 1.4 -4.9"
+      radius="0.18"
+      color="#FFF07A"
+      animation="property: position; dir: alternate; dur: 1650; loop: true; to: 2.7 1.78 -4.9"
+    ></a-sphere>
+    <a-sphere
+      class="clickable"
+      data-token
+      position="-2.15 0.85 -2.15"
+      radius="0.18"
+      color="#FFF07A"
+      animation="property: position; dir: alternate; dur: 1700; loop: true; to: -2.15 1.2 -2.15"
+    ></a-sphere>
+    <a-sphere
+      class="clickable"
+      data-token
+      position="2.1 0.9 -2.4"
+      radius="0.18"
+      color="#FFF07A"
+      animation="property: position; dir: alternate; dur: 1550; loop: true; to: 2.1 1.24 -2.4"
+    ></a-sphere>
+  </a-scene>
 </body>
 </html>
