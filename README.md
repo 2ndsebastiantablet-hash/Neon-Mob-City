@@ -13,10 +13,15 @@ The project keeps the basic static A-Frame/WebXR setup from the previous
 - no npm install
 - no server required for hosting
 
-## Phase 1 Features
+## Current Prototype Features
 
-- Compact generated-feeling neon city hub
-- Three mob base entrances: Robot Factory, Mutant Lab, and Neon Casino
+- Randomized neon city hub generated on each page load
+- Dark road grid with sidewalks, side streets, alleys, and neon lane lines
+- Blocky buildings with varied heights, glowing windows, skyline silhouettes, signs, and billboards
+- Non-interactive shop exteriors: Gun Shop, Upgrade Clinic, Repair Garage, Black Market Door, Neon Diner, Pawn Shop, Arcade Shop, and Mod Shop
+- Wandering visual NPCs: civilians, mob workers, vendors, robot pedestrians, and mutant weirdos
+- Parked cars, street lamps, vending machines, trash cans, crates, sewer grates, barriers, rooftop antennas, and other city props
+- All 30 mob base locations represented as visible locked/active landmarks
 - One playable Robot Factory interior
 - Simple room/hallway layout with cover blocks
 - Mob Soldier and Robot Guard enemy placeholders
@@ -30,6 +35,8 @@ The project keeps the basic static A-Frame/WebXR setup from the previous
 - Return portal back to the city
 - City state label updated by the selected choice
 
+Only the Robot Factory is playable right now. The other 29 base landmarks are visual locked entrances for the full city map prototype.
+
 ## Controls
 
 - Meta Quest Browser: press the A-Frame `Enter VR` button.
@@ -42,6 +49,12 @@ The project keeps the basic static A-Frame/WebXR setup from the previous
 - Restart after death: press `R` on desktop, or reload the page in Quest Browser.
 
 The gun starts in front of the player. It is not attached to a hand until grabbed.
+
+## Randomized City
+
+The city uses a lightweight seeded generator in `main.js`. On each page load it shuffles base slots within broad zones, varies building heights/window patterns, changes prop/NPC placement, and rotates billboard/sign content.
+
+Zones currently include downtown, industrial, entertainment, underground/sewer, rooftop/high-rise, weird/secret, and waterfront/docks areas. This is still a visual prototype, not the full roguelike city simulation.
 
 ## Hosting
 

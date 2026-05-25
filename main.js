@@ -38,6 +38,102 @@ const ENEMY_DEFS = {
   },
 };
 
+const SHOP_DEFS = [
+  ["Gun Shop", "GUN", COLORS.yellow],
+  ["Upgrade Clinic", "UP+", COLORS.green],
+  ["Repair Garage", "FIX", COLORS.cyan],
+  ["Black Market Door", "???", COLORS.pink],
+  ["Neon Diner", "EAT", COLORS.orange],
+  ["Pawn Shop", "$", COLORS.yellow],
+  ["Arcade Shop", "8BIT", COLORS.cyan],
+  ["Mod Shop", "MOD", COLORS.green],
+];
+
+const NPC_DEFS = [
+  { id: "civilian", label: "CIV", texture: "#npc-civilian", color: COLORS.cyan },
+  { id: "mob-worker", label: "MOB", texture: "#npc-mob-worker", color: COLORS.pink },
+  { id: "vendor", label: "SELL", texture: "#npc-vendor", color: COLORS.yellow },
+  { id: "robot-ped", label: "BOT", texture: "#npc-robot-ped", color: COLORS.cyan },
+  { id: "mutant-weirdo", label: "BIO", texture: "#npc-mutant", color: COLORS.green },
+];
+
+const BILLBOARD_COPY = [
+  "NEON MOB CITY",
+  "DON'T TRUST THE TOWER",
+  "PAY YOUR STREET TAX",
+  "ROBOT FACTORY HIRING",
+  "BLACK MARKET BELOW",
+  "MOB NEWS 24/7",
+  "VHS DREAMS",
+  "CYBER NOODLES",
+  "WARNING: MUTANT ZONE",
+  "THE TOWER WATCHES",
+];
+
+const BASE_LOCATIONS = [
+  { id: "street-tax-office", label: "Street Tax Office", zone: "downtown", color: COLORS.yellow, icon: "TAX", kind: "office" },
+  { id: "robot", label: "Robot Factory", zone: "industrial", color: COLORS.cyan, icon: "BOT", kind: "factory", active: true },
+  { id: "neon-casino", label: "Neon Casino", zone: "entertainment", color: COLORS.pink, accent: COLORS.yellow, icon: "$$$", kind: "casino" },
+  { id: "mutant-lab", label: "Mutant Lab", zone: "weird", color: COLORS.green, accent: COLORS.purple, icon: "BIO", kind: "lab" },
+  { id: "police-armory", label: "Corrupt Police Armory", zone: "downtown", color: "#5A7DFF", accent: COLORS.red, icon: "POL", kind: "armory" },
+  { id: "broadcast-tower", label: "Broadcast Tower", zone: "rooftop", color: COLORS.cyan, accent: COLORS.pink, icon: "TV", kind: "tower" },
+  { id: "sewer-black-market", label: "Sewer Black Market", zone: "underground", color: COLORS.green, accent: COLORS.yellow, icon: "SEW", kind: "sewer" },
+  { id: "rooftop-mech-yard", label: "Rooftop Mech Yard", zone: "rooftop", color: COLORS.orange, accent: COLORS.cyan, icon: "MECH", kind: "rooftop" },
+  { id: "neon-nightclub", label: "Neon Nightclub", zone: "entertainment", color: COLORS.pink, accent: COLORS.cyan, icon: "CLUB", kind: "club" },
+  { id: "abandoned-arcade", label: "Abandoned Arcade", zone: "entertainment", color: COLORS.cyan, accent: COLORS.yellow, icon: "8BIT", kind: "arcade" },
+  { id: "sky-construction", label: "Sky Construction Site", zone: "rooftop", color: COLORS.yellow, accent: COLORS.orange, icon: "SKY", kind: "construction" },
+  { id: "mob-hospital", label: "Mob Hospital", zone: "downtown", color: COLORS.green, accent: COLORS.red, icon: "MED", kind: "hospital" },
+  { id: "underground-train", label: "Underground Train Station", zone: "underground", color: COLORS.cyan, accent: COLORS.yellow, icon: "RAIL", kind: "station" },
+  { id: "hotel-hideout", label: "Luxury Hotel Hideout", zone: "downtown", color: COLORS.pink, accent: COLORS.yellow, icon: "HOT", kind: "hotel" },
+  { id: "weapon-range", label: "Weapon Testing Range", zone: "industrial", color: COLORS.red, accent: COLORS.yellow, icon: "RNG", kind: "range" },
+  { id: "mutant-zoo", label: "Mutant Zoo", zone: "weird", color: COLORS.green, accent: COLORS.orange, icon: "ZOO", kind: "zoo" },
+  { id: "city-hall", label: "City Hall Courtroom", zone: "downtown", color: COLORS.white, accent: COLORS.red, icon: "LAW", kind: "court" },
+  { id: "neon-mall", label: "Neon Mall", zone: "downtown", color: COLORS.cyan, accent: COLORS.pink, icon: "MALL", kind: "mall" },
+  { id: "power-plant", label: "Power Plant", zone: "industrial", color: COLORS.yellow, accent: COLORS.cyan, icon: "PWR", kind: "plant" },
+  { id: "mob-church", label: "Mob Church", zone: "downtown", color: COLORS.purple, accent: COLORS.yellow, icon: "BELL", kind: "church" },
+  { id: "cyber-prison", label: "Cyber Prison", zone: "underground", color: "#5A7DFF", accent: COLORS.red, icon: "CELL", kind: "prison" },
+  { id: "highway-ambush", label: "Highway Ambush Route", zone: "waterfront", color: COLORS.orange, accent: COLORS.yellow, icon: "HWY", kind: "highway" },
+  { id: "neon-docks", label: "Neon Docks", zone: "waterfront", color: COLORS.cyan, accent: COLORS.green, icon: "DOCK", kind: "docks" },
+  { id: "weather-tower", label: "Weather Control Tower", zone: "rooftop", color: COLORS.cyan, accent: COLORS.yellow, icon: "WX", kind: "tower" },
+  { id: "dream-theater", label: "Dream Theater", zone: "entertainment", color: COLORS.pink, accent: COLORS.purple, icon: "DREAM", kind: "theater" },
+  { id: "mob-museum", label: "Mob Museum", zone: "downtown", color: COLORS.orange, accent: COLORS.yellow, icon: "ART", kind: "museum" },
+  { id: "old-subway-lab", label: "Old Subway Lab", zone: "underground", color: COLORS.green, accent: COLORS.cyan, icon: "LAB", kind: "station" },
+  { id: "tower-restaurant", label: "Moonlight Tower Restaurant", zone: "rooftop", color: COLORS.yellow, accent: COLORS.pink, icon: "MOON", kind: "tower" },
+  { id: "ai-bank-vault", label: "AI Bank Vault", zone: "downtown", color: COLORS.yellow, accent: COLORS.cyan, icon: "AI$", kind: "vault" },
+  { id: "vhs-dimension", label: "Secret VHS Dimension", zone: "weird", color: COLORS.pink, accent: COLORS.cyan, icon: "VHS", kind: "vhs" },
+];
+
+const BASE_SLOTS = {
+  downtown: [
+    { x: -14.4, z: 13.0, rot: 90 }, { x: -5.0, z: 13.2, rot: 0 }, { x: 5.0, z: 13.2, rot: 0 },
+    { x: 14.4, z: 12.8, rot: -90 }, { x: -14.5, z: 3.4, rot: 90 }, { x: 14.5, z: 3.2, rot: -90 },
+    { x: -5.0, z: 3.3, rot: 180 }, { x: 5.0, z: 3.3, rot: 180 }, { x: -14.2, z: -6.6, rot: 90 },
+    { x: 14.2, z: -6.6, rot: -90 },
+  ],
+  industrial: [
+    { x: -22.0, z: -14.5, rot: 90 }, { x: -14.0, z: -22.0, rot: 0 }, { x: -5.2, z: -22.2, rot: 0 },
+    { x: -22.0, z: -26.0, rot: 90 }, { x: -10.5, z: -32.0, rot: 180 },
+  ],
+  entertainment: [
+    { x: 14.2, z: -15.0, rot: -90 }, { x: 22.0, z: -14.5, rot: -90 }, { x: 14.0, z: -22.2, rot: 0 },
+    { x: 5.2, z: -22.0, rot: 0 }, { x: 22.0, z: -26.0, rot: -90 },
+  ],
+  underground: [
+    { x: -22.0, z: 4.0, rot: 90 }, { x: -22.0, z: -4.2, rot: 90 }, { x: -14.2, z: -13.0, rot: 180 },
+    { x: -5.0, z: -13.2, rot: 180 },
+  ],
+  rooftop: [
+    { x: 5.2, z: -31.8, rot: 180 }, { x: 14.0, z: -31.8, rot: 180 }, { x: 22.0, z: -3.8, rot: -90 },
+    { x: 22.0, z: 4.2, rot: -90 }, { x: 5.0, z: -13.2, rot: 180 },
+  ],
+  weird: [
+    { x: -5.0, z: -31.8, rot: 180 }, { x: 0.0, z: -36.0, rot: 180 }, { x: 14.5, z: -36.0, rot: 180 },
+  ],
+  waterfront: [
+    { x: -22.0, z: -34.5, rot: 90 }, { x: 22.0, z: -34.5, rot: -90 },
+  ],
+};
+
 const state = {
   mode: "city",
   seed: Date.now() % 100000,
@@ -50,6 +146,8 @@ const state = {
   activeChoice: "",
   enemies: [],
   patrols: [],
+  npcs: [],
+  baseLocations: [],
   targets: [],
   enemyShots: [],
   bullets: [],
@@ -120,6 +218,10 @@ function init() {
 function ensureComponentWiring() {
   refs.scene.setAttribute("game-state", "");
   refs.scene.setAttribute("bullet-system", "");
+  refs.scene.setAttribute("city-generator", "");
+  refs.scene.setAttribute("building-generator", "");
+  refs.scene.setAttribute("base-location-manager", "");
+  refs.scene.setAttribute("neon-sign-generator", "");
   refs.rig.setAttribute("player-movement", "");
   refs.rig.setAttribute("snap-turn", "");
   refs.rig.setAttribute("player-health", "");
@@ -173,6 +275,56 @@ function registerComponents() {
         }
 
         updatePlayerMove(Math.min((delta || 0) / 1000, 0.05));
+      },
+    });
+  }
+
+  if (!AFRAME.components["city-generator"]) {
+    AFRAME.registerComponent("city-generator", {});
+  }
+
+  if (!AFRAME.components["building-generator"]) {
+    AFRAME.registerComponent("building-generator", {});
+  }
+
+  if (!AFRAME.components["base-location-manager"]) {
+    AFRAME.registerComponent("base-location-manager", {});
+  }
+
+  if (!AFRAME.components["neon-sign-generator"]) {
+    AFRAME.registerComponent("neon-sign-generator", {});
+  }
+
+  if (!AFRAME.components["npc-wander"]) {
+    AFRAME.registerComponent("npc-wander", {
+      schema: {
+        axis: { default: "x" },
+        span: { default: 1.4 },
+        speed: { default: 0.00032 },
+        phase: { default: 0 },
+      },
+      init() {
+        this.basePosition = this.el.object3D.position.clone();
+        this.lastOffset = 0;
+      },
+      tick(time) {
+        if (state.mode !== "city" || !this.basePosition) {
+          return;
+        }
+
+        const offset = Math.sin(time * this.data.speed + this.data.phase) * this.data.span;
+        this.el.object3D.position.copy(this.basePosition);
+        if (this.data.axis === "z") {
+          this.el.object3D.position.z += offset;
+        } else {
+          this.el.object3D.position.x += offset;
+        }
+
+        const movingPositive = offset >= this.lastOffset;
+        this.lastOffset = offset;
+        this.el.object3D.rotation.y = this.data.axis === "z"
+          ? (movingPositive ? 0 : Math.PI)
+          : (movingPositive ? -Math.PI / 2 : Math.PI / 2);
       },
     });
   }
@@ -252,7 +404,7 @@ function updateStick(hand, event) {
   const stick = getStickVector(event);
   if (hand === "left") {
     state.leftStick.x = Math.abs(stick.x) > 0.15 ? stick.x : 0;
-    state.leftStick.y = Math.abs(stick.y) > 0.15 ? stick.y : 0;
+    state.leftStick.y = Math.abs(stick.y) > 0.15 ? -stick.y : 0;
     return;
   }
 
@@ -451,12 +603,15 @@ function restartGame() {
   setMessage("Neon Mob City", "Run restarted. Grip the gun, then choose the Robot Factory.");
 }
 
-// City hub generation: blocky roads, randomized building heights/windows,
-// neon skyline pieces, patrol placeholders, and three mob base entrances.
+// City hub generation: a seeded visual city pass. Each page load gets a new
+// seed, then bases, shops, NPC paths, props, billboards, and building heights
+// are shuffled inside broad zones so the hub feels alive without becoming huge.
 function buildCityHub() {
   state.mode = "city";
   state.enemies = [];
   state.patrols = [];
+  state.npcs = [];
+  state.baseLocations = [];
   state.enemyShots = [];
   state.bullets = [];
   state.portalZones = [];
@@ -465,76 +620,159 @@ function buildCityHub() {
   clearEntity(refs.effects);
   rand = seededRandom(state.seed);
 
-  refs.rig.object3D.position.set(0, 0, 6);
-  placeGunInFrontOfPlayer(1.75);
+  refs.rig.object3D.position.set(0, 0, 18);
+  refs.rig.object3D.rotation.set(0, 0, 0);
   refs.scene.setAttribute("background", "color: #090018");
-  refs.scene.setAttribute("fog", "type: exponential; color: #150020; density: 0.035");
+  refs.scene.setAttribute("fog", "type: exponential; color: #150020; density: 0.022");
 
-  makePlane({
-    parent: refs.world,
-    position: "0 0 0",
-    rotation: "-90 0 0",
-    width: 30,
-    height: 30,
-    material: "src: #city-grid; repeat: 14 14; shader: flat",
-  });
+  const basePlacements = generateBasePlacements();
+  const shopPlacements = generateShopPlacements();
+  const occupied = basePlacements.concat(shopPlacements).map((item) => ({ x: item.x, z: item.z, radius: 2.8 }));
 
-  makeBox({ position: "0 0.015 -3", size: "5 0.03 24", color: COLORS.street, material: neonMaterial(COLORS.street) });
-  makeBox({ position: "0 0.025 -3", size: "0.08 0.04 23", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
-  makeBox({ position: "-2.25 0.03 -3", size: "0.08 0.05 23", color: COLORS.pink, material: neonMaterial(COLORS.pink) });
-  makeBox({ position: "2.25 0.03 -3", size: "0.08 0.05 23", color: COLORS.pink, material: neonMaterial(COLORS.pink) });
-  makeBox({ position: "0 0.035 -3", size: "24 0.04 0.08", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
-
+  createCityRoadGrid();
   createSkyline();
-  createCityBuildings();
+  createGeneratedBuildings(occupied);
+  createShopExteriors(shopPlacements);
+  createBaseLocations(basePlacements);
+  createBillboards();
+  createCityProps();
+  createCityNpcs();
   createCityTitlePanel();
-
-  // Base entrance setup: one active Robot Factory, two locked Phase 1 placeholders.
-  createBaseEntrance({
-    id: "robot",
-    label: "ROBOT FACTORY",
-    sublabel: "Phase 1 playable",
-    x: 0,
-    z: -10.4,
-    color: COLORS.cyan,
-    icon: "BOT",
-    active: true,
-  });
-  createBaseEntrance({
-    id: "mutant",
-    label: "MUTANT LAB",
-    sublabel: "Locked",
-    x: -5.6,
-    z: -6.8,
-    color: COLORS.green,
-    accent: COLORS.purple,
-    icon: "BIO",
-    active: false,
-  });
-  createBaseEntrance({
-    id: "casino",
-    label: "NEON CASINO",
-    sublabel: "Locked",
-    x: 5.6,
-    z: -6.8,
-    color: COLORS.pink,
-    accent: COLORS.yellow,
-    icon: "$$$",
-    active: false,
-  });
-
-  createPatrol("mob", -2.2, -1.6);
-  createPatrol("robot", 3.1, -2.6);
+  placeGunInFrontOfPlayer(1.75);
 
   updateHud();
-  setMessage("Neon Mob City", "Choose a mob base. Robot Factory is playable in Phase 1.");
+  setMessage("Neon Mob City", "Explore the randomized city. Robot Factory is the active test base.");
+}
+
+function generateBasePlacements() {
+  const slotsByZone = {};
+  Object.entries(BASE_SLOTS).forEach(([zone, slots]) => {
+    slotsByZone[zone] = shuffle(slots.slice(), rand);
+  });
+
+  state.baseLocations = BASE_LOCATIONS.map((base) => {
+    const slot = slotsByZone[base.zone].shift();
+    const jitter = base.active ? 0.25 : 0.85;
+    return {
+      ...base,
+      x: slot.x + (rand() - 0.5) * jitter,
+      z: slot.z + (rand() - 0.5) * jitter,
+      rotation: slot.rot,
+      active: Boolean(base.active),
+      sublabel: base.active ? "Active test base" : "Locked visual landmark",
+    };
+  });
+
+  return state.baseLocations;
+}
+
+function generateShopPlacements() {
+  const slots = shuffle([
+    { x: -5.0, z: 17.0, rot: 180 }, { x: 5.0, z: 17.0, rot: 180 },
+    { x: -14.6, z: 8.0, rot: 90 }, { x: 14.6, z: 8.0, rot: -90 },
+    { x: -14.6, z: -1.8, rot: 90 }, { x: 14.6, z: -1.8, rot: -90 },
+    { x: -5.0, z: -17.0, rot: 0 }, { x: 5.0, z: -17.0, rot: 0 },
+  ], rand);
+
+  return SHOP_DEFS.map(([label, icon, color], index) => ({
+    label,
+    icon,
+    color,
+    accent: index % 2 === 0 ? COLORS.cyan : COLORS.pink,
+    ...slots[index],
+  }));
+}
+
+function createCityRoadGrid() {
+  makePlane({
+    parent: refs.world,
+    position: "0 -0.01 -8",
+    rotation: "-90 0 0",
+    width: 58,
+    height: 62,
+    material: "src: #city-grid; repeat: 24 26; shader: flat",
+  });
+
+  const roadsX = [-20, -10, 0, 10, 20];
+  const roadsZ = [18, 8, -2, -12, -22, -32];
+
+  roadsX.forEach((x) => {
+    makeBox({ position: `${x} 0.015 -7`, size: "4.3 0.03 58", color: COLORS.street, material: "src: #road-pixel; repeat: 2 24; shader: flat" });
+    for (let z = 18; z >= -34; z -= 4) {
+      makeBox({ position: `${x} 0.045 ${z}`, size: "0.1 0.04 1.15", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+    }
+  });
+
+  roadsZ.forEach((z) => {
+    makeBox({ position: `0 0.018 ${z}`, size: "50 0.03 4.3", color: COLORS.street, material: "src: #road-pixel; repeat: 22 2; shader: flat" });
+    for (let x = -24; x <= 24; x += 4) {
+      makeBox({ position: `${x} 0.05 ${z}`, size: "1.15 0.04 0.1", color: COLORS.pink, material: neonMaterial(COLORS.pink) });
+    }
+  });
+
+  for (let xi = 0; xi < roadsX.length - 1; xi += 1) {
+    for (let zi = 0; zi < roadsZ.length - 1; zi += 1) {
+      const cx = (roadsX[xi] + roadsX[xi + 1]) / 2;
+      const cz = (roadsZ[zi] + roadsZ[zi + 1]) / 2;
+      makeBox({ position: `${cx} 0.025 ${cz}`, size: "4.9 0.04 4.9", color: "#161128", material: "src: #sidewalk-tile; repeat: 3 3; shader: flat" });
+      if (rand() > 0.55) {
+        makeBox({ position: `${cx} 0.055 ${cz}`, size: `${rand() > 0.5 ? "0.42 0.04 5.2" : "5.2 0.04 0.42"}`, color: "#05050B", material: "color: #05050B; shader: flat" });
+      }
+    }
+  }
+
+  makeBox({ position: "0 0.04 -37.8", size: "54 0.05 2.4", color: "#061827", material: "color: #061827; emissive: #00F5FF; emissiveIntensity: 0.18; shader: flat" });
+}
+
+function createGeneratedBuildings(occupied) {
+  const cells = [];
+  [-15, -5, 5, 15].forEach((x) => {
+    [13, 3, -7, -17, -27].forEach((z) => cells.push({ x, z }));
+  });
+
+  shuffle(cells, rand).forEach((cell) => {
+    const count = 2 + Math.floor(rand() * 3);
+    for (let i = 0; i < count; i += 1) {
+      const x = cell.x + (rand() - 0.5) * 4.2;
+      const z = cell.z + (rand() - 0.5) * 4.2;
+      if (isNearOccupied(x, z, occupied, 3.0)) {
+        continue;
+      }
+
+      const heightBias = z < -20 ? 3.5 : 1.6;
+      const h = heightBias + 1.6 + rand() * 5.2;
+      const w = 1.15 + rand() * 1.55;
+      const d = 1.15 + rand() * 1.55;
+      const windowColor = [COLORS.cyan, COLORS.pink, COLORS.yellow, COLORS.green][Math.floor(rand() * 4)];
+      createBuilding(x, z, w, h, d, windowColor);
+      if (rand() > 0.62) {
+        createRooftopAntenna(x, h, z, windowColor);
+      }
+    }
+  });
+}
+
+function isNearOccupied(x, z, occupied, radius) {
+  return occupied.some((item) => {
+    const dx = x - item.x;
+    const dz = z - item.z;
+    return Math.sqrt(dx * dx + dz * dz) < radius + item.radius;
+  });
+}
+
+function createShopExteriors(shops) {
+  shops.forEach((shop) => createShopExterior(shop));
+}
+
+function createBaseLocations(bases) {
+  bases.forEach((base) => createBaseEntrance(base));
 }
 
 function createSkyline() {
-  for (let i = 0; i < 18; i += 1) {
-    const x = -14 + i * 1.65;
-    const h = 2.2 + rand() * 4.2;
-    const z = -14.2 - rand() * 1.2;
+  for (let i = 0; i < 34; i += 1) {
+    const x = -28 + i * 1.75;
+    const h = 3.2 + rand() * 8.2;
+    const z = -42.5 - rand() * 2.4;
     makeBox({
       position: `${x} ${h / 2} ${z}`,
       size: `${0.9 + rand() * 0.8} ${h} ${0.8 + rand() * 0.6}`,
@@ -544,9 +782,9 @@ function createSkyline() {
   }
 
   makePlane({
-    position: "0 6.2 -16.5",
-    width: 11,
-    height: 6,
+    position: "0 9.2 -45.5",
+    width: 20,
+    height: 9,
     material: `color: #7B145F; opacity: 0.5; transparent: true; side: double; shader: flat`,
   });
 }
@@ -615,58 +853,187 @@ function createNeonSign(x, y, z, text, color) {
   makeText({ parent: sign, value: text, position: "-0.58 0.17 0.03", width: 1.35, color: COLORS.black });
 }
 
+function createShopExterior(shop) {
+  const group = makeEntity("a-entity", { position: `${shop.x} 0 ${shop.z}`, rotation: `0 ${shop.rot} 0` });
+  makeBox({ parent: group, position: "0 1.05 0", size: "2.15 2.1 0.48", color: "#080713", material: "color: #080713; shader: flat" });
+  makeBox({ parent: group, position: "0 0.72 0.28", size: "0.74 1.18 0.14", color: "#111827", material: `color: #111827; emissive: ${shop.color}; emissiveIntensity: 0.18; shader: flat` });
+  makeBox({ parent: group, position: "-0.68 0.92 0.3", size: "0.42 0.56 0.08", color: shop.accent, material: neonMaterial(shop.accent) });
+  makeBox({ parent: group, position: "0.68 0.92 0.3", size: "0.42 0.56 0.08", color: shop.accent, material: neonMaterial(shop.accent) });
+
+  const sign = makePlane({ parent: group, position: "0 2.25 0.31", width: 2.35, height: 0.5, material: neonMaterial(shop.color) });
+  makeText({ parent: sign, value: shop.label.toUpperCase(), position: "-1.02 0.12 0.03", width: 2.05, color: COLORS.black, align: "center", wrapCount: 14 });
+  makeText({ parent: group, value: shop.icon, position: "-0.38 1.18 0.36", width: 0.9, color: shop.color, align: "center", wrapCount: 8 });
+}
+
+function createBillboards() {
+  const billboardSlots = [
+    { x: -18, y: 5.6, z: 6, rot: 75 }, { x: 18, y: 5.8, z: 5, rot: -75 },
+    { x: -17, y: 6.2, z: -12, rot: 90 }, { x: 17, y: 6.0, z: -13, rot: -90 },
+    { x: -7, y: 7.0, z: -27, rot: 180 }, { x: 7, y: 6.8, z: -27, rot: 180 },
+    { x: 0, y: 4.4, z: 10, rot: 180 }, { x: 0, y: 5.5, z: -35, rot: 0 },
+  ];
+
+  shuffle(billboardSlots, rand).forEach((slot, index) => {
+    const text = BILLBOARD_COPY[index % BILLBOARD_COPY.length];
+    const color = [COLORS.cyan, COLORS.pink, COLORS.yellow, COLORS.green][index % 4];
+    const group = makeEntity("a-entity", { position: `${slot.x} ${slot.y} ${slot.z}`, rotation: `0 ${slot.rot} 0` });
+    makeBox({ parent: group, position: "0 -0.16 -0.04", size: "3.5 0.16 0.12", color: "#22283D", material: "color: #22283D; shader: flat" });
+    makePlane({ parent: group, width: 3.6, height: 1.2, material: `color: #070913; emissive: ${color}; emissiveIntensity: 0.25; shader: flat` });
+    makeText({ parent: group, value: text, position: "-1.58 0.28 0.05", width: 3.15, color, align: "center", wrapCount: 16 });
+    if (index % 3 === 0) {
+      makeBox({ parent: group, position: "-1.65 -0.42 0.08", size: "0.18 0.32 0.08", color: color, material: neonMaterial(color) });
+      makeBox({ parent: group, position: "1.65 -0.42 0.08", size: "0.18 0.32 0.08", color: color, material: neonMaterial(color) });
+    }
+  });
+}
+
+function createCityProps() {
+  for (let i = 0; i < 18; i += 1) {
+    const x = [-22.1, -17.9, -12.1, -7.9, -2.1, 2.1, 7.9, 12.1, 17.9, 22.1][Math.floor(rand() * 10)];
+    const z = 16 - Math.floor(rand() * 13) * 4;
+    createParkedCar(x, z + (rand() - 0.5) * 1.8, rand() > 0.5 ? 0 : 90);
+  }
+
+  for (let i = 0; i < 28; i += 1) {
+    const x = -24 + rand() * 48;
+    const z = -35 + rand() * 52;
+    if (Math.abs(x % 10) < 2.8 || Math.abs((z + 2) % 10) < 2.8) {
+      continue;
+    }
+    createSmallProp(x, z, i);
+  }
+
+  for (let i = 0; i < 16; i += 1) {
+    const x = i % 2 === 0 ? -2.8 : 2.8;
+    const z = 16 - i * 3.2;
+    createStreetLamp(x, z, i % 3 === 0 ? COLORS.pink : COLORS.cyan);
+  }
+}
+
+function createParkedCar(x, z, rotation) {
+  const color = [COLORS.pink, COLORS.cyan, COLORS.yellow, COLORS.green][Math.floor(rand() * 4)];
+  const group = makeEntity("a-entity", { position: `${x} 0 ${z}`, rotation: `0 ${rotation} 0` });
+  makeBox({ parent: group, position: "0 0.28 0", size: "1.25 0.38 2.05", color: "#101626", material: "color: #101626; shader: flat" });
+  makeBox({ parent: group, position: "0 0.55 -0.12", size: "0.86 0.34 0.88", color, material: neonMaterial(color) });
+  makeBox({ parent: group, position: "-0.68 0.23 0.62", size: "0.08 0.18 0.42", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+  makeBox({ parent: group, position: "0.68 0.23 0.62", size: "0.08 0.18 0.42", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+}
+
+function createSmallProp(x, z, index) {
+  const type = index % 6;
+  if (type === 0) {
+    makeCylinder({ position: `${x} 0.28 ${z}`, radius: 0.24, height: 0.56, color: "#1C2432", material: "src: #panel-block; repeat: 1 1; shader: flat" });
+  } else if (type === 1) {
+    makeBox({ position: `${x} 0.42 ${z}`, size: "0.45 0.84 0.34", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+  } else if (type === 2) {
+    makeBox({ position: `${x} 0.23 ${z}`, size: "0.72 0.46 0.72", color: "#293446", material: "src: #panel-block; repeat: 1 1; shader: flat" });
+  } else if (type === 3) {
+    makeBox({ position: `${x} 0.18 ${z}`, size: "1.05 0.36 0.16", color: COLORS.orange, material: "src: #hazard; repeat: 2 1; shader: flat" });
+  } else if (type === 4) {
+    makeCylinder({ position: `${x} 0.04 ${z}`, rotation: "-90 0 0", radius: 0.48, height: 0.04, color: COLORS.green, material: `color: ${COLORS.green}; emissive: ${COLORS.green}; emissiveIntensity: 0.25; shader: flat` });
+  } else {
+    const arrow = makePlane({ position: `${x} 1.0 ${z}`, rotation: `0 ${Math.floor(rand() * 4) * 90} 0`, width: 0.9, height: 0.4, material: neonMaterial(COLORS.pink) });
+    makeText({ parent: arrow, value: ">>>", position: "-0.34 0.1 0.03", width: 0.72, color: COLORS.black, align: "center" });
+  }
+}
+
+function createStreetLamp(x, z, color) {
+  const group = makeEntity("a-entity", { position: `${x} 0 ${z}` });
+  makeCylinder({ parent: group, position: "0 1.05 0", radius: 0.035, height: 2.1, color: "#3B4658", material: "color: #3B4658; shader: flat" });
+  makeBox({ parent: group, position: "0 2.12 0", size: "0.48 0.12 0.48", color, material: neonMaterial(color) });
+}
+
+function createCityNpcs() {
+  for (let i = 0; i < 24; i += 1) {
+    const def = NPC_DEFS[i % NPC_DEFS.length];
+    const x = [-12.5, -7.2, -2.8, 2.8, 7.2, 12.5][Math.floor(rand() * 6)] + (rand() - 0.5) * 1.2;
+    const z = 15 - Math.floor(rand() * 14) * 3.4 + (rand() - 0.5) * 0.9;
+    createNpc(def, x, z, i);
+  }
+}
+
+function createNpc(def, x, z, index) {
+  const axis = rand() > 0.5 ? "x" : "z";
+  const group = makeEntity("a-entity", {
+    position: `${x} 0 ${z}`,
+    "npc-wander": `axis: ${axis}; span: ${(0.9 + rand() * 1.8).toFixed(2)}; speed: ${(0.00022 + rand() * 0.00022).toFixed(5)}; phase: ${(rand() * 6.28).toFixed(2)}`,
+  });
+  makePlane({
+    parent: group,
+    position: "0 0.72 0",
+    width: 0.55,
+    height: 1.05,
+    material: `src: ${def.texture}; transparent: true; alphaTest: 0.08; side: double; shader: flat`,
+    billboard: "",
+  });
+  makePlane({ parent: group, position: "0 0.03 0", rotation: "-90 0 0", width: 0.48, height: 0.3, material: "color: #000000; opacity: 0.32; transparent: true; shader: flat" });
+  state.npcs.push(group);
+}
+
+function createRooftopAntenna(x, height, z, color) {
+  const group = makeEntity("a-entity", { position: `${x} ${height + 0.18} ${z}` });
+  makeCylinder({ parent: group, position: "0 0.44 0", radius: 0.025, height: 0.88, color: color, material: neonMaterial(color) });
+  makeBox({ parent: group, position: "0 0.92 0", size: "0.52 0.05 0.05", color: color, material: neonMaterial(color) });
+}
+
 function createCityTitlePanel() {
-  const panel = makeEntity("a-entity", { position: "0 2.35 1.8", billboard: "" });
+  const panel = makeEntity("a-entity", { position: "0 2.55 15.0", billboard: "" });
   makePlane({
     parent: panel,
-    width: 5.2,
-    height: 1.45,
+    width: 6.4,
+    height: 2.0,
     material: "color: #080713; opacity: 0.86; transparent: true; shader: flat",
   });
-  makeText({ parent: panel, value: "NEON MOB CITY", position: "-2.25 0.45 0.04", width: 4.6, color: COLORS.cyan });
-  makeText({ parent: panel, value: "Objective: Choose a mob base", position: "-2.2 0.03 0.04", width: 4.2, color: COLORS.white });
+  makeText({ parent: panel, value: "NEON MOB CITY", position: "-2.9 0.72 0.04", width: 5.8, color: COLORS.cyan });
+  makeText({ parent: panel, value: `Run Seed: ${Math.floor(state.seed)}`, position: "-2.85 0.32 0.04", width: 5.6, color: COLORS.yellow });
+  makeText({ parent: panel, value: "Objective: Explore the city and choose a mob base", position: "-2.85 -0.02 0.04", width: 5.6, color: COLORS.white });
+  makeText({ parent: panel, value: "Active Base: Robot Factory  |  Locked Bases Visible: 29", position: "-2.85 -0.36 0.04", width: 5.6, color: COLORS.pink });
   refs.cityStateText = makeText({
     parent: panel,
     value: `City State: ${state.cityState}`,
-    position: "-2.2 -0.34 0.04",
-    width: 4.2,
+    position: "-2.85 -0.7 0.04",
+    width: 5.6,
     color: COLORS.yellow,
   });
 }
 
 function createBaseEntrance(config) {
-  const group = makeEntity("a-entity", { position: `${config.x} 0 ${config.z}` });
+  const group = makeEntity("a-entity", {
+    position: `${config.x} 0 ${config.z}`,
+    rotation: `0 ${config.rotation || 0} 0`,
+  });
   const accent = config.accent || config.color;
 
-  makeBox({ parent: group, position: "0 1.3 0", size: "2.4 2.6 0.35", color: "#0B0E18", material: "color: #0B0E18; roughness: 1" });
-  makeBox({ parent: group, position: "0 1.3 0.04", size: "1.48 1.85 0.12", color: config.color, material: neonMaterial(config.color) });
-  makeBox({ parent: group, position: "-1.45 1.05 0.08", size: "0.18 2.1 0.18", color: accent, material: neonMaterial(accent) });
-  makeBox({ parent: group, position: "1.45 1.05 0.08", size: "0.18 2.1 0.18", color: accent, material: neonMaterial(accent) });
+  makeBox({ parent: group, position: "0 1.35 0", size: "2.55 2.7 0.42", color: "#0B0E18", material: "color: #0B0E18; roughness: 1; metalness: 0" });
+  makeBox({ parent: group, position: "0 1.18 0.08", size: "1.42 1.75 0.16", color: config.color, material: neonMaterial(config.color) });
+  makeBox({ parent: group, position: "-1.45 1.05 0.12", size: "0.18 2.05 0.2", color: accent, material: neonMaterial(accent) });
+  makeBox({ parent: group, position: "1.45 1.05 0.12", size: "0.18 2.05 0.2", color: accent, material: neonMaterial(accent) });
 
   const labelPanel = makePlane({
     parent: group,
-    position: "0 2.95 0.08",
-    width: 2.9,
-    height: 0.62,
+    position: "0 3.02 0.12",
+    width: 3.15,
+    height: 0.72,
     material: neonMaterial(config.color),
   });
-  makeText({ parent: labelPanel, value: config.label, position: "-1.22 0.14 0.03", width: 2.45, color: COLORS.black });
+  makeText({ parent: labelPanel, value: config.label.toUpperCase(), position: "-1.43 0.18 0.03", width: 2.86, color: COLORS.black, align: "center", wrapCount: 16 });
 
   const iconPanel = makePlane({
     parent: group,
-    position: "0 1.45 0.13",
-    width: 1.05,
+    position: "0 1.46 0.2",
+    width: 1.08,
     height: 0.62,
     material: "color: #080713; shader: flat",
   });
-  makeText({ parent: iconPanel, value: config.icon, position: "-0.38 0.14 0.03", width: 0.85, color: config.color });
+  makeText({ parent: iconPanel, value: config.icon, position: "-0.46 0.14 0.03", width: 0.92, color: config.color, align: "center", wrapCount: 7 });
 
-  const sub = makeText({ parent: group, value: config.sublabel, position: "-1.03 0.28 0.14", width: 2.1, color: COLORS.white });
+  const sub = makeText({ parent: group, value: config.sublabel, position: "-1.2 0.28 0.22", width: 2.4, color: config.active ? COLORS.yellow : COLORS.white, wrapCount: 14 });
   sub.setAttribute("align", "center");
+  createBaseDetails(group, config, accent);
 
   const target = makeBox({
     parent: group,
-    position: "0 1.1 0.18",
+    position: "0 1.08 0.25",
     size: "1.55 1.95 0.12",
     color: config.color,
     material: `color: ${config.color}; opacity: 0.18; transparent: true; shader: flat`,
@@ -681,11 +1048,49 @@ function createBaseEntrance(config) {
     type: config.active ? "robot" : "locked",
     label: config.label,
     x: config.x,
-    z: config.z + 0.25,
+    z: config.z,
     radius: 1.2,
     active: true,
     nextAllowed: 0,
   });
+}
+
+function createBaseDetails(group, config, accent) {
+  if (["factory", "plant", "range"].includes(config.kind)) {
+    makeCylinder({ parent: group, position: "-0.82 2.15 -0.08", radius: 0.12, height: 1.25, color: accent, material: neonMaterial(accent) });
+    makeCylinder({ parent: group, position: "0.82 2.0 -0.08", radius: 0.1, height: 1.0, color: "#36465D", material: "src: #panel-block; repeat: 1 2; shader: flat" });
+    makeBox({ parent: group, position: "0 0.12 0.48", size: "2.35 0.14 0.18", color: COLORS.yellow, material: "src: #hazard; repeat: 4 1; shader: flat" });
+  } else if (["lab", "zoo", "hospital"].includes(config.kind)) {
+    makeCylinder({ parent: group, position: "-0.82 0.78 0.48", radius: 0.22, height: 1.15, color: COLORS.green, material: `color: ${COLORS.green}; opacity: 0.58; transparent: true; shader: flat` });
+    makeCylinder({ parent: group, position: "0.82 0.78 0.48", radius: 0.22, height: 1.15, color: accent, material: `color: ${accent}; opacity: 0.52; transparent: true; shader: flat` });
+    makeText({ parent: group, value: "!!", position: "-0.16 2.08 0.24", width: 0.35, color: COLORS.yellow, align: "center" });
+  } else if (["casino", "club", "arcade", "theater"].includes(config.kind)) {
+    makeBox({ parent: group, position: "-1.1 0.82 0.45", size: "0.22 1.35 0.22", color: accent, material: neonMaterial(accent) });
+    makeBox({ parent: group, position: "1.1 0.82 0.45", size: "0.22 1.35 0.22", color: accent, material: neonMaterial(accent) });
+    makeBox({ parent: group, position: "0 2.46 0.2", size: "2.3 0.16 0.12", color: accent, material: neonMaterial(accent) });
+  } else if (["tower", "rooftop", "construction"].includes(config.kind)) {
+    makeBox({ parent: group, position: "0 3.95 -0.05", size: "0.32 1.7 0.32", color: "#111827", material: "color: #111827; shader: flat" });
+    makeBox({ parent: group, position: "0 4.82 -0.05", size: "1.35 0.18 0.18", color: accent, material: neonMaterial(accent) });
+    makeBox({ parent: group, position: "0.48 3.62 0.12", size: "0.76 0.42 0.08", color: config.color, material: neonMaterial(config.color) });
+  } else if (["sewer", "station", "prison"].includes(config.kind)) {
+    makeCylinder({ parent: group, position: "0 0.04 0.92", rotation: "-90 0 0", radius: 0.68, height: 0.08, color: accent, material: `color: ${accent}; emissive: ${accent}; emissiveIntensity: 0.45; shader: flat` });
+    makeBox({ parent: group, position: "-0.56 0.36 0.55", size: "0.18 0.72 0.16", color: "#334155", material: "color: #334155; shader: flat" });
+    makeBox({ parent: group, position: "0.56 0.36 0.55", size: "0.18 0.72 0.16", color: "#334155", material: "color: #334155; shader: flat" });
+  } else if (["docks", "highway"].includes(config.kind)) {
+    makeBox({ parent: group, position: "0 0.09 0.92", size: "2.8 0.18 0.72", color: "#0A2633", material: `color: #0A2633; emissive: ${accent}; emissiveIntensity: 0.14; shader: flat` });
+    makeBox({ parent: group, position: "-0.7 0.38 0.72", size: "0.55 0.55 0.55", color: "#293446", material: "src: #panel-block; repeat: 1 1; shader: flat" });
+    makeBox({ parent: group, position: "0.52 0.28 0.85", size: "0.72 0.36 0.48", color: COLORS.orange, material: "src: #hazard; repeat: 2 1; shader: flat" });
+  } else if (config.kind === "vhs") {
+    makeBox({ parent: group, position: "-0.62 1.88 0.38", size: "0.38 0.38 0.12", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+    makeBox({ parent: group, position: "0.68 0.82 0.46", size: "0.46 0.46 0.12", color: COLORS.pink, material: neonMaterial(COLORS.pink) });
+    makeText({ parent: group, value: "TRACKING...", position: "-0.84 2.28 0.24", width: 1.7, color: COLORS.white, align: "center", wrapCount: 12 });
+  } else if (config.kind === "vault") {
+    makeCylinder({ parent: group, position: "0 1.08 0.3", rotation: "90 0 0", radius: 0.62, height: 0.16, color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+    makeText({ parent: group, value: "AI", position: "-0.2 1.25 0.43", width: 0.5, color: COLORS.black, align: "center" });
+  } else {
+    makeBox({ parent: group, position: "-0.95 0.48 0.52", size: "0.5 0.38 0.38", color: accent, material: neonMaterial(accent) });
+    makeBox({ parent: group, position: "0.96 0.48 0.52", size: "0.5 0.38 0.38", color: config.color, material: neonMaterial(config.color) });
+  }
 }
 
 function createPatrol(type, x, z) {
@@ -735,7 +1140,7 @@ function enterRobotFactory() {
 
   selectedSpawns.forEach((spawn) => createEnemy(spawn.type, spawn.x, spawn.z, { activeCombat: true }));
 
-  setMessage("Robot Factory", "Clear the guards. Shoot with trigger, click, or Space.");
+  setMessage("Robot Factory", "Clear the guards. Hold the gun and fire neon bullets.");
   updateHud();
 }
 
@@ -945,8 +1350,14 @@ function tryGrabGun(hand) {
 
   state.gun.heldBy = hand;
   hand.appendChild(state.gun.el);
-  state.gun.el.setAttribute("position", "0 -0.04 -0.34");
-  state.gun.el.setAttribute("rotation", "0 0 0");
+  setGunVisible(true);
+  state.gun.el.setAttribute("position", "0 -0.08 -0.25");
+  state.gun.el.setAttribute("rotation", "-8 0 0");
+  state.gun.el.setAttribute("scale", "1 1 1");
+  state.gun.el.object3D.position.set(0, -0.08, -0.25);
+  state.gun.el.object3D.rotation.set(THREE.MathUtils.degToRad(-8), 0, 0);
+  state.gun.el.object3D.scale.set(1, 1, 1);
+  state.gun.el.object3D.updateMatrixWorld(true);
   setMessage("Gun grabbed", "Trigger fires neon bullets. Release grip to drop it.");
 }
 
@@ -955,16 +1366,10 @@ function releaseGun(hand) {
     return;
   }
 
-  const worldPosition = new THREE.Vector3();
-  const worldQuaternion = new THREE.Quaternion();
-  state.gun.el.object3D.getWorldPosition(worldPosition);
-  state.gun.el.object3D.getWorldQuaternion(worldQuaternion);
-
-  refs.scene.appendChild(state.gun.el);
-  worldPosition.y = Math.max(worldPosition.y, 0.65);
-  state.gun.el.setAttribute("position", vecToAttr(worldPosition));
-  state.gun.el.setAttribute("rotation", quatToRotationAttr(worldQuaternion));
   state.gun.heldBy = null;
+  refs.scene.appendChild(state.gun.el);
+  setGunVisible(true);
+  placeGunInFrontOfPlayer(1.0);
   setMessage("Gun dropped", "Grip near the gun with either hand to pick it up again.");
 }
 
@@ -986,8 +1391,10 @@ function placeGunInFrontOfPlayer(distance) {
 
   const position = new THREE.Vector3(rigPosition.x, 1.15, rigPosition.z).addScaledVector(forward, distance);
   const yaw = THREE.MathUtils.radToDeg(Math.atan2(-forward.x, -forward.z));
+  setGunVisible(true);
   state.gun.el.setAttribute("position", vecToAttr(position));
   state.gun.el.setAttribute("rotation", `0 ${yaw.toFixed(2)} 0`);
+  state.gun.el.setAttribute("scale", "1 1 1");
 }
 
 function updateGunDrop() {
@@ -999,6 +1406,21 @@ function updateGunDrop() {
   if (pos.y < 0.65) {
     pos.y = 0.65;
   }
+}
+
+function setGunVisible(visible) {
+  if (!state.gun.el) {
+    return;
+  }
+
+  state.gun.el.setAttribute("visible", visible ? "true" : "false");
+  state.gun.el.object3D.visible = visible;
+  state.gun.el.object3D.scale.set(1, 1, 1);
+  state.gun.el.querySelectorAll("*").forEach((child) => {
+    child.setAttribute("visible", visible ? "true" : "false");
+    child.object3D.visible = visible;
+    child.object3D.scale.set(1, 1, 1);
+  });
 }
 
 function shootHeldGun(hand) {
@@ -1161,7 +1583,7 @@ function handleTarget(target, point) {
     if (target.portalId === "robot") {
       enterRobotFactory();
     } else {
-      setMessage("Locked base", "This mob base is a Phase 1 placeholder.");
+      setMessage("Locked base", "Landmark is visible for the full city prototype. Only Robot Factory is playable now.");
     }
   } else if (target.type === "choice") {
     chooseFactoryOutcome(target.choiceId);
@@ -1282,18 +1704,18 @@ function chooseFactoryOutcome(choiceId) {
 // Return-to-city flow: rebuild the hub and keep the selected city-state label.
 function returnToCity() {
   buildCityHub();
-  setMessage("Back in the hub", `City State: ${state.cityState}. Other bases remain locked for Phase 1.`);
+  setMessage("Back in the city", `City State: ${state.cityState}. All 30 base landmarks are visible; Robot Factory remains playable.`);
 }
 
 function updateHud() {
   const enemyLabel = state.mode === "base"
     ? `Enemies: ${state.enemies.length}`
-    : "Enemies: Hub patrols";
+    : `City: ${BASE_LOCATIONS.length} bases, ${state.npcs.length} NPCs`;
   const objective = state.mode === "base"
     ? state.baseCleared
       ? "Objective: Choose reward, return to city"
       : "Objective: Clear the Robot Factory"
-    : "Objective: Choose a mob base";
+    : "Objective: Explore the city and choose a mob base";
 
   refs.hudHealth.textContent = heartsLabel();
   refs.hudObjective.textContent = objective;
@@ -1348,6 +1770,36 @@ function createPixelTextures() {
     ctx.fillStyle = "rgba(0, 245, 255, 0.24)";
     ctx.fillRect(31, 0, 2, 64);
     ctx.fillRect(0, 31, 64, 2);
+  });
+
+  makeTexture("road-pixel", 64, 64, (ctx) => {
+    ctx.fillStyle = "#070913";
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = "#111827";
+    for (let i = 0; i < 64; i += 8) {
+      ctx.fillRect(i, 0, 2, 64);
+      ctx.fillRect(0, i, 64, 1);
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(8, 12, 10, 2);
+    ctx.fillRect(34, 42, 14, 2);
+  });
+
+  makeTexture("sidewalk-tile", 64, 64, (ctx) => {
+    ctx.fillStyle = "#161128";
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.strokeStyle = "#2B2140";
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= 64; i += 16) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, 64);
+      ctx.moveTo(0, i);
+      ctx.lineTo(64, i);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(0,245,255,0.18)";
+    ctx.fillRect(30, 0, 2, 64);
   });
 
   makeTexture("factory-floor", 64, 64, (ctx) => {
@@ -1462,6 +1914,29 @@ function createPixelTextures() {
     ctx.fillRect(13, 88, 16, 5);
     ctx.fillRect(35, 88, 16, 5);
   });
+
+  makeNpcTexture("npc-civilian", "#1B2030", COLORS.cyan, "#F3B591");
+  makeNpcTexture("npc-mob-worker", "#111111", COLORS.pink, "#D9B59B");
+  makeNpcTexture("npc-vendor", "#342018", COLORS.yellow, "#E6B37A");
+  makeNpcTexture("npc-robot-ped", "#2F3B4C", COLORS.cyan, "#B8F8FF");
+  makeNpcTexture("npc-mutant", "#1F3424", COLORS.green, "#83FF94");
+}
+
+function makeNpcTexture(id, body, accent, skin) {
+  makeTexture(id, 48, 72, (ctx) => {
+    ctx.clearRect(0, 0, 48, 72);
+    ctx.fillStyle = body;
+    ctx.fillRect(16, 24, 16, 28);
+    ctx.fillStyle = skin;
+    ctx.fillRect(17, 8, 14, 15);
+    ctx.fillStyle = accent;
+    ctx.fillRect(13, 19, 22, 4);
+    ctx.fillRect(18, 34, 12, 4);
+    ctx.fillStyle = "#05050B";
+    ctx.fillRect(13, 52, 8, 16);
+    ctx.fillRect(27, 52, 8, 16);
+    ctx.fillRect(14, 4, 20, 5);
+  });
 }
 
 function makeTexture(id, width, height, draw) {
@@ -1518,6 +1993,20 @@ function makePlane(options) {
   if (options.material) attrs.material = options.material;
   if (options.billboard !== undefined) attrs.billboard = options.billboard;
   return makeEntity("a-plane", attrs, options.parent || refs.world);
+}
+
+function makeCylinder(options) {
+  const attrs = {
+    position: options.position || "0 0 0",
+    rotation: options.rotation || "0 0 0",
+    radius: options.radius || 0.5,
+    height: options.height || 1,
+    color: options.color || COLORS.white,
+    "segments-radial": options.segmentsRadial || 8,
+  };
+
+  if (options.material) attrs.material = options.material;
+  return makeEntity("a-cylinder", attrs, options.parent || refs.world);
 }
 
 function makeText(options) {
