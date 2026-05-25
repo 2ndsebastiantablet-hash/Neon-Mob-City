@@ -16,14 +16,15 @@ The project keeps the basic static A-Frame/WebXR setup from the previous
 ## Current Prototype Features
 
 - Randomized neon city hub generated on each page load
-- Dark road grid with sidewalks, side streets, alleys, and neon lane lines
-- Blocky buildings with varied heights, glowing windows, skyline silhouettes, signs, and billboards
+- Dark road grid with clear streets, sidewalks, side streets, alleys, and neon lane lines
+- Blocky regular buildings placed on lots behind sidewalks, with varied heights and glowing windows
 - Non-interactive shop exteriors: Gun Shop, Upgrade Clinic, Repair Garage, Black Market Door, Neon Diner, Pawn Shop, Arcade Shop, and Mod Shop
 - 3D blocky walking NPCs: civilians, mob workers, vendors, robot pedestrians, and mutant weirdos
 - Looping traffic cars that stay on road lanes
-- Parked cars, street lamps, vending machines, trash cans, crates, sewer grates, barriers, rooftop antennas, and other city props
-- Simple player collision against buildings, cars, lamp posts, major props, NPCs, and landmarks
+- Street lamps, vending machines, trash cans, crates, sewer grates, barriers, rooftop antennas, and other city props
+- Simple player collision against buildings, cars, major props, NPCs, and landmarks
 - Four-sided purple skyline panels plus distant silhouette buildings around the whole city
+- Border billboards with support frames placed around the city perimeter
 - All 30 mob base locations represented as visible locked/active landmarks
 - One playable Robot Factory interior
 - Simple room/hallway layout with cover blocks
@@ -56,7 +57,7 @@ Debug logs print `Gun grabbed left`, `Gun grabbed right`, and `Gun released` for
 
 ## Randomized City
 
-The city uses a lightweight seeded generator in `main.js`. On each page load it shuffles base slots within broad zones, varies building heights/window patterns, changes prop/NPC placement, loops car traffic on road lanes, and rotates billboard/sign content.
+The city uses a lightweight seeded generator in `main.js`. On each page load it shuffles base slots within broad zones, places regular buildings only on valid lots, varies building heights/window patterns, changes prop/NPC placement, loops car traffic on road lanes, and rotates perimeter billboard content.
 
 Zones currently include downtown, industrial, entertainment, underground/sewer, rooftop/high-rise, weird/secret, and waterfront/docks areas. This is still a visual prototype, not the full roguelike city simulation.
 

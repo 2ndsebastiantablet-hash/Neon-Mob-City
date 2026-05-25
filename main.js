@@ -161,11 +161,6 @@ const TRAFFIC_PATHS = [
   { axis: "x", z: -32.9, start: 24, end: -24, lane: -0.9 },
 ];
 
-const REGULAR_BUILDING_SIGNS = [
-  "APTS", "DATA OFFICE", "NOIR HOTEL", "NOODLE BAR", "PARKING", "WAREHOUSE",
-  "BYTE LOFTS", "CYBER LAUNDRY", "PIXEL PLAZA", "ALLEY MART", "SLEEP PODS", "RADIO REPAIR",
-];
-
 const state = {
   mode: "city",
   seed: Date.now() % 100000,
@@ -225,7 +220,6 @@ function init() {
     hudObjective: document.getElementById("hudObjective"),
     hudEnemies: document.getElementById("hudEnemies"),
     hudCityState: document.getElementById("hudCityState"),
-    vrHudText: document.getElementById("vrHudText"),
   };
 
   if (!refs.scene || !refs.world || !refs.camera || !window.AFRAME) {
@@ -737,7 +731,7 @@ function buildCityHub() {
 
   const basePlacements = generateBasePlacements();
   const shopPlacements = generateShopPlacements();
-  const occupied = basePlacements.concat(shopPlacements).map((item) => ({ x: item.x, z: item.z, radius: 2.8 }));
+  const occupied = basePlacements.concat(shopPlacements).map((item) => ({ x: item.x, z: item.z, radius: 1.7 }));
 
   createCityRoadGrid();
   createSkyline();
@@ -834,33 +828,71 @@ function createCityRoadGrid() {
 
 function createGeneratedBuildings(occupied) {
   const cells = [];
-  [-15, -5, 5, 15].forEach((x) => {
+  for (let xi = 0; xi < ROAD_X.length - 1; xi += 1) {
+    for (let zi = 0; zi < ROAD_Z.length - 1; zi += 1) {
+      cells.push({
+        x: (ROAD_X[xi] + ROAD_X[xi + 1]) / 2,
+        z: (ROAD_Z[zi] + ROAD_Z[zi + 1]) / 2,
+      });
+    }
+  }
+
+  [-25, 25].forEach((x) => {
     [13, 3, -7, -17, -27].forEach((z) => cells.push({ x, z }));
   });
 
   shuffle(cells, rand).forEach((cell) => {
-    const count = 3 + Math.floor(rand() * 3);
+    const count = 4 + Math.floor(rand() * 4);
     for (let i = 0; i < count; i += 1) {
-      const x = cell.x + (rand() - 0.5) * 5.4;
-      const z = cell.z + (rand() - 0.5) * 5.4;
-      if (isNearOccupied(x, z, occupied, 2.15)) {
+      const heightBias = cell.z < -20 ? 3.5 : 1.6;
+      const h = heightBias + 1.6 + rand() * 5.2;
+      const w = 0.8 + rand() * 1.15;
+      const d = 0.8 + rand() * 1.15;
+      const spot = findBuildingSpot(cell, w, d, occupied);
+      if (!spot) {
         continue;
       }
 
-      const heightBias = z < -20 ? 3.5 : 1.6;
-      const h = heightBias + 1.6 + rand() * 5.2;
-      const w = 1.15 + rand() * 1.55;
-      const d = 1.15 + rand() * 1.55;
       const windowColor = [COLORS.cyan, COLORS.pink, COLORS.yellow, COLORS.green][Math.floor(rand() * 4)];
-      createBuilding(x, z, w, h, d, windowColor);
-      if (rand() > 0.45) {
-        createRegularBuildingSign(x, z, w, d, h, REGULAR_BUILDING_SIGNS[Math.floor(rand() * REGULAR_BUILDING_SIGNS.length)], windowColor);
-      }
+      createBuilding(spot.x, spot.z, w, h, d, windowColor);
       if (rand() > 0.62) {
-        createRooftopAntenna(x, h, z, windowColor);
+        createRooftopAntenna(spot.x, h, spot.z, windowColor);
       }
     }
   });
+}
+
+function findBuildingSpot(cell, width, depth, occupied) {
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const x = cell.x + (rand() - 0.5) * 2.1;
+    const z = cell.z + (rand() - 0.5) * 2.1;
+    if (
+      isClearOfRoads(x, z, width, depth)
+      && !isNearOccupied(x, z, occupied, 1.55)
+      && !isNearSolidBox(x, z, width, depth, 0.18)
+    ) {
+      return { x, z };
+    }
+  }
+  return null;
+}
+
+function isClearOfRoads(x, z, width, depth) {
+  const roadHalf = 2.15;
+  const clearance = 0.85;
+  const nearestRoadX = Math.min(...ROAD_X.map((roadX) => Math.abs(x - roadX)));
+  const nearestRoadZ = Math.min(...ROAD_Z.map((roadZ) => Math.abs(z - roadZ)));
+  return (
+    nearestRoadX > roadHalf + width / 2 + clearance
+    && nearestRoadZ > roadHalf + depth / 2 + clearance
+  );
+}
+
+function isNearSolidBox(x, z, width, depth, clearance) {
+  return state.solidBoxes.some((box) => (
+    Math.abs(x - box.x) < width / 2 + box.halfX + clearance
+    && Math.abs(z - box.z) < depth / 2 + box.halfZ + clearance
+  ));
 }
 
 function isNearOccupied(x, z, occupied, radius) {
@@ -966,12 +998,13 @@ function createCityBuildings() {
 }
 
 function createBuilding(x, z, width, height, depth, windowColor) {
-  makeBox({
+  const building = makeBox({
     position: `${x} ${height / 2} ${z}`,
     size: `${width} ${height} ${depth}`,
     color: COLORS.black,
     material: "color: #05050B; roughness: 1; metalness: 0",
   });
+  building.classList.add("regular-building");
   addSolidBox(x, z, width + 0.18, depth + 0.18, "regular-building");
 
   const faceZ = z + (z < -3 ? depth / 2 + 0.02 : -depth / 2 - 0.02);
@@ -1022,16 +1055,20 @@ function createShopExterior(shop) {
 
 function createBillboards() {
   const billboardSlots = [
-    { x: -18, y: 5.6, z: 6, rot: 75 }, { x: 18, y: 5.8, z: 5, rot: -75 },
-    { x: -17, y: 6.2, z: -12, rot: 90 }, { x: 17, y: 6.0, z: -13, rot: -90 },
-    { x: -7, y: 7.0, z: -27, rot: 180 }, { x: 7, y: 6.8, z: -27, rot: 180 },
-    { x: 0, y: 4.4, z: 10, rot: 180 }, { x: 0, y: 5.5, z: -35, rot: 0 },
+    { x: -26.5, y: 6.2, z: 18, rot: 90 }, { x: -26.5, y: 6.8, z: 5, rot: 90 },
+    { x: -26.5, y: 6.4, z: -10, rot: 90 }, { x: -26.5, y: 6.9, z: -25, rot: 90 },
+    { x: 26.5, y: 6.4, z: 18, rot: -90 }, { x: 26.5, y: 6.9, z: 5, rot: -90 },
+    { x: 26.5, y: 6.2, z: -10, rot: -90 }, { x: 26.5, y: 6.7, z: -25, rot: -90 },
+    { x: -15, y: 6.4, z: -38.5, rot: 0 }, { x: 0, y: 6.9, z: -38.5, rot: 0 },
+    { x: 15, y: 6.2, z: -38.5, rot: 0 }, { x: -15, y: 6.4, z: 23.5, rot: 180 },
+    { x: 0, y: 6.7, z: 23.5, rot: 180 }, { x: 15, y: 6.3, z: 23.5, rot: 180 },
   ];
 
   shuffle(billboardSlots, rand).forEach((slot, index) => {
     const text = BILLBOARD_COPY[index % BILLBOARD_COPY.length];
     const color = [COLORS.cyan, COLORS.pink, COLORS.yellow, COLORS.green][index % 4];
     const group = makeEntity("a-entity", { position: `${slot.x} ${slot.y} ${slot.z}`, rotation: `0 ${slot.rot} 0` });
+    group.classList.add("border-billboard");
     makeBox({ parent: group, position: "0 -0.16 -0.04", size: "3.5 0.16 0.12", color: "#22283D", material: "color: #22283D; shader: flat" });
     makeBox({ parent: group, position: "-1.35 -2.35 -0.08", size: "0.12 4.4 0.12", color: "#273449", material: "color: #273449; shader: flat" });
     makeBox({ parent: group, position: "1.35 -2.35 -0.08", size: "0.12 4.4 0.12", color: "#273449", material: "color: #273449; shader: flat" });
@@ -1042,17 +1079,10 @@ function createBillboards() {
       makeBox({ parent: group, position: "-1.65 -0.42 0.08", size: "0.18 0.32 0.08", color: color, material: neonMaterial(color) });
       makeBox({ parent: group, position: "1.65 -0.42 0.08", size: "0.18 0.32 0.08", color: color, material: neonMaterial(color) });
     }
-    addSolidBox(slot.x, slot.z, 0.55, 0.55, "billboard-support");
   });
 }
 
 function createCityProps() {
-  for (let i = 0; i < 18; i += 1) {
-    const x = [-22.1, -17.9, -12.1, -7.9, -2.1, 2.1, 7.9, 12.1, 17.9, 22.1][Math.floor(rand() * 10)];
-    const z = 16 - Math.floor(rand() * 13) * 4;
-    createParkedCar(x, z + (rand() - 0.5) * 1.8, rand() > 0.5 ? 0 : 90);
-  }
-
   for (let i = 0; i < 28; i += 1) {
     const x = -24 + rand() * 48;
     const z = -35 + rand() * 52;
@@ -1067,33 +1097,6 @@ function createCityProps() {
     const z = 16 - i * 3.2;
     createStreetLamp(x, z, i % 3 === 0 ? COLORS.pink : COLORS.cyan);
   }
-}
-
-function createRegularBuildingSign(x, z, width, depth, height, label, color) {
-  const frontSouth = z < -3;
-  const signZ = z + (frontSouth ? depth / 2 + 0.05 : -depth / 2 - 0.05);
-  const rotation = frontSouth ? "0 0 0" : "0 180 0";
-  const signY = Math.min(height - 0.35, 2.1 + rand() * 1.4);
-  const sign = makePlane({
-    position: `${x} ${signY} ${signZ}`,
-    rotation,
-    width: Math.min(1.8, width + 0.35),
-    height: 0.42,
-    material: neonMaterial(color),
-  });
-  makeText({ parent: sign, value: label, position: "-0.78 0.1 0.03", width: 1.55, color: COLORS.black, align: "center", wrapCount: 12 });
-  makeBox({ position: `${x - Math.min(width / 2, 0.8)} ${signY} ${signZ - (frontSouth ? 0.04 : -0.04)}`, size: "0.06 0.55 0.06", color: "#273449", material: "color: #273449; shader: flat" });
-  makeBox({ position: `${x + Math.min(width / 2, 0.8)} ${signY} ${signZ - (frontSouth ? 0.04 : -0.04)}`, size: "0.06 0.55 0.06", color: "#273449", material: "color: #273449; shader: flat" });
-}
-
-function createParkedCar(x, z, rotation) {
-  const color = [COLORS.pink, COLORS.cyan, COLORS.yellow, COLORS.green][Math.floor(rand() * 4)];
-  const group = makeEntity("a-entity", { position: `${x} 0 ${z}`, rotation: `0 ${rotation} 0` });
-  addSolidBox(x, z, rotation === 0 ? 1.4 : 2.2, rotation === 0 ? 2.2 : 1.4, "parked-car");
-  makeBox({ parent: group, position: "0 0.28 0", size: "1.25 0.38 2.05", color: "#101626", material: "color: #101626; shader: flat" });
-  makeBox({ parent: group, position: "0 0.55 -0.12", size: "0.86 0.34 0.88", color, material: neonMaterial(color) });
-  makeBox({ parent: group, position: "-0.68 0.23 0.62", size: "0.08 0.18 0.42", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
-  makeBox({ parent: group, position: "0.68 0.23 0.62", size: "0.08 0.18 0.42", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
 }
 
 function createSmallProp(x, z, index) {
@@ -1120,7 +1123,6 @@ function createSmallProp(x, z, index) {
 
 function createStreetLamp(x, z, color) {
   const group = makeEntity("a-entity", { position: `${x} 0 ${z}` });
-  addSolidCircle(x, z, 0.22, "street-lamp");
   makeCylinder({ parent: group, position: "0 1.05 0", radius: 0.035, height: 2.1, color: "#3B4658", material: "color: #3B4658; shader: flat" });
   makeBox({ parent: group, position: "0 2.12 0", size: "0.48 0.12 0.48", color, material: neonMaterial(color) });
 }
@@ -1156,9 +1158,6 @@ function createNpc(def, x, z, path, index) {
   rightArm.classList.add("npc-right-arm");
   leftLeg.classList.add("npc-left-leg");
   rightLeg.classList.add("npc-right-leg");
-  if (def.id === "vendor") {
-    makeBox({ parent: group, position: "0.52 0.45 -0.05", size: "0.5 0.3 0.42", color: def.color, material: neonMaterial(def.color) });
-  }
   makePlane({ parent: group, position: "0 0.03 0", rotation: "-90 0 0", width: 0.58, height: 0.36, material: "color: #000000; opacity: 0.32; transparent: true; shader: flat" });
   group.setAttribute("npc-wander", wanderConfig);
   state.npcs.push(group);
@@ -1232,22 +1231,21 @@ function createRooftopAntenna(x, height, z, color) {
 }
 
 function createCityTitlePanel() {
-  const panel = makeEntity("a-entity", { position: "0 2.55 15.0", billboard: "" });
+  const panel = makeEntity("a-entity", { position: "-5.8 1.85 15.7", billboard: "" });
   makePlane({
     parent: panel,
-    width: 6.4,
-    height: 2.0,
+    width: 3.9,
+    height: 1.25,
     material: "color: #080713; opacity: 0.86; transparent: true; shader: flat",
   });
-  makeText({ parent: panel, value: "NEON MOB CITY", position: "-2.9 0.72 0.04", width: 5.8, color: COLORS.cyan });
-  makeText({ parent: panel, value: `Run Seed: ${Math.floor(state.seed)}`, position: "-2.85 0.32 0.04", width: 5.6, color: COLORS.yellow });
-  makeText({ parent: panel, value: "Objective: Explore the city and choose a mob base", position: "-2.85 -0.02 0.04", width: 5.6, color: COLORS.white });
-  makeText({ parent: panel, value: "Active Base: Robot Factory  |  Locked Bases Visible: 29", position: "-2.85 -0.36 0.04", width: 5.6, color: COLORS.pink });
+  makeText({ parent: panel, value: "NEON MOB CITY", position: "-1.72 0.42 0.04", width: 3.4, color: COLORS.cyan });
+  makeText({ parent: panel, value: `Seed ${Math.floor(state.seed)}`, position: "-1.68 0.08 0.04", width: 3.25, color: COLORS.yellow });
+  makeText({ parent: panel, value: "Explore. Robot Factory active.", position: "-1.68 -0.22 0.04", width: 3.25, color: COLORS.white, wrapCount: 24 });
   refs.cityStateText = makeText({
     parent: panel,
     value: `City State: ${state.cityState}`,
-    position: "-2.85 -0.7 0.04",
-    width: 5.6,
+    position: "-1.68 -0.5 0.04",
+    width: 3.25,
     color: COLORS.yellow,
   });
 }
@@ -1615,7 +1613,10 @@ function tryGrabGun(hand) {
   state.gun.el.setAttribute("scale", "1 1 1");
   state.gun.el.object3D.scale.set(1, 1, 1);
   updateHeldGun();
+  console.log("Gun grabbed");
   console.log(`Gun grabbed ${state.gun.handName}`);
+  console.log("Gun visible state: true");
+  console.log(`Gun position after grab: ${vecToAttr(state.gun.el.object3D.position)}`);
   setMessage("Gun grabbed", "Trigger fires neon bullets. Release grip to drop it.");
 }
 
@@ -1644,7 +1645,7 @@ function updateHeldGun() {
 
   const handPosition = new THREE.Vector3();
   const handQuaternion = new THREE.Quaternion();
-  const localOffset = new THREE.Vector3(0, -0.08, -0.25);
+  const localOffset = new THREE.Vector3(0, -0.1, -0.48);
   const localRotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(
     THREE.MathUtils.degToRad(-8),
     0,
@@ -1659,6 +1660,8 @@ function updateHeldGun() {
   state.gun.el.object3D.quaternion.copy(handQuaternion.multiply(localRotation));
   state.gun.el.object3D.scale.set(1, 1, 1);
   setGunVisible(true);
+  state.gun.el.setAttribute("position", vecToAttr(state.gun.el.object3D.position));
+  state.gun.el.setAttribute("scale", "1 1 1");
   state.gun.el.object3D.updateMatrixWorld(true);
 }
 
@@ -2014,13 +2017,6 @@ function updateHud() {
   refs.hudObjective.textContent = objective;
   refs.hudEnemies.textContent = enemyLabel;
   refs.hudCityState.textContent = `City State: ${state.cityState}`;
-
-  if (refs.vrHudText) {
-    refs.vrHudText.setAttribute(
-      "value",
-      `NEON MOB CITY\n${heartsLabel()}\n${enemyLabel}\n${state.dead ? "YOU DIED" : state.cityState}`
-    );
-  }
 
   if (refs.cityStateText && refs.cityStateText.isConnected) {
     refs.cityStateText.setAttribute("value", `City State: ${state.cityState}`);

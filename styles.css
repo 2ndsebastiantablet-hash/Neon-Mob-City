@@ -17,15 +17,16 @@ body {
   z-index: 10;
   display: grid;
   gap: 5px;
-  max-width: 340px;
-  padding: 10px 12px;
+  max-width: 270px;
+  padding: 8px 10px;
   border: 1px solid rgba(0, 245, 255, 0.48);
   border-radius: 8px;
   color: #f8f7ff;
   background: rgba(5, 4, 16, 0.78);
   box-shadow: 0 0 18px rgba(255, 43, 214, 0.28);
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1.4;
+  pointer-events: none;
 }
 
 #note strong {
@@ -36,4 +37,11 @@ body {
 
 #hudCityState {
   color: #fff07a;
+}
+
+#hudHealth,
+#hudObjective,
+#hudEnemies,
+#hudCityState {
+  display: none;
 }
