@@ -1,6 +1,6 @@
 // Neon Mob City Phase 1
-// Static A-Frame/WebXR prototype: city hub, one robot factory base, simple AI,
-// physical pickup gun, visible bullets, clear choices, and return-to-city flow.
+// Static A-Frame/WebXR prototype: generated city hub, Street Tax Office map
+// chunks, physical pickup gun, visible bullets, and return-to-city flow.
 
 const COLORS = {
   black: "#04030B",
@@ -71,8 +71,8 @@ const BILLBOARD_COPY = [
 ];
 
 const BASE_LOCATIONS = [
-  { id: "street-tax-office", label: "Street Tax Office", zone: "downtown", color: COLORS.yellow, icon: "TAX", kind: "office" },
-  { id: "robot", label: "Robot Factory", zone: "industrial", color: COLORS.cyan, icon: "BOT", kind: "factory", active: true },
+  { id: "street-tax-office", label: "Street Tax Office", zone: "downtown", color: COLORS.yellow, accent: COLORS.pink, icon: "TAX", kind: "office", active: true },
+  { id: "robot", label: "Robot Factory", zone: "industrial", color: COLORS.cyan, icon: "BOT", kind: "factory" },
   { id: "neon-casino", label: "Neon Casino", zone: "entertainment", color: COLORS.pink, accent: COLORS.yellow, icon: "$$$", kind: "casino" },
   { id: "mutant-lab", label: "Mutant Lab", zone: "weird", color: COLORS.green, accent: COLORS.purple, icon: "BIO", kind: "lab" },
   { id: "police-armory", label: "Corrupt Police Armory", zone: "downtown", color: "#5A7DFF", accent: COLORS.red, icon: "POL", kind: "armory" },
@@ -101,6 +101,29 @@ const BASE_LOCATIONS = [
   { id: "tower-restaurant", label: "Moonlight Tower Restaurant", zone: "rooftop", color: COLORS.yellow, accent: COLORS.pink, icon: "MOON", kind: "tower" },
   { id: "ai-bank-vault", label: "AI Bank Vault", zone: "downtown", color: COLORS.yellow, accent: COLORS.cyan, icon: "AI$", kind: "vault" },
   { id: "vhs-dimension", label: "Secret VHS Dimension", zone: "weird", color: COLORS.pink, accent: COLORS.cyan, icon: "VHS", kind: "vhs" },
+];
+
+const STREET_TAX_MAIN_CHUNKS = [
+  { id: "security", label: "Security Checkpoint", width: 7, depth: 6, builder: "security" },
+  { id: "cubicles", label: "Cubicle Maze", width: 8, depth: 7, builder: "cubicles" },
+  { id: "hall-straight", label: "Long Office Hallway", width: 5, depth: 7, builder: "hallStraight" },
+  { id: "hall-l", label: "L-Shaped Hallway", width: 7, depth: 7, builder: "hallL" },
+  { id: "hall-t", label: "T-Junction Hallway", width: 8, depth: 7, builder: "hallT" },
+  { id: "records", label: "Records Room", width: 8, depth: 7, builder: "records" },
+  { id: "payment", label: "Payment Counter", width: 8, depth: 6, builder: "payment" },
+  { id: "manager", label: "Manager Office", width: 7, depth: 6, builder: "manager" },
+  { id: "call-center", label: "Illegal Call Center", width: 9, depth: 7, builder: "callCenter" },
+  { id: "printer", label: "Printer Room", width: 8, depth: 6, builder: "printer" },
+  { id: "audit", label: "Audit Chamber", width: 8, depth: 7, builder: "audit" },
+  { id: "collection", label: "Collection Room", width: 8, depth: 7, builder: "collection" },
+  { id: "stairwell", label: "Stairwell Elevator", width: 6, depth: 6, builder: "stairwell" },
+];
+
+const STREET_TAX_SIDE_CHUNKS = [
+  { id: "break-room", label: "Break Room", width: 5, depth: 5, builder: "breakRoom" },
+  { id: "evidence", label: "Hidden Evidence Closet", width: 4.5, depth: 4.5, builder: "evidence" },
+  { id: "manager-side", label: "Manager Office", width: 5.5, depth: 5, builder: "manager" },
+  { id: "records-side", label: "Records Annex", width: 5.5, depth: 5, builder: "records" },
 ];
 
 const BASE_SLOTS = {
@@ -178,6 +201,8 @@ const state = {
   solidBoxes: [],
   solidCircles: [],
   baseLocations: [],
+  streetTaxOfficeSeed: 0,
+  currentLevelChunks: [],
   targets: [],
   enemyShots: [],
   bullets: [],
@@ -234,6 +259,9 @@ function init() {
   state.gun.el = refs.gun;
   state.gun.muzzle = refs.gunMuzzle;
   buildCityHub();
+  if (window.location.hash === "#street-tax-office") {
+    setTimeout(() => enterStreetTaxOffice(), 0);
+  }
   state.ready = true;
 
   refs.scene.addEventListener("enter-vr", () => {
@@ -241,7 +269,7 @@ function init() {
   });
 
   refs.scene.addEventListener("exit-vr", () => {
-    setMessage("Neon Mob City", "Open in Meta Quest Browser, press Enter VR, then enter the Robot Factory.");
+    setMessage("Neon Mob City", "Open in Meta Quest Browser, press Enter VR, then enter the Street Tax Office.");
   });
 }
 
@@ -252,6 +280,11 @@ function ensureComponentWiring() {
   refs.scene.setAttribute("building-generator", "");
   refs.scene.setAttribute("base-location-manager", "");
   refs.scene.setAttribute("neon-sign-generator", "");
+  refs.scene.setAttribute("street-tax-office-generator", "");
+  refs.scene.setAttribute("level-chunk", "");
+  refs.scene.setAttribute("chunk-connector", "");
+  refs.scene.setAttribute("base-entry-handler", "");
+  refs.scene.setAttribute("return-to-city-handler", "");
   refs.rig.setAttribute("player-movement", "");
   refs.rig.setAttribute("snap-turn", "");
   refs.rig.setAttribute("player-health", "");
@@ -325,6 +358,26 @@ function registerComponents() {
 
   if (!AFRAME.components["neon-sign-generator"]) {
     AFRAME.registerComponent("neon-sign-generator", {});
+  }
+
+  if (!AFRAME.components["street-tax-office-generator"]) {
+    AFRAME.registerComponent("street-tax-office-generator", {});
+  }
+
+  if (!AFRAME.components["level-chunk"]) {
+    AFRAME.registerComponent("level-chunk", {});
+  }
+
+  if (!AFRAME.components["chunk-connector"]) {
+    AFRAME.registerComponent("chunk-connector", {});
+  }
+
+  if (!AFRAME.components["base-entry-handler"]) {
+    AFRAME.registerComponent("base-entry-handler", {});
+  }
+
+  if (!AFRAME.components["return-to-city-handler"]) {
+    AFRAME.registerComponent("return-to-city-handler", {});
   }
 
   if (!AFRAME.components["npc-wander"]) {
@@ -542,7 +595,7 @@ function movePlayerWithCollision(direction, distance) {
 }
 
 function wouldCollide(position) {
-  if (state.mode !== "city") {
+  if (state.mode !== "city" && state.mode !== "street-tax-office") {
     return false;
   }
 
@@ -666,11 +719,13 @@ function updatePortalZones(time) {
     }
 
     portal.nextAllowed = time + 1200;
-    if (portal.type === "robot") {
+    if (portal.type === "street-tax-office") {
+      enterStreetTaxOffice();
+    } else if (portal.type === "robot") {
       enterRobotFactory();
     } else if (portal.type === "locked") {
       setMessage(portal.label, "This mob base is locked in Phase 1.");
-    } else if (portal.type === "return" && state.baseCleared) {
+    } else if (portal.type === "return" && (state.baseCleared || state.mode === "street-tax-office")) {
       returnToCity();
     }
   });
@@ -701,7 +756,7 @@ function restartGame() {
   state.baseCleared = false;
   clearBullets();
   buildCityHub();
-  setMessage("Neon Mob City", "Run restarted. Grip the gun, then choose the Robot Factory.");
+  setMessage("Neon Mob City", "Run restarted. Grip the gun, then choose the Street Tax Office.");
 }
 
 // City hub generation: a seeded visual city pass. Each page load gets a new
@@ -746,7 +801,7 @@ function buildCityHub() {
   placeGunInFrontOfPlayer(1.75);
 
   updateHud();
-  setMessage("Neon Mob City", "Explore the randomized city. Robot Factory is the active test base.");
+  setMessage("Neon Mob City", "Explore the randomized city. Street Tax Office is the active test base.");
 }
 
 function generateBasePlacements() {
@@ -1240,7 +1295,7 @@ function createCityTitlePanel() {
   });
   makeText({ parent: panel, value: "NEON MOB CITY", position: "-1.72 0.42 0.04", width: 3.4, color: COLORS.cyan });
   makeText({ parent: panel, value: `Seed ${Math.floor(state.seed)}`, position: "-1.68 0.08 0.04", width: 3.25, color: COLORS.yellow });
-  makeText({ parent: panel, value: "Explore. Robot Factory active.", position: "-1.68 -0.22 0.04", width: 3.25, color: COLORS.white, wrapCount: 24 });
+  makeText({ parent: panel, value: "Explore. Street Tax Office active.", position: "-1.68 -0.22 0.04", width: 3.25, color: COLORS.white, wrapCount: 24 });
   refs.cityStateText = makeText({
     parent: panel,
     value: `City State: ${state.cityState}`,
@@ -1296,10 +1351,11 @@ function createBaseEntrance(config) {
   addTarget(target, {
     type: "portal",
     portalId: config.id,
+    active: config.active,
   });
 
   state.portalZones.push({
-    type: config.active ? "robot" : "locked",
+    type: config.active ? config.id : "locked",
     label: config.label,
     x: config.x,
     z: config.z,
@@ -1351,6 +1407,576 @@ function createPatrol(type, x, z) {
   const patrol = createEnemy(type, x, z, { activeCombat: false });
   patrol.basePosition = { x, z };
   state.patrols.push(patrol);
+}
+
+// Street Tax Office level generation: a small chunk chain that is rebuilt each
+// time the base is entered. Chunks are premade room recipes with open door
+// points, simple office props, and future spawn markers but no combat yet.
+function enterStreetTaxOffice() {
+  state.mode = "street-tax-office";
+  state.baseCleared = false;
+  state.enemies = [];
+  state.patrols = [];
+  state.npcs = [];
+  state.cars = [];
+  state.solidBoxes = [];
+  state.solidCircles = [];
+  state.enemyShots = [];
+  state.bullets = [];
+  state.portalZones = [];
+  state.targets = [];
+  state.currentLevelChunks = [];
+  clearEntity(refs.world);
+  clearEntity(refs.effects);
+
+  state.streetTaxOfficeSeed = Date.now() % 100000;
+  rand = seededRandom(state.streetTaxOfficeSeed);
+  refs.rig.object3D.position.set(0, 0, 2.35);
+  refs.rig.object3D.rotation.set(0, 0, 0);
+  placeGunInFrontOfPlayer(1.15);
+  refs.scene.setAttribute("background", "color: #050712");
+  refs.scene.setAttribute("fog", "type: exponential; color: #071018; density: 0.016");
+
+  generateStreetTaxOffice();
+  setMessage("Street Tax Office", `Layout seed ${state.streetTaxOfficeSeed}. Follow the office route to the Tax Vault exit.`);
+  updateHud();
+}
+
+function generateStreetTaxOffice() {
+  const startChunk = { id: "front-lobby", label: "Front Lobby", width: 9, depth: 7, builder: "frontLobby" };
+  const endChunk = { id: "tax-vault", label: "Tax Vault", width: 9, depth: 7, builder: "taxVault" };
+  const guaranteed = ["security", "cubicles", "records"].map((id) => STREET_TAX_MAIN_CHUNKS.find((chunk) => chunk.id === id));
+  const extras = shuffle(STREET_TAX_MAIN_CHUNKS.filter((chunk) => !guaranteed.includes(chunk)), rand)
+    .slice(0, 1 + Math.floor(rand() * 4));
+  const middleChunks = shuffle([...guaranteed, ...extras], rand);
+  const mainChunks = [startChunk, ...middleChunks, endChunk];
+
+  const sideAssignments = createStreetTaxSideAssignments(mainChunks.length);
+  const contexts = [];
+  let centerZ = 0;
+
+  mainChunks.forEach((chunk, index) => {
+    if (index > 0) {
+      const previous = contexts[index - 1];
+      centerZ = previous.z - previous.depth / 2 - chunk.depth / 2 - 0.85;
+    }
+
+    const side = sideAssignments.get(index);
+    const ctx = createTaxChunkContext(chunk, 0, centerZ, {
+      mainDoors: true,
+      sideOpen: side ? side.direction : "",
+    });
+    createTaxOfficeShell(ctx);
+    buildStreetTaxChunk(ctx);
+
+    if (index > 0) {
+      createTaxMainConnector(contexts[index - 1], ctx);
+    }
+
+    contexts.push(ctx);
+    state.currentLevelChunks.push(chunk.id);
+
+    if (side) {
+      const sideSign = side.direction === "left" ? -1 : 1;
+      const sideX = sideSign * (chunk.width / 2 + side.chunk.width / 2 + 0.85);
+      const sideCtx = createTaxChunkContext(side.chunk, sideX, centerZ + (rand() - 0.5) * 0.65, {
+        mainDoors: false,
+        sideOpen: side.direction === "left" ? "right" : "left",
+        side: true,
+      });
+      createTaxOfficeShell(sideCtx);
+      buildStreetTaxChunk(sideCtx);
+      createTaxSideConnector(ctx, sideCtx, side.direction);
+      state.currentLevelChunks.push(side.chunk.id);
+    }
+  });
+
+  createStreetTaxHeader();
+}
+
+function createStreetTaxSideAssignments(mainLength) {
+  const sideAssignments = new Map();
+  const sideCount = 1 + Math.floor(rand() * 3);
+  const indexes = shuffle(Array.from({ length: Math.max(0, mainLength - 3) }, (_, i) => i + 1), rand);
+  const sideChunks = shuffle(STREET_TAX_SIDE_CHUNKS, rand).slice(0, sideCount);
+
+  sideChunks.forEach((chunk, index) => {
+    if (!indexes[index]) {
+      return;
+    }
+
+    sideAssignments.set(indexes[index], {
+      chunk,
+      direction: index % 2 === 0 ? "left" : "right",
+    });
+  });
+
+  return sideAssignments;
+}
+
+function createTaxChunkContext(chunk, x, z, options) {
+  const group = makeEntity("a-entity", {
+    position: `${x} 0 ${z}`,
+    "level-chunk": "",
+  });
+  group.dataset.chunkId = chunk.id;
+  group.dataset.chunkLabel = chunk.label;
+  return {
+    chunk,
+    group,
+    x,
+    z,
+    width: chunk.width,
+    depth: chunk.depth,
+    options: options || {},
+  };
+}
+
+function createTaxOfficeShell(ctx) {
+  const floorMaterial = ctx.chunk.id === "tax-vault"
+    ? "src: #office-tile; repeat: 5 5; shader: flat"
+    : "src: #office-carpet; repeat: 6 6; shader: flat";
+  makePlane({
+    parent: ctx.group,
+    position: "0 0.01 0",
+    rotation: "-90 0 0",
+    width: ctx.width,
+    height: ctx.depth,
+    material: floorMaterial,
+  });
+  makePlane({
+    parent: ctx.group,
+    position: "0 2.65 0",
+    rotation: "90 0 0",
+    width: ctx.width,
+    height: ctx.depth,
+    material: "color: #303642; shader: flat",
+  });
+
+  const sideOpen = ctx.options.sideOpen || "";
+  createTaxSideWall(ctx, "left", sideOpen);
+  createTaxSideWall(ctx, "right", sideOpen);
+  createTaxEndWall(ctx, "front", ctx.options.mainDoors !== false);
+  createTaxEndWall(ctx, "back", ctx.options.mainDoors !== false);
+
+  for (let z = -ctx.depth / 2 + 1.15; z < ctx.depth / 2; z += 2.3) {
+    makeBox({ parent: ctx.group, position: `0 2.54 ${z}`, size: "1.1 0.06 0.26", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+  }
+}
+
+function createTaxSideWall(ctx, side, sideOpen) {
+  const x = side === "left" ? -ctx.width / 2 : ctx.width / 2;
+  const gap = 2.35;
+  if (sideOpen === side && ctx.depth > gap + 0.4) {
+    const segment = (ctx.depth - gap) / 2;
+    createTaxWall(ctx, x, -(gap / 2 + segment / 2), 0.16, segment, "tax-side-wall");
+    createTaxWall(ctx, x, gap / 2 + segment / 2, 0.16, segment, "tax-side-wall");
+    createTaxDoorTrim(ctx, x, 0, side === "left" ? 90 : -90, COLORS.pink);
+    return;
+  }
+
+  createTaxWall(ctx, x, 0, 0.16, ctx.depth, "tax-side-wall");
+}
+
+function createTaxEndWall(ctx, side, hasDoor) {
+  const z = side === "front" ? ctx.depth / 2 : -ctx.depth / 2;
+  const gap = hasDoor ? 2.45 : 0;
+  if (hasDoor && ctx.width > gap + 0.4) {
+    const segment = (ctx.width - gap) / 2;
+    createTaxWall(ctx, -(gap / 2 + segment / 2), z, segment, 0.16, "tax-end-wall");
+    createTaxWall(ctx, gap / 2 + segment / 2, z, segment, 0.16, "tax-end-wall");
+    createTaxDoorTrim(ctx, 0, z, 0, COLORS.cyan);
+    return;
+  }
+
+  createTaxWall(ctx, 0, z, ctx.width, 0.16, "tax-end-wall");
+}
+
+function createTaxWall(ctx, localX, localZ, width, depth, label) {
+  makeBox({
+    parent: ctx.group,
+    position: `${localX} 1.3 ${localZ}`,
+    size: `${width} 2.6 ${depth}`,
+    color: "#6B7480",
+    material: "src: #office-wall; repeat: 2 2; shader: flat",
+  });
+  addSolidBox(ctx.x + localX, ctx.z + localZ, width, depth, label);
+}
+
+function createTaxDoorTrim(ctx, localX, localZ, yaw, color) {
+  const trim = makeEntity("a-entity", {
+    position: `${localX} 1.28 ${localZ}`,
+    rotation: `0 ${yaw} 0`,
+  }, ctx.group);
+  makeBox({ parent: trim, position: "-1.22 0 0", size: "0.08 2.25 0.08", color, material: neonMaterial(color) });
+  makeBox({ parent: trim, position: "1.22 0 0", size: "0.08 2.25 0.08", color, material: neonMaterial(color) });
+  makeBox({ parent: trim, position: "0 1.12 0", size: "2.48 0.08 0.08", color, material: neonMaterial(color) });
+}
+
+function createTaxMainConnector(previous, current) {
+  const previousExitZ = previous.z - previous.depth / 2;
+  const currentEntranceZ = current.z + current.depth / 2;
+  const centerZ = (previousExitZ + currentEntranceZ) / 2;
+  const depth = Math.abs(previousExitZ - currentEntranceZ) + 0.18;
+  makeBox({
+    position: `0 0.035 ${centerZ}`,
+    size: "2.45 0.06 " + depth.toFixed(2),
+    color: "#234237",
+    material: "src: #office-carpet; repeat: 2 1; shader: flat",
+    parent: refs.world,
+  });
+  makeBox({ position: `-1.32 1.2 ${centerZ}`, size: `0.08 2.35 ${depth.toFixed(2)}`, color: "#3B4654", material: "src: #office-wall; repeat: 1 1; shader: flat" });
+  makeBox({ position: `1.32 1.2 ${centerZ}`, size: `0.08 2.35 ${depth.toFixed(2)}`, color: "#3B4654", material: "src: #office-wall; repeat: 1 1; shader: flat" });
+  makeBox({ position: `0 2.42 ${centerZ}`, size: `1.1 0.05 ${Math.max(0.28, depth - 0.1).toFixed(2)}`, color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+}
+
+function createTaxSideConnector(mainCtx, sideCtx, direction) {
+  const sign = direction === "left" ? -1 : 1;
+  const mainEdge = mainCtx.x + sign * mainCtx.width / 2;
+  const sideEdge = sideCtx.x - sign * sideCtx.width / 2;
+  const centerX = (mainEdge + sideEdge) / 2;
+  const width = Math.abs(sideEdge - mainEdge) + 0.18;
+  const z = (mainCtx.z + sideCtx.z) / 2;
+
+  makeBox({
+    position: `${centerX} 0.035 ${z}`,
+    size: `${width.toFixed(2)} 0.06 2.25`,
+    color: "#234237",
+    material: "src: #office-carpet; repeat: 1 1; shader: flat",
+    "chunk-connector": "",
+  });
+  makeBox({ position: `${centerX} 2.38 ${z}`, size: `${width.toFixed(2)} 0.05 1.0`, color: COLORS.pink, material: neonMaterial(COLORS.pink) });
+}
+
+function buildStreetTaxChunk(ctx) {
+  switch (ctx.chunk.builder) {
+    case "frontLobby": createFrontLobbyChunk(ctx); break;
+    case "security": createSecurityCheckpointChunk(ctx); break;
+    case "cubicles": createCubicleMazeChunk(ctx); break;
+    case "hallStraight": createOfficeHallwayChunk(ctx, "straight"); break;
+    case "hallL": createOfficeHallwayChunk(ctx, "l"); break;
+    case "hallT": createOfficeHallwayChunk(ctx, "t"); break;
+    case "records": createRecordsRoomChunk(ctx); break;
+    case "payment": createPaymentCounterChunk(ctx); break;
+    case "breakRoom": createBreakRoomChunk(ctx); break;
+    case "manager": createManagerOfficeChunk(ctx); break;
+    case "callCenter": createCallCenterChunk(ctx); break;
+    case "printer": createPrinterRoomChunk(ctx); break;
+    case "audit": createAuditChamberChunk(ctx); break;
+    case "collection": createCollectionRoomChunk(ctx); break;
+    case "evidence": createEvidenceClosetChunk(ctx); break;
+    case "stairwell": createStairwellChunk(ctx); break;
+    case "taxVault": createTaxVaultEndChunk(ctx); break;
+    default: createRecordsRoomChunk(ctx); break;
+  }
+}
+
+function createFrontLobbyChunk(ctx) {
+  makePlane({
+    parent: ctx.group,
+    position: `0 2.08 ${ctx.depth / 2 - 0.16}`,
+    rotation: "0 0 0",
+    width: 2.7,
+    height: 0.72,
+    material: "src: #street-tax-sign; shader: flat; side: double",
+  });
+  createTaxSign(ctx.group, "CITY REVENUE AUTHORITY", -2.7, 1.55, ctx.depth / 2 - 0.1, 2.3, 0.34, COLORS.cyan);
+  makeCylinder({ parent: ctx.group, position: "2.8 1.55 3.02", rotation: "90 0 0", radius: 0.42, height: 0.08, color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+  makeText({ parent: ctx.group, value: "$", position: "2.64 1.68 3.08", width: 0.45, color: COLORS.black, align: "center" });
+  createOfficeDesk(ctx.group, 0, 1.6, 2.15, COLORS.orange);
+  makeText({ parent: ctx.group, value: "START", position: "-0.55 0.05 2.8", rotation: "-90 0 0", width: 1.1, color: COLORS.yellow, align: "center" });
+  createTaxMarker(ctx, "player-start", 0, 2.55, COLORS.green);
+
+  [-1.1, 1.1].forEach((x) => {
+    makeBox({ parent: ctx.group, position: `${x} 0.75 -0.45`, size: "0.28 1.45 0.12", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+    makeBox({ parent: ctx.group, position: `${x} 0.55 -0.08`, size: "0.95 0.12 0.12", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+  });
+
+  [-3.1, -2.35, 2.35, 3.1].forEach((x, index) => {
+    createWaitingChair(ctx.group, x, -1.6, index % 2 === 0 ? COLORS.cyan : COLORS.pink);
+  });
+
+  createTaxPoster(ctx.group, -4.32, 1.35, 0.8, "NO CASH BACK", COLORS.yellow);
+  createTaxPoster(ctx.group, 4.32, 1.35, -0.8, "STAMPED OR ELSE", COLORS.red);
+}
+
+function createSecurityCheckpointChunk(ctx) {
+  createTaxSign(ctx.group, "NO REFUNDS", 0, 2.05, ctx.depth / 2 - 0.12, 3.2, 0.46, COLORS.red);
+  [-1.15, 1.15].forEach((x) => createDetectorArch(ctx.group, x, 0.25));
+  makeBox({ parent: ctx.group, position: "-2.9 0.75 -0.8", size: "1.05 1.5 1.1", color: "#101622", material: "src: #panel-block; repeat: 1 1; shader: flat" });
+  createComputer(ctx.group, -2.9, -0.15, COLORS.red);
+  makeBox({ parent: ctx.group, position: "2.35 0.48 -1.0", size: "2.4 0.26 0.72", color: "#2F3B4C", material: "src: #panel-block; repeat: 2 1; shader: flat" });
+  [0.55, 0.85, 1.15].forEach((y) => {
+    makeBox({ parent: ctx.group, position: `0 ${y} -0.35`, size: "4.7 0.025 0.025", color: COLORS.red, material: neonMaterial(COLORS.red) });
+  });
+  createTaxMarker(ctx, "enemy-spawn", -1.75, -1.8, COLORS.red);
+  createTaxMarker(ctx, "enemy-spawn", 1.75, -1.8, COLORS.red);
+}
+
+function createCubicleMazeChunk(ctx) {
+  createTaxSign(ctx.group, "CLAIMS FLOOR", 0, 2.1, ctx.depth / 2 - 0.12, 2.6, 0.4, COLORS.cyan);
+  const cubicles = [
+    [-2.5, 1.5], [-0.5, 1.5], [1.65, 1.5],
+    [-2.5, -0.75], [0.15, -0.75], [2.45, -0.75],
+    [-1.35, -2.4], [1.25, -2.4],
+  ];
+  cubicles.forEach(([x, z], index) => {
+    createCubicle(ctx.group, x, z, index % 2 === 0 ? COLORS.cyan : COLORS.green);
+  });
+  createTaxMarker(ctx, "enemy-spawn", -2.8, -2.65, COLORS.red);
+  createTaxMarker(ctx, "item-spawn", 2.85, 2.1, COLORS.yellow);
+}
+
+function createOfficeHallwayChunk(ctx, variant) {
+  makeBox({ parent: ctx.group, position: "0 0.04 0", size: "1.15 0.05 " + (ctx.depth - 0.4).toFixed(2), color: COLORS.red, material: "src: #red-stripe; repeat: 1 6; shader: flat" });
+  const labels = ["AUDIT", "CLAIMS", "COMPLIANCE", "PAYROLL"];
+  for (let z = -ctx.depth / 2 + 1.35; z < ctx.depth / 2 - 1.0; z += 1.65) {
+    createOfficeDoor(ctx.group, -ctx.width / 2 + 0.25, z, 90, labels[Math.floor(rand() * labels.length)]);
+    createOfficeDoor(ctx.group, ctx.width / 2 - 0.25, z, -90, labels[Math.floor(rand() * labels.length)]);
+  }
+  if (variant === "l") {
+    makeBox({ parent: ctx.group, position: "1.4 0.05 0.6", size: "2.55 0.05 1.0", color: "#234237", material: "src: #office-carpet; repeat: 2 1; shader: flat" });
+    createTaxSign(ctx.group, "LATE FEES", 1.8, 1.75, 0.55, 1.4, 0.28, COLORS.yellow, -90);
+  } else if (variant === "t") {
+    makeBox({ parent: ctx.group, position: "0 0.055 0.15", size: `${ctx.width - 1.0} 0.05 0.85`, color: "#234237", material: "src: #office-carpet; repeat: 4 1; shader: flat" });
+    createTaxMarker(ctx, "item-spawn", 2.2, 0.35, COLORS.yellow);
+  }
+  createTaxMarker(ctx, "enemy-spawn", 0, -ctx.depth / 2 + 1.2, COLORS.red);
+}
+
+function createRecordsRoomChunk(ctx) {
+  createTaxSign(ctx.group, "ILLEGAL RECORDS", 0, 2.1, ctx.depth / 2 - 0.12, 3.2, 0.44, COLORS.green);
+  [-2.7, -1.25, 1.25, 2.7].forEach((x) => {
+    makeBox({ parent: ctx.group, position: `${x} 1.0 -0.45`, size: "0.62 2.0 4.2", color: "#2D3541", material: "src: #panel-block; repeat: 1 3; shader: flat" });
+    for (let z = -2.0; z <= 1.2; z += 1.05) {
+      makeBox({ parent: ctx.group, position: `${x} 1.05 ${z}`, size: "0.7 0.22 0.7", color: COLORS.orange, material: "color: #D26A2B; shader: flat" });
+    }
+  });
+  createComputer(ctx.group, 0, 1.7, COLORS.cyan);
+  makeBox({ parent: ctx.group, position: "3.55 1.2 1.5", rotation: "0 0 18", size: "0.08 2.1 0.2", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+  createTaxMarker(ctx, "item-spawn", 0.2, -1.55, COLORS.yellow);
+  createTaxMarker(ctx, "secret-marker", 3.1, 2.1, COLORS.pink);
+}
+
+function createPaymentCounterChunk(ctx) {
+  createTaxSign(ctx.group, "PAY HERE", 0, 2.05, ctx.depth / 2 - 0.12, 3.2, 0.5, COLORS.yellow);
+  makeBox({ parent: ctx.group, position: "0 0.65 -0.85", size: `${ctx.width - 1.4} 1.3 0.45`, color: "#4B3A2A", material: "color: #4B3A2A; shader: flat" });
+  for (let x = -2.7; x <= 2.7; x += 1.35) {
+    makePlane({ parent: ctx.group, position: `${x} 1.45 -0.56`, width: 0.85, height: 0.85, material: `color: ${COLORS.cyan}; opacity: 0.35; transparent: true; shader: flat` });
+    makeText({ parent: ctx.group, value: String(10 + Math.floor(rand() * 80)), position: `${x - 0.2} 2.05 -0.48`, width: 0.42, color: COLORS.pink, align: "center" });
+  }
+  [-2.4, 0, 2.4].forEach((x) => makeCylinder({ parent: ctx.group, position: `${x} 0.58 1.25`, radius: 0.04, height: 1.0, color: COLORS.red, material: neonMaterial(COLORS.red) }));
+  makeBox({ parent: ctx.group, position: "0 0.93 1.25", size: "5.2 0.04 0.04", color: COLORS.red, material: neonMaterial(COLORS.red) });
+  createTaxMarker(ctx, "item-spawn", 0, -1.7, COLORS.yellow);
+}
+
+function createBreakRoomChunk(ctx) {
+  createTaxSign(ctx.group, "THE MOB CARES", 0, 2.0, ctx.depth / 2 - 0.12, 2.7, 0.42, COLORS.pink);
+  makeBox({ parent: ctx.group, position: "-1.6 0.85 -1.2", size: "0.85 1.7 0.55", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+  makeBox({ parent: ctx.group, position: "-0.45 0.42 -1.45", size: "0.65 0.48 0.45", color: "#C6C1A0", material: "color: #C6C1A0; shader: flat" });
+  makeBox({ parent: ctx.group, position: "1.5 0.8 -1.2", size: "0.85 1.6 0.55", color: COLORS.green, material: neonMaterial(COLORS.green) });
+  makeBox({ parent: ctx.group, position: "0 0.34 0.6", size: "1.6 0.28 0.9", color: "#3B2A2A", material: "color: #3B2A2A; shader: flat" });
+  [-0.95, 0.95].forEach((x) => createWaitingChair(ctx.group, x, 1.35, COLORS.orange));
+  createTaxMarker(ctx, "item-spawn", 0.4, -0.25, COLORS.yellow);
+}
+
+function createManagerOfficeChunk(ctx) {
+  createTaxSign(ctx.group, "MANAGER ONLY", 0, 2.05, ctx.depth / 2 - 0.12, 2.7, 0.42, COLORS.red);
+  createOfficeDesk(ctx.group, 0, -0.2, 1.6, "#5D2B2B");
+  createComputer(ctx.group, -0.35, 0.25, COLORS.cyan);
+  makeBox({ parent: ctx.group, position: "1.9 0.7 -1.9", size: "1.0 1.4 0.7", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+  makeCylinder({ parent: ctx.group, position: "-0.85 0.85 0.3", radius: 0.12, height: 0.28, color: COLORS.red, material: neonMaterial(COLORS.red) });
+  createTaxPoster(ctx.group, -ctx.width / 2 + 0.08, 1.45, -1.1, "CITY MAP", COLORS.cyan, 90);
+  createTaxPoster(ctx.group, ctx.width / 2 - 0.08, 1.35, 1.2, "BLINDS", COLORS.yellow, -90);
+  createTaxMarker(ctx, "secret-marker", 1.9, -1.9, COLORS.pink);
+}
+
+function createCallCenterChunk(ctx) {
+  createTaxSign(ctx.group, "COLLECT OR BE COLLECTED", 0, 2.05, ctx.depth / 2 - 0.12, 4.4, 0.42, COLORS.pink);
+  for (let row = 0; row < 3; row += 1) {
+    const z = 1.5 - row * 1.65;
+    for (let x = -3.0; x <= 3.0; x += 1.5) {
+      createOfficeDesk(ctx.group, x, z, 0.72, "#333044");
+      createComputer(ctx.group, x, z + 0.18, COLORS.cyan);
+      makeBox({ parent: ctx.group, position: `${x + 0.25} 0.78 ${z + 0.34}`, size: "0.14 0.08 0.14", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+    }
+  }
+  [-ctx.width / 2 + 0.18, ctx.width / 2 - 0.18].forEach((x, sideIndex) => {
+    for (let z = -2.4; z <= 2.2; z += 0.75) {
+      makeBox({ parent: ctx.group, position: `${x} 1.45 ${z}`, size: "0.12 0.18 0.5", color: sideIndex ? COLORS.cyan : COLORS.pink, material: neonMaterial(sideIndex ? COLORS.cyan : COLORS.pink) });
+    }
+  });
+  createTaxMarker(ctx, "enemy-spawn", -2.9, -2.35, COLORS.red);
+  createTaxMarker(ctx, "enemy-spawn", 2.9, -2.35, COLORS.red);
+}
+
+function createPrinterRoomChunk(ctx) {
+  createTaxSign(ctx.group, "PRINTING FINES", 0, 2.05, ctx.depth / 2 - 0.12, 3.2, 0.42, COLORS.red);
+  [-2.2, 0, 2.2].forEach((x) => {
+    makeBox({ parent: ctx.group, position: `${x} 0.62 -0.7`, size: "1.35 1.05 1.0", color: "#2F3B4C", material: "src: #panel-block; repeat: 1 1; shader: flat" });
+    makeBox({ parent: ctx.group, position: `${x} 1.18 -1.08`, size: "0.9 0.09 0.18", color: COLORS.red, material: neonMaterial(COLORS.red) });
+    makeBox({ parent: ctx.group, position: `${x} 0.18 0.15`, size: "1.1 0.1 1.25", color: "#F4EFD8", material: "src: #paper-stack; repeat: 2 2; shader: flat" });
+  });
+  makeBox({ parent: ctx.group, position: "0 0.26 1.25", size: "5.7 0.22 0.55", color: "#36465D", material: "src: #panel-block; repeat: 5 1; shader: flat" });
+  makePlane({ parent: ctx.group, position: "0 1.6 -2.15", width: 4.5, height: 1.0, material: `color: ${COLORS.red}; opacity: 0.12; transparent: true; shader: flat` });
+  createTaxMarker(ctx, "item-spawn", 0, 1.8, COLORS.yellow);
+}
+
+function createAuditChamberChunk(ctx) {
+  createTaxSign(ctx.group, "FINAL NOTICE", 0, 2.12, ctx.depth / 2 - 0.12, 3.5, 0.46, COLORS.red);
+  makeBox({ parent: ctx.group, position: "0 0.7 0", size: "2.4 1.15 1.45", color: "#4B2C2C", material: "color: #4B2C2C; shader: flat" });
+  for (let angle = 0; angle < 360; angle += 45) {
+    const rad = THREE.MathUtils.degToRad(angle);
+    const x = Math.cos(rad) * 3.0;
+    const z = Math.sin(rad) * 2.3;
+    makeBox({ parent: ctx.group, position: `${x.toFixed(2)} 0.9 ${z.toFixed(2)}`, rotation: `0 ${-angle} 0`, size: "0.52 1.8 0.5", color: COLORS.orange, material: "color: #D26A2B; shader: flat" });
+  }
+  makeBox({ parent: ctx.group, position: "0 0.06 0", size: "5.8 0.04 0.16", color: COLORS.red, material: neonMaterial(COLORS.red) });
+  makeBox({ parent: ctx.group, position: "0 0.065 0", rotation: "0 90 0", size: "5.0 0.04 0.16", color: COLORS.red, material: neonMaterial(COLORS.red) });
+  createTaxMarker(ctx, "mini-boss-room", 0, 0, COLORS.red);
+}
+
+function createCollectionRoomChunk(ctx) {
+  createTaxSign(ctx.group, "AMOUNT DUE", 0, 2.12, ctx.depth / 2 - 0.12, 3.3, 0.46, COLORS.yellow);
+  makeBox({ parent: ctx.group, position: "-2.7 0.92 -0.8", size: "1.25 1.8 1.25", color: "#1A202C", material: "src: #panel-block; repeat: 1 2; shader: flat" });
+  makeBox({ parent: ctx.group, position: "2.7 0.92 -0.8", size: "1.25 1.8 1.25", color: "#1A202C", material: "src: #panel-block; repeat: 1 2; shader: flat" });
+  for (let x = -1.4; x <= 1.4; x += 1.4) {
+    makeBox({ parent: ctx.group, position: `${x} 0.34 0.85`, size: "0.85 0.65 0.75", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+    makeBox({ parent: ctx.group, position: `${x} 0.74 0.85`, size: "0.65 0.12 0.55", color: COLORS.green, material: neonMaterial(COLORS.green) });
+  }
+  createTaxSign(ctx.group, "$999999", 0, 1.55, -ctx.depth / 2 + 0.12, 2.4, 0.38, COLORS.red, 180);
+  createTaxMarker(ctx, "mini-boss-room", 0, -0.8, COLORS.red);
+}
+
+function createEvidenceClosetChunk(ctx) {
+  createTaxSign(ctx.group, "EVIDENCE", 0, 2.0, ctx.depth / 2 - 0.12, 2.1, 0.38, COLORS.cyan);
+  [-1.2, 0.1, 1.2].forEach((x) => {
+    makeBox({ parent: ctx.group, position: `${x} 0.35 -0.9`, size: "0.82 0.62 0.7", color: COLORS.orange, material: "color: #D26A2B; shader: flat" });
+    makeText({ parent: ctx.group, value: "EVIDENCE", position: `${x - 0.33} 0.54 -0.52`, width: 0.62, color: COLORS.black, wrapCount: 8 });
+  });
+  makeBox({ parent: ctx.group, position: "-1.55 1.2 1.35", size: "0.9 0.08 0.52", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+  makeBox({ parent: ctx.group, position: "1.35 0.85 1.15", rotation: "0 0 18", size: "0.58 0.34 0.26", color: "#242C36", material: "color: #242C36; shader: flat" });
+  createTaxMarker(ctx, "secret-marker", 0, 0.8, COLORS.pink);
+}
+
+function createStairwellChunk(ctx) {
+  createTaxSign(ctx.group, "STAFF ONLY", 0, 2.05, ctx.depth / 2 - 0.12, 2.7, 0.42, COLORS.red);
+  makeBox({ parent: ctx.group, position: "-1.8 0.22 -0.4", size: "2.3 0.2 0.9", color: "#59636F", material: "src: #office-wall; repeat: 2 1; shader: flat" });
+  makeBox({ parent: ctx.group, position: "-0.7 0.62 -0.4", size: "2.3 0.2 0.9", color: "#59636F", material: "src: #office-wall; repeat: 2 1; shader: flat" });
+  makeBox({ parent: ctx.group, position: "0.4 1.02 -0.4", size: "2.3 0.2 0.9", color: "#59636F", material: "src: #office-wall; repeat: 2 1; shader: flat" });
+  makeBox({ parent: ctx.group, position: "2.25 1.15 -1.15", size: "1.15 2.3 0.16", color: "#111827", material: "color: #111827; shader: flat" });
+  makeBox({ parent: ctx.group, position: "2.25 1.15 -1.05", size: "0.9 2.0 0.08", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+  makeBox({ parent: ctx.group, position: "-2.55 1.7 1.3", size: "0.35 0.2 0.08", color: COLORS.red, material: neonMaterial(COLORS.red) });
+  createTaxMarker(ctx, "enemy-spawn", -1.4, 1.2, COLORS.red);
+}
+
+function createTaxVaultEndChunk(ctx) {
+  createTaxSign(ctx.group, "TAX VAULT", 0, 2.1, ctx.depth / 2 - 0.12, 3.2, 0.5, COLORS.yellow);
+  makeCylinder({ parent: ctx.group, position: "0 1.2 -1.7", rotation: "90 0 0", radius: 1.18, height: 0.22, color: COLORS.yellow, material: neonMaterial(COLORS.yellow), segmentsRadial: 16 });
+  makeCylinder({ parent: ctx.group, position: "0 1.2 -1.56", rotation: "90 0 0", radius: 0.7, height: 0.18, color: "#111827", material: "color: #111827; shader: flat", segmentsRadial: 16 });
+  makeText({ parent: ctx.group, value: "MOB", position: "-0.38 1.42 -1.42", width: 0.8, color: COLORS.pink, align: "center" });
+  [-2.6, -1.55, 1.55, 2.6].forEach((x) => {
+    makeBox({ parent: ctx.group, position: `${x} 0.35 0.7`, size: "0.82 0.65 0.7", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+    makeBox({ parent: ctx.group, position: `${x} 0.85 0.7`, size: "0.7 0.28 0.55", color: COLORS.green, material: neonMaterial(COLORS.green) });
+  });
+  makeBox({ parent: ctx.group, position: "0 0.05 2.0", size: "5.8 0.05 0.18", color: COLORS.red, material: neonMaterial(COLORS.red) });
+  createTaxMarker(ctx, "exit-marker", 0, -2.35, COLORS.green);
+  createTaxOfficeReturnPortal(ctx);
+}
+
+function createTaxOfficeReturnPortal(ctx) {
+  const portalZ = ctx.z - ctx.depth / 2 + 1.0;
+  const portal = makeEntity("a-entity", {
+    id: "street-tax-return-portal",
+    position: `0 1.15 ${portalZ}`,
+    "return-to-city-handler": "",
+  });
+  makeBox({ parent: portal, position: "0 0 0", size: "1.55 2.25 0.16", color: COLORS.green, material: `color: ${COLORS.green}; opacity: 0.36; transparent: true; shader: flat` });
+  makeBox({ parent: portal, position: "-0.9 0 0", size: "0.12 2.45 0.18", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+  makeBox({ parent: portal, position: "0.9 0 0", size: "0.12 2.45 0.18", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+  makeText({ parent: portal, value: "RETURN TO CITY", position: "-0.78 1.42 0.12", width: 1.55, color: COLORS.black, align: "center", wrapCount: 11 });
+  addTarget(portal, { type: "return" });
+  state.portalZones.push({
+    type: "return",
+    label: "Return to City",
+    x: 0,
+    z: portalZ,
+    radius: 1.25,
+    active: true,
+    nextAllowed: 0,
+  });
+}
+
+function createStreetTaxHeader() {
+  const panel = makeEntity("a-entity", { position: "-3.9 1.95 2.6", billboard: "" });
+  makePlane({ parent: panel, width: 3.6, height: 1.1, material: "color: #080713; opacity: 0.86; transparent: true; shader: flat" });
+  makeText({ parent: panel, value: "STREET TAX OFFICE", position: "-1.55 0.34 0.04", width: 3.1, color: COLORS.yellow, align: "center" });
+  makeText({ parent: panel, value: `Map seed ${state.streetTaxOfficeSeed}`, position: "-1.45 0.02 0.04", width: 2.9, color: COLORS.cyan, align: "center" });
+  makeText({ parent: panel, value: "No encounters yet. Find the vault exit.", position: "-1.45 -0.3 0.04", width: 2.9, color: COLORS.white, align: "center", wrapCount: 22 });
+}
+
+function createOfficeDesk(parent, x, z, width, color) {
+  makeBox({ parent, position: `${x} 0.43 ${z}`, size: `${width} 0.32 0.72`, color, material: `color: ${color}; shader: flat` });
+  makeBox({ parent, position: `${x - width / 2 + 0.12} 0.2 ${z - 0.25}`, size: "0.12 0.4 0.12", color: "#151A25", material: "color: #151A25; shader: flat" });
+  makeBox({ parent, position: `${x + width / 2 - 0.12} 0.2 ${z - 0.25}`, size: "0.12 0.4 0.12", color: "#151A25", material: "color: #151A25; shader: flat" });
+}
+
+function createComputer(parent, x, z, color) {
+  makeBox({ parent, position: `${x} 0.86 ${z}`, size: "0.48 0.32 0.08", color, material: neonMaterial(color) });
+  makeBox({ parent, position: `${x} 0.58 ${z + 0.08}`, size: "0.16 0.2 0.12", color: "#111827", material: "color: #111827; shader: flat" });
+}
+
+function createWaitingChair(parent, x, z, color) {
+  makeBox({ parent, position: `${x} 0.32 ${z}`, size: "0.5 0.12 0.5", color, material: neonMaterial(color) });
+  makeBox({ parent, position: `${x} 0.72 ${z + 0.22}`, size: "0.5 0.7 0.1", color, material: neonMaterial(color) });
+  makeBox({ parent, position: `${x - 0.18} 0.14 ${z - 0.15}`, size: "0.06 0.28 0.06", color: "#151A25", material: "color: #151A25; shader: flat" });
+  makeBox({ parent, position: `${x + 0.18} 0.14 ${z - 0.15}`, size: "0.06 0.28 0.06", color: "#151A25", material: "color: #151A25; shader: flat" });
+}
+
+function createDetectorArch(parent, x, z) {
+  makeBox({ parent, position: `${x - 0.36} 0.9 ${z}`, size: "0.08 1.8 0.12", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+  makeBox({ parent, position: `${x + 0.36} 0.9 ${z}`, size: "0.08 1.8 0.12", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+  makeBox({ parent, position: `${x} 1.78 ${z}`, size: "0.8 0.08 0.12", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+}
+
+function createCubicle(parent, x, z, accent) {
+  makeBox({ parent, position: `${x} 0.62 ${z - 0.46}`, size: "1.32 1.05 0.08", color: "#45515F", material: "src: #office-wall; repeat: 1 1; shader: flat" });
+  makeBox({ parent, position: `${x - 0.66} 0.62 ${z}`, size: "0.08 1.05 1.0", color: "#45515F", material: "src: #office-wall; repeat: 1 1; shader: flat" });
+  createOfficeDesk(parent, x, z + 0.18, 0.85, "#2A2B38");
+  createComputer(parent, x, z + 0.35, accent);
+  makeBox({ parent, position: `${x + 0.36} 0.72 ${z + 0.36}`, size: "0.34 0.08 0.25", color: "#F4EFD8", material: "src: #paper-stack; repeat: 1 1; shader: flat" });
+}
+
+function createOfficeDoor(parent, x, z, yaw, label) {
+  const door = makeEntity("a-entity", { position: `${x} 1.05 ${z}`, rotation: `0 ${yaw} 0` }, parent);
+  makeBox({ parent: door, position: "0 0 0", size: "0.8 1.75 0.08", color: "#111827", material: "color: #111827; shader: flat" });
+  makeBox({ parent: door, position: "0.3 0.1 0.06", size: "0.08 0.08 0.08", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+  makeText({ parent: door, value: label, position: "-0.32 0.5 0.07", width: 0.65, color: COLORS.cyan, align: "center", wrapCount: 9 });
+}
+
+function createTaxSign(parent, value, x, y, z, width, height, color, yaw = 0) {
+  const signYaw = yaw === 0 && z > 0.9 ? 180 : yaw;
+  const sign = makeEntity("a-entity", { position: `${x} ${y} ${z}`, rotation: `0 ${signYaw} 0` }, parent);
+  makePlane({ parent: sign, width, height, material: `${neonMaterial(color)}; side: double` });
+  makeText({ parent: sign, value, position: `0 ${height * 0.22} 0.12`, width: width * 0.9, color: COLORS.black, align: "center", wrapCount: Math.max(8, Math.floor(width * 5)) });
+}
+
+function createTaxPoster(parent, x, y, z, value, color, yaw = 0) {
+  const poster = makeEntity("a-entity", { position: `${x} ${y} ${z}`, rotation: `0 ${yaw} 0` }, parent);
+  makePlane({ parent: poster, width: 0.9, height: 0.62, material: `color: ${color}; opacity: 0.8; transparent: true; shader: flat; side: double` });
+  makeText({ parent: poster, value, position: "-0.38 0.16 0.04", width: 0.76, color: COLORS.black, align: "center", wrapCount: 10 });
+}
+
+function createTaxMarker(ctx, type, x, z, color) {
+  const marker = makeBox({
+    parent: ctx.group,
+    position: `${x} 0.13 ${z}`,
+    size: "0.26 0.22 0.26",
+    color,
+    material: `color: ${color}; opacity: 0.34; transparent: true; shader: flat`,
+  });
+  marker.classList.add("future-marker", type);
+  marker.dataset.markerType = type;
 }
 
 // Test base generation: a tiny robot factory with simple rooms, hallway,
@@ -1876,14 +2502,16 @@ function handleTarget(target, point) {
   if (target.type === "enemy") {
     return;
   } else if (target.type === "portal") {
-    if (target.portalId === "robot") {
+    if (target.portalId === "street-tax-office" && target.active) {
+      enterStreetTaxOffice();
+    } else if (target.portalId === "robot" && target.active) {
       enterRobotFactory();
     } else {
-      setMessage("Locked base", "Landmark is visible for the full city prototype. Only Robot Factory is playable now.");
+      setMessage("Locked base", "Landmark is visible for the full city prototype. Street Tax Office is playable now.");
     }
   } else if (target.type === "choice") {
     chooseFactoryOutcome(target.choiceId);
-  } else if (target.type === "return" && state.baseCleared) {
+  } else if (target.type === "return" && (state.baseCleared || state.mode === "street-tax-office")) {
     returnToCity();
   }
 }
@@ -2000,17 +2628,21 @@ function chooseFactoryOutcome(choiceId) {
 // Return-to-city flow: rebuild the hub and keep the selected city-state label.
 function returnToCity() {
   buildCityHub();
-  setMessage("Back in the city", `City State: ${state.cityState}. All 30 base landmarks are visible; Robot Factory remains playable.`);
+  setMessage("Back in the city", `City State: ${state.cityState}. All 30 base landmarks are visible; Street Tax Office remains playable.`);
 }
 
 function updateHud() {
   const enemyLabel = state.mode === "base"
     ? `Enemies: ${state.enemies.length}`
+    : state.mode === "street-tax-office"
+      ? `Street Tax Office seed ${state.streetTaxOfficeSeed}`
     : `City: ${BASE_LOCATIONS.length} bases, ${state.npcs.length} NPCs, ${state.cars.length} cars`;
   const objective = state.mode === "base"
     ? state.baseCleared
       ? "Objective: Choose reward, return to city"
       : "Objective: Clear the Robot Factory"
+    : state.mode === "street-tax-office"
+      ? "Objective: Find the Tax Vault exit"
     : "Objective: Explore the city and choose a mob base";
 
   refs.hudHealth.textContent = heartsLabel();
@@ -2182,6 +2814,102 @@ function createPixelTextures() {
     }
   });
 
+  makeTexture("office-carpet", 64, 64, (ctx) => {
+    ctx.fillStyle = "#234237";
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.strokeStyle = "rgba(82,255,107,0.22)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= 64; i += 8) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, 64);
+      ctx.moveTo(0, i);
+      ctx.lineTo(64, i);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(0,245,255,0.12)";
+    ctx.fillRect(0, 30, 64, 4);
+  });
+
+  makeTexture("office-wall", 64, 64, (ctx) => {
+    ctx.fillStyle = "#6B7480";
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = "#53606D";
+    for (let y = 0; y < 64; y += 16) {
+      ctx.fillRect(0, y + 1, 64, 2);
+    }
+    ctx.strokeStyle = "#303845";
+    ctx.lineWidth = 2;
+    for (let x = 0; x <= 64; x += 16) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 64);
+      ctx.stroke();
+    }
+  });
+
+  makeTexture("office-tile", 64, 64, (ctx) => {
+    ctx.fillStyle = "#24303B";
+    ctx.fillRect(0, 0, 64, 64);
+    for (let y = 0; y < 64; y += 16) {
+      for (let x = 0; x < 64; x += 16) {
+        ctx.fillStyle = (x + y) % 32 === 0 ? "#D8D171" : "#4D5663";
+        ctx.fillRect(x + 2, y + 2, 12, 12);
+      }
+    }
+    ctx.strokeStyle = "#101822";
+    for (let i = 0; i <= 64; i += 16) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, 64);
+      ctx.moveTo(0, i);
+      ctx.lineTo(64, i);
+      ctx.stroke();
+    }
+  });
+
+  makeTexture("paper-stack", 64, 64, (ctx) => {
+    ctx.fillStyle = "#F4EFD8";
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = "#C9BFA5";
+    for (let y = 8; y < 60; y += 10) {
+      ctx.fillRect(7, y, 50, 2);
+    }
+    ctx.fillStyle = COLORS.red;
+    ctx.fillRect(8, 8, 20, 8);
+  });
+
+  makeTexture("red-stripe", 64, 64, (ctx) => {
+    ctx.fillStyle = "#1B1218";
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = COLORS.red;
+    for (let x = -64; x < 128; x += 24) {
+      ctx.beginPath();
+      ctx.moveTo(x, 64);
+      ctx.lineTo(x + 10, 64);
+      ctx.lineTo(x + 74, 0);
+      ctx.lineTo(x + 64, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+  });
+
+  makeTexture("street-tax-sign", 256, 64, (ctx) => {
+    ctx.fillStyle = COLORS.pink;
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.strokeStyle = COLORS.cyan;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(4, 4, 248, 56);
+    ctx.fillStyle = COLORS.yellow;
+    ctx.font = "bold 23px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("PAY YOUR", 128, 24);
+    ctx.fillText("STREET TAX", 128, 45);
+    ctx.fillStyle = "#090018";
+    ctx.fillRect(18, 48, 220, 4);
+  });
+
   makeTexture("mob-soldier", 64, 96, (ctx) => {
     ctx.clearRect(0, 0, 64, 96);
     ctx.fillStyle = "#151421";
@@ -2306,6 +3034,7 @@ function makeText(options) {
     color: options.color || COLORS.white,
     align: options.align || "left",
     wrapCount: options.wrapCount || 24,
+    side: options.side || "double",
   };
 
   if (options.rotation) attrs.rotation = options.rotation;

@@ -26,20 +26,19 @@ The project keeps the basic static A-Frame/WebXR setup from the previous
 - Four-sided purple skyline panels plus distant silhouette buildings around the whole city
 - Border billboards with support frames placed around the city perimeter
 - All 30 mob base locations represented as visible locked/active landmarks
-- One playable Robot Factory interior
-- Simple room/hallway layout with cover blocks
-- Mob Soldier and Robot Guard enemy placeholders
+- Street Tax Office is the active first mob base
+- Generated Street Tax Office interior assembled from premade room chunks
+- Guaranteed Front Lobby start chunk and Tax Vault end chunk
+- Randomized middle chunks and optional side chunks on each level entry/reload
+- Future-use markers for enemy spawns, item spawns, secrets, mini-boss rooms, and exits
 - Physical pickup gun that can be grabbed with either Quest side grip
 - Visible neon bullets fired from the held gun
 - Left-stick smooth locomotion
 - Right-stick 30 degree snap turning
 - Five-heart player health with a simple death/restart state
-- Base clear condition
-- Choice panel after clearing the Robot Factory
-- Return portal back to the city
-- City state label updated by the selected choice
+- Return portal from the Street Tax Office back to the city
 
-Only the Robot Factory is playable right now. The other 29 base landmarks are visual locked entrances for the full city map prototype.
+Only the Street Tax Office is active right now. The other 29 base landmarks are visual locked entrances for the full city map prototype.
 
 ## Controls
 
@@ -54,6 +53,20 @@ Only the Robot Factory is playable right now. The other 29 base landmarks are vi
 
 The gun starts in front of the player. It is not attached to a hand until grabbed.
 Debug logs print `Gun grabbed left`, `Gun grabbed right`, and `Gun released` for controller grip testing.
+
+## Street Tax Office
+
+The Street Tax Office is a first pass at the mob-base map generator. It is a map/layout prototype only: no enemies, bosses, combat encounters, choices, dialogue, shops, or upgrades are added to this level yet.
+
+Each entry builds a semi-linear office route from reusable chunks:
+
+- Front Lobby always appears first.
+- Tax Vault always appears last.
+- Four to seven middle chunks are randomly selected from security, cubicles, hallways, records, payment, manager office, call center, printer room, audit chamber, collection room, and stairwell pieces.
+- One to three optional side chunks can attach to the main path.
+- Small colored markers show future enemy, item, secret, mini-boss, and exit locations.
+
+For quick desktop QA, open `index.html#street-tax-office` to load directly into the generated office. The normal game flow is to enter the Street Tax Office landmark from the city hub.
 
 ## Randomized City
 
