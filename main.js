@@ -134,6 +134,38 @@ const BASE_SLOTS = {
   ],
 };
 
+const ROAD_X = [-20, -10, 0, 10, 20];
+const ROAD_Z = [18, 8, -2, -12, -22, -32];
+
+const NPC_SIDEWALK_PATHS = [
+  { axis: "z", x: -12.8, start: 16, end: -30, rot: 180 },
+  { axis: "z", x: -7.2, start: -30, end: 16, rot: 0 },
+  { axis: "z", x: 2.8, start: 16, end: -30, rot: 180 },
+  { axis: "z", x: 7.2, start: -30, end: 16, rot: 0 },
+  { axis: "z", x: 12.8, start: 16, end: -30, rot: 180 },
+  { axis: "x", z: 12.8, start: -18, end: 18, rot: -90 },
+  { axis: "x", z: 3.2, start: 18, end: -18, rot: 90 },
+  { axis: "x", z: -16.8, start: -18, end: 18, rot: -90 },
+  { axis: "x", z: -26.8, start: 18, end: -18, rot: 90 },
+];
+
+const TRAFFIC_PATHS = [
+  { axis: "z", x: -20.9, start: 18, end: -34, lane: -0.9 },
+  { axis: "z", x: -9.1, start: -34, end: 18, lane: 0.9 },
+  { axis: "z", x: 0.9, start: 18, end: -34, lane: 0.9 },
+  { axis: "z", x: 10.9, start: -34, end: 18, lane: 0.9 },
+  { axis: "z", x: 19.1, start: 18, end: -34, lane: -0.9 },
+  { axis: "x", z: 17.1, start: -24, end: 24, lane: -0.9 },
+  { axis: "x", z: -2.9, start: 24, end: -24, lane: -0.9 },
+  { axis: "x", z: -21.1, start: -24, end: 24, lane: 0.9 },
+  { axis: "x", z: -32.9, start: 24, end: -24, lane: -0.9 },
+];
+
+const REGULAR_BUILDING_SIGNS = [
+  "APTS", "DATA OFFICE", "NOIR HOTEL", "NOODLE BAR", "PARKING", "WAREHOUSE",
+  "BYTE LOFTS", "CYBER LAUNDRY", "PIXEL PLAZA", "ALLEY MART", "SLEEP PODS", "RADIO REPAIR",
+];
+
 const state = {
   mode: "city",
   seed: Date.now() % 100000,
@@ -147,6 +179,9 @@ const state = {
   enemies: [],
   patrols: [],
   npcs: [],
+  cars: [],
+  solidBoxes: [],
+  solidCircles: [],
   baseLocations: [],
   targets: [],
   enemyShots: [],
@@ -158,6 +193,7 @@ const state = {
   snapTurnReadyAt: 0,
   gun: {
     heldBy: null,
+    handName: "",
     el: null,
     muzzle: null,
   },
@@ -260,6 +296,8 @@ function registerComponents() {
         updatePatrols(dt, time);
         updateEnemies(dt, time);
         updateEnemyShots(dt);
+        updateTraffic(dt, time);
+        updateHeldGun();
         updatePortalZones(time);
         updateGunDrop();
         updateHud();
@@ -306,6 +344,11 @@ function registerComponents() {
       init() {
         this.basePosition = this.el.object3D.position.clone();
         this.lastOffset = 0;
+        this.body = this.el.querySelector(".npc-body-root")?.object3D || null;
+        this.leftArm = this.el.querySelector(".npc-left-arm")?.object3D || null;
+        this.rightArm = this.el.querySelector(".npc-right-arm")?.object3D || null;
+        this.leftLeg = this.el.querySelector(".npc-left-leg")?.object3D || null;
+        this.rightLeg = this.el.querySelector(".npc-right-leg")?.object3D || null;
       },
       tick(time) {
         if (state.mode !== "city" || !this.basePosition) {
@@ -325,6 +368,16 @@ function registerComponents() {
         this.el.object3D.rotation.y = this.data.axis === "z"
           ? (movingPositive ? 0 : Math.PI)
           : (movingPositive ? -Math.PI / 2 : Math.PI / 2);
+
+        const stride = Math.sin(time * 0.008 + this.data.phase);
+        const swing = stride * 0.42;
+        if (this.body) {
+          this.body.position.y = 0.04 + Math.abs(stride) * 0.035;
+        }
+        if (this.leftArm) this.leftArm.rotation.x = swing;
+        if (this.rightArm) this.rightArm.rotation.x = -swing;
+        if (this.leftLeg) this.leftLeg.rotation.x = -swing;
+        if (this.rightLeg) this.rightLeg.rotation.x = swing;
       },
     });
   }
@@ -467,8 +520,62 @@ function updatePlayerMove(dt) {
 
   if (move.lengthSq() > 0) {
     move.normalize();
-    refs.rig.object3D.position.addScaledVector(move, 3.0 * dt);
+    movePlayerWithCollision(move, 3.0 * dt);
   }
+}
+
+function movePlayerWithCollision(direction, distance) {
+  const current = refs.rig.object3D.position;
+  const proposed = current.clone().addScaledVector(direction, distance);
+
+  if (!wouldCollide(proposed)) {
+    current.copy(proposed);
+    return;
+  }
+
+  const slideX = current.clone();
+  slideX.x = proposed.x;
+  if (!wouldCollide(slideX)) {
+    current.copy(slideX);
+    return;
+  }
+
+  const slideZ = current.clone();
+  slideZ.z = proposed.z;
+  if (!wouldCollide(slideZ)) {
+    current.copy(slideZ);
+  }
+}
+
+function wouldCollide(position) {
+  if (state.mode !== "city") {
+    return false;
+  }
+
+  const radius = 0.42;
+  const margin = 0.08;
+  const boxHit = state.solidBoxes.some((box) => (
+    Math.abs(position.x - box.x) < box.halfX + radius + margin
+    && Math.abs(position.z - box.z) < box.halfZ + radius + margin
+  ));
+  if (boxHit) {
+    return true;
+  }
+
+  const circleHit = state.solidCircles.some((circle) => (
+    distance2D(position.x, position.z, circle.x, circle.z) < circle.radius + radius
+  ));
+  if (circleHit) {
+    return true;
+  }
+
+  return state.cars.some((car) => (
+    car.el.isConnected
+    && distance2D(position.x, position.z, car.el.object3D.position.x, car.el.object3D.position.z) < car.radius + radius
+  )) || state.npcs.some((npc) => (
+    npc.isConnected
+    && distance2D(position.x, position.z, npc.object3D.position.x, npc.object3D.position.z) < 0.62 + radius
+  ));
 }
 
 function updatePatrols(dt, time) {
@@ -611,6 +718,9 @@ function buildCityHub() {
   state.enemies = [];
   state.patrols = [];
   state.npcs = [];
+  state.cars = [];
+  state.solidBoxes = [];
+  state.solidCircles = [];
   state.baseLocations = [];
   state.enemyShots = [];
   state.bullets = [];
@@ -637,6 +747,7 @@ function buildCityHub() {
   createBillboards();
   createCityProps();
   createCityNpcs();
+  createTrafficCars();
   createCityTitlePanel();
   placeGunInFrontOfPlayer(1.75);
 
@@ -693,27 +804,24 @@ function createCityRoadGrid() {
     material: "src: #city-grid; repeat: 24 26; shader: flat",
   });
 
-  const roadsX = [-20, -10, 0, 10, 20];
-  const roadsZ = [18, 8, -2, -12, -22, -32];
-
-  roadsX.forEach((x) => {
+  ROAD_X.forEach((x) => {
     makeBox({ position: `${x} 0.015 -7`, size: "4.3 0.03 58", color: COLORS.street, material: "src: #road-pixel; repeat: 2 24; shader: flat" });
     for (let z = 18; z >= -34; z -= 4) {
       makeBox({ position: `${x} 0.045 ${z}`, size: "0.1 0.04 1.15", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
     }
   });
 
-  roadsZ.forEach((z) => {
+  ROAD_Z.forEach((z) => {
     makeBox({ position: `0 0.018 ${z}`, size: "50 0.03 4.3", color: COLORS.street, material: "src: #road-pixel; repeat: 22 2; shader: flat" });
     for (let x = -24; x <= 24; x += 4) {
       makeBox({ position: `${x} 0.05 ${z}`, size: "1.15 0.04 0.1", color: COLORS.pink, material: neonMaterial(COLORS.pink) });
     }
   });
 
-  for (let xi = 0; xi < roadsX.length - 1; xi += 1) {
-    for (let zi = 0; zi < roadsZ.length - 1; zi += 1) {
-      const cx = (roadsX[xi] + roadsX[xi + 1]) / 2;
-      const cz = (roadsZ[zi] + roadsZ[zi + 1]) / 2;
+  for (let xi = 0; xi < ROAD_X.length - 1; xi += 1) {
+    for (let zi = 0; zi < ROAD_Z.length - 1; zi += 1) {
+      const cx = (ROAD_X[xi] + ROAD_X[xi + 1]) / 2;
+      const cz = (ROAD_Z[zi] + ROAD_Z[zi + 1]) / 2;
       makeBox({ position: `${cx} 0.025 ${cz}`, size: "4.9 0.04 4.9", color: "#161128", material: "src: #sidewalk-tile; repeat: 3 3; shader: flat" });
       if (rand() > 0.55) {
         makeBox({ position: `${cx} 0.055 ${cz}`, size: `${rand() > 0.5 ? "0.42 0.04 5.2" : "5.2 0.04 0.42"}`, color: "#05050B", material: "color: #05050B; shader: flat" });
@@ -731,11 +839,11 @@ function createGeneratedBuildings(occupied) {
   });
 
   shuffle(cells, rand).forEach((cell) => {
-    const count = 2 + Math.floor(rand() * 3);
+    const count = 3 + Math.floor(rand() * 3);
     for (let i = 0; i < count; i += 1) {
-      const x = cell.x + (rand() - 0.5) * 4.2;
-      const z = cell.z + (rand() - 0.5) * 4.2;
-      if (isNearOccupied(x, z, occupied, 3.0)) {
+      const x = cell.x + (rand() - 0.5) * 5.4;
+      const z = cell.z + (rand() - 0.5) * 5.4;
+      if (isNearOccupied(x, z, occupied, 2.15)) {
         continue;
       }
 
@@ -745,6 +853,9 @@ function createGeneratedBuildings(occupied) {
       const d = 1.15 + rand() * 1.55;
       const windowColor = [COLORS.cyan, COLORS.pink, COLORS.yellow, COLORS.green][Math.floor(rand() * 4)];
       createBuilding(x, z, w, h, d, windowColor);
+      if (rand() > 0.45) {
+        createRegularBuildingSign(x, z, w, d, h, REGULAR_BUILDING_SIGNS[Math.floor(rand() * REGULAR_BUILDING_SIGNS.length)], windowColor);
+      }
       if (rand() > 0.62) {
         createRooftopAntenna(x, h, z, windowColor);
       }
@@ -769,24 +880,66 @@ function createBaseLocations(bases) {
 }
 
 function createSkyline() {
-  for (let i = 0; i < 34; i += 1) {
-    const x = -28 + i * 1.75;
-    const h = 3.2 + rand() * 8.2;
-    const z = -42.5 - rand() * 2.4;
+  createSkyPanel("0 8 -46", "0 0 0", 70, 18);
+  createSkyPanel("0 8 28", "0 180 0", 70, 18);
+  createSkyPanel("-34 8 -8", "0 90 0", 74, 18);
+  createSkyPanel("34 8 -8", "0 -90 0", 74, 18);
+
+  createSkylineWall("north");
+  createSkylineWall("south");
+  createSkylineWall("west");
+  createSkylineWall("east");
+}
+
+function createSkyPanel(position, rotation, width, height) {
+  makePlane({
+    position,
+    rotation,
+    width,
+    height,
+    material: `color: #7B145F; opacity: 0.38; transparent: true; side: double; shader: flat`,
+  });
+}
+
+function createSkylineWall(side) {
+  const count = side === "north" || side === "south" ? 36 : 32;
+  for (let i = 0; i < count; i += 1) {
+    const h = 3.4 + rand() * 8.4;
+    const w = 0.8 + rand() * 1.3;
+    const d = 0.7 + rand() * 1.1;
+    let x;
+    let z;
+    if (side === "north") {
+      x = -32 + i * (64 / count);
+      z = -42.5 - rand() * 2.2;
+    } else if (side === "south") {
+      x = -32 + i * (64 / count);
+      z = 24.5 + rand() * 2.2;
+    } else if (side === "west") {
+      x = -32.5 - rand() * 2.2;
+      z = 22 - i * (62 / count);
+    } else {
+      x = 32.5 + rand() * 2.2;
+      z = 22 - i * (62 / count);
+    }
+
     makeBox({
       position: `${x} ${h / 2} ${z}`,
-      size: `${0.9 + rand() * 0.8} ${h} ${0.8 + rand() * 0.6}`,
+      size: `${w} ${h} ${d}`,
       color: "#05050B",
       material: "color: #05050B; roughness: 1; metalness: 0",
     });
-  }
 
-  makePlane({
-    position: "0 9.2 -45.5",
-    width: 20,
-    height: 9,
-    material: `color: #7B145F; opacity: 0.5; transparent: true; side: double; shader: flat`,
-  });
+    if (i % 3 === 0) {
+      const windowGlow = rand() > 0.5 ? COLORS.cyan : COLORS.pink;
+      makeBox({
+        position: `${x} ${Math.min(h - 0.45, 2 + rand() * 4)} ${z}`,
+        size: "0.18 0.18 0.03",
+        color: windowGlow,
+        material: neonMaterial(windowGlow),
+      });
+    }
+  }
 }
 
 function createCityBuildings() {
@@ -819,6 +972,7 @@ function createBuilding(x, z, width, height, depth, windowColor) {
     color: COLORS.black,
     material: "color: #05050B; roughness: 1; metalness: 0",
   });
+  addSolidBox(x, z, width + 0.18, depth + 0.18, "regular-building");
 
   const faceZ = z + (z < -3 ? depth / 2 + 0.02 : -depth / 2 - 0.02);
   const rows = Math.max(2, Math.floor(height / 0.72));
@@ -855,6 +1009,7 @@ function createNeonSign(x, y, z, text, color) {
 
 function createShopExterior(shop) {
   const group = makeEntity("a-entity", { position: `${shop.x} 0 ${shop.z}`, rotation: `0 ${shop.rot} 0` });
+  addSolidBox(shop.x, shop.z, shop.rot % 180 === 0 ? 2.45 : 0.9, shop.rot % 180 === 0 ? 0.9 : 2.45, "shop");
   makeBox({ parent: group, position: "0 1.05 0", size: "2.15 2.1 0.48", color: "#080713", material: "color: #080713; shader: flat" });
   makeBox({ parent: group, position: "0 0.72 0.28", size: "0.74 1.18 0.14", color: "#111827", material: `color: #111827; emissive: ${shop.color}; emissiveIntensity: 0.18; shader: flat` });
   makeBox({ parent: group, position: "-0.68 0.92 0.3", size: "0.42 0.56 0.08", color: shop.accent, material: neonMaterial(shop.accent) });
@@ -878,12 +1033,16 @@ function createBillboards() {
     const color = [COLORS.cyan, COLORS.pink, COLORS.yellow, COLORS.green][index % 4];
     const group = makeEntity("a-entity", { position: `${slot.x} ${slot.y} ${slot.z}`, rotation: `0 ${slot.rot} 0` });
     makeBox({ parent: group, position: "0 -0.16 -0.04", size: "3.5 0.16 0.12", color: "#22283D", material: "color: #22283D; shader: flat" });
+    makeBox({ parent: group, position: "-1.35 -2.35 -0.08", size: "0.12 4.4 0.12", color: "#273449", material: "color: #273449; shader: flat" });
+    makeBox({ parent: group, position: "1.35 -2.35 -0.08", size: "0.12 4.4 0.12", color: "#273449", material: "color: #273449; shader: flat" });
+    makeBox({ parent: group, position: "0 -4.52 -0.08", size: "3.05 0.14 0.22", color: "#111827", material: "color: #111827; shader: flat" });
     makePlane({ parent: group, width: 3.6, height: 1.2, material: `color: #070913; emissive: ${color}; emissiveIntensity: 0.25; shader: flat` });
     makeText({ parent: group, value: text, position: "-1.58 0.28 0.05", width: 3.15, color, align: "center", wrapCount: 16 });
     if (index % 3 === 0) {
       makeBox({ parent: group, position: "-1.65 -0.42 0.08", size: "0.18 0.32 0.08", color: color, material: neonMaterial(color) });
       makeBox({ parent: group, position: "1.65 -0.42 0.08", size: "0.18 0.32 0.08", color: color, material: neonMaterial(color) });
     }
+    addSolidBox(slot.x, slot.z, 0.55, 0.55, "billboard-support");
   });
 }
 
@@ -910,9 +1069,27 @@ function createCityProps() {
   }
 }
 
+function createRegularBuildingSign(x, z, width, depth, height, label, color) {
+  const frontSouth = z < -3;
+  const signZ = z + (frontSouth ? depth / 2 + 0.05 : -depth / 2 - 0.05);
+  const rotation = frontSouth ? "0 0 0" : "0 180 0";
+  const signY = Math.min(height - 0.35, 2.1 + rand() * 1.4);
+  const sign = makePlane({
+    position: `${x} ${signY} ${signZ}`,
+    rotation,
+    width: Math.min(1.8, width + 0.35),
+    height: 0.42,
+    material: neonMaterial(color),
+  });
+  makeText({ parent: sign, value: label, position: "-0.78 0.1 0.03", width: 1.55, color: COLORS.black, align: "center", wrapCount: 12 });
+  makeBox({ position: `${x - Math.min(width / 2, 0.8)} ${signY} ${signZ - (frontSouth ? 0.04 : -0.04)}`, size: "0.06 0.55 0.06", color: "#273449", material: "color: #273449; shader: flat" });
+  makeBox({ position: `${x + Math.min(width / 2, 0.8)} ${signY} ${signZ - (frontSouth ? 0.04 : -0.04)}`, size: "0.06 0.55 0.06", color: "#273449", material: "color: #273449; shader: flat" });
+}
+
 function createParkedCar(x, z, rotation) {
   const color = [COLORS.pink, COLORS.cyan, COLORS.yellow, COLORS.green][Math.floor(rand() * 4)];
   const group = makeEntity("a-entity", { position: `${x} 0 ${z}`, rotation: `0 ${rotation} 0` });
+  addSolidBox(x, z, rotation === 0 ? 1.4 : 2.2, rotation === 0 ? 2.2 : 1.4, "parked-car");
   makeBox({ parent: group, position: "0 0.28 0", size: "1.25 0.38 2.05", color: "#101626", material: "color: #101626; shader: flat" });
   makeBox({ parent: group, position: "0 0.55 -0.12", size: "0.86 0.34 0.88", color, material: neonMaterial(color) });
   makeBox({ parent: group, position: "-0.68 0.23 0.62", size: "0.08 0.18 0.42", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
@@ -923,12 +1100,16 @@ function createSmallProp(x, z, index) {
   const type = index % 6;
   if (type === 0) {
     makeCylinder({ position: `${x} 0.28 ${z}`, radius: 0.24, height: 0.56, color: "#1C2432", material: "src: #panel-block; repeat: 1 1; shader: flat" });
+    addSolidCircle(x, z, 0.28, "trash-can");
   } else if (type === 1) {
     makeBox({ position: `${x} 0.42 ${z}`, size: "0.45 0.84 0.34", color: COLORS.cyan, material: neonMaterial(COLORS.cyan) });
+    addSolidBox(x, z, 0.58, 0.48, "vending-machine");
   } else if (type === 2) {
     makeBox({ position: `${x} 0.23 ${z}`, size: "0.72 0.46 0.72", color: "#293446", material: "src: #panel-block; repeat: 1 1; shader: flat" });
+    addSolidBox(x, z, 0.84, 0.84, "crate");
   } else if (type === 3) {
     makeBox({ position: `${x} 0.18 ${z}`, size: "1.05 0.36 0.16", color: COLORS.orange, material: "src: #hazard; repeat: 2 1; shader: flat" });
+    addSolidBox(x, z, 1.15, 0.28, "barrier");
   } else if (type === 4) {
     makeCylinder({ position: `${x} 0.04 ${z}`, rotation: "-90 0 0", radius: 0.48, height: 0.04, color: COLORS.green, material: `color: ${COLORS.green}; emissive: ${COLORS.green}; emissiveIntensity: 0.25; shader: flat` });
   } else {
@@ -939,6 +1120,7 @@ function createSmallProp(x, z, index) {
 
 function createStreetLamp(x, z, color) {
   const group = makeEntity("a-entity", { position: `${x} 0 ${z}` });
+  addSolidCircle(x, z, 0.22, "street-lamp");
   makeCylinder({ parent: group, position: "0 1.05 0", radius: 0.035, height: 2.1, color: "#3B4658", material: "color: #3B4658; shader: flat" });
   makeBox({ parent: group, position: "0 2.12 0", size: "0.48 0.12 0.48", color, material: neonMaterial(color) });
 }
@@ -946,28 +1128,101 @@ function createStreetLamp(x, z, color) {
 function createCityNpcs() {
   for (let i = 0; i < 24; i += 1) {
     const def = NPC_DEFS[i % NPC_DEFS.length];
-    const x = [-12.5, -7.2, -2.8, 2.8, 7.2, 12.5][Math.floor(rand() * 6)] + (rand() - 0.5) * 1.2;
-    const z = 15 - Math.floor(rand() * 14) * 3.4 + (rand() - 0.5) * 0.9;
-    createNpc(def, x, z, i);
+    const path = NPC_SIDEWALK_PATHS[i % NPC_SIDEWALK_PATHS.length];
+    const t = rand();
+    const x = path.axis === "x" ? lerp(path.start, path.end, t) : path.x + (rand() - 0.5) * 0.35;
+    const z = path.axis === "z" ? lerp(path.start, path.end, t) : path.z + (rand() - 0.5) * 0.35;
+    createNpc(def, x, z, path, i);
   }
 }
 
-function createNpc(def, x, z, index) {
-  const axis = rand() > 0.5 ? "x" : "z";
+function createNpc(def, x, z, path, index) {
+  const bodyColor = def.id === "robot-ped" ? "#334155" : def.id === "mutant-weirdo" ? "#203B28" : "#171827";
+  const headColor = def.id === "robot-ped" ? "#8DEBFF" : def.id === "mutant-weirdo" ? "#8EFF7A" : "#D7A37A";
   const group = makeEntity("a-entity", {
     position: `${x} 0 ${z}`,
-    "npc-wander": `axis: ${axis}; span: ${(0.9 + rand() * 1.8).toFixed(2)}; speed: ${(0.00022 + rand() * 0.00022).toFixed(5)}; phase: ${(rand() * 6.28).toFixed(2)}`,
+    rotation: `0 ${path.rot} 0`,
   });
-  makePlane({
-    parent: group,
-    position: "0 0.72 0",
-    width: 0.55,
-    height: 1.05,
-    material: `src: ${def.texture}; transparent: true; alphaTest: 0.08; side: double; shader: flat`,
-    billboard: "",
-  });
-  makePlane({ parent: group, position: "0 0.03 0", rotation: "-90 0 0", width: 0.48, height: 0.3, material: "color: #000000; opacity: 0.32; transparent: true; shader: flat" });
+  const wanderConfig = `axis: ${path.axis}; span: ${(0.75 + rand() * 1.1).toFixed(2)}; speed: ${(0.00018 + rand() * 0.0002).toFixed(5)}; phase: ${(rand() * 6.28).toFixed(2)}`;
+  const rig = makeEntity("a-entity", { class: "npc-body-root", position: "0 0.04 0" }, group);
+  makeBox({ parent: rig, position: "0 0.82 0", size: "0.38 0.62 0.22", color: bodyColor, material: `color: ${bodyColor}; shader: flat` });
+  makeBox({ parent: rig, position: "0 1.27 0", size: "0.32 0.32 0.3", color: headColor, material: `color: ${headColor}; shader: flat` });
+  makeBox({ parent: rig, position: "0 1.31 -0.16", size: "0.22 0.045 0.035", color: def.color, material: neonMaterial(def.color) });
+  const leftArm = makeBox({ parent: rig, position: "-0.32 0.78 0", size: "0.12 0.48 0.12", color: bodyColor, material: `color: ${bodyColor}; shader: flat` });
+  const rightArm = makeBox({ parent: rig, position: "0.32 0.78 0", size: "0.12 0.48 0.12", color: bodyColor, material: `color: ${bodyColor}; shader: flat` });
+  const leftLeg = makeBox({ parent: rig, position: "-0.12 0.28 0", size: "0.13 0.48 0.13", color: "#0B0E18", material: "color: #0B0E18; shader: flat" });
+  const rightLeg = makeBox({ parent: rig, position: "0.12 0.28 0", size: "0.13 0.48 0.13", color: "#0B0E18", material: "color: #0B0E18; shader: flat" });
+  leftArm.classList.add("npc-left-arm");
+  rightArm.classList.add("npc-right-arm");
+  leftLeg.classList.add("npc-left-leg");
+  rightLeg.classList.add("npc-right-leg");
+  if (def.id === "vendor") {
+    makeBox({ parent: group, position: "0.52 0.45 -0.05", size: "0.5 0.3 0.42", color: def.color, material: neonMaterial(def.color) });
+  }
+  makePlane({ parent: group, position: "0 0.03 0", rotation: "-90 0 0", width: 0.58, height: 0.36, material: "color: #000000; opacity: 0.32; transparent: true; shader: flat" });
+  group.setAttribute("npc-wander", wanderConfig);
   state.npcs.push(group);
+}
+
+function createTrafficCars() {
+  const shuffledPaths = shuffle(TRAFFIC_PATHS.slice(), rand);
+  for (let i = 0; i < 9; i += 1) {
+    createTrafficCar(shuffledPaths[i % shuffledPaths.length], i);
+  }
+}
+
+function createTrafficCar(path, index) {
+  const start = path.start;
+  const end = path.end;
+  const direction = end >= start ? 1 : -1;
+  const span = Math.abs(end - start);
+  const offset = rand() * span;
+  const color = [COLORS.pink, COLORS.cyan, COLORS.yellow, COLORS.green, COLORS.orange][index % 5];
+  const group = makeEntity("a-entity", {}, refs.world);
+  const car = {
+    el: group,
+    path,
+    value: start + direction * offset,
+    direction,
+    speed: 2.2 + rand() * 1.2,
+    radius: 0.95,
+  };
+
+  makeBox({ parent: group, position: "0 0.28 0", size: "1.15 0.38 1.85", color: "#101626", material: "color: #101626; shader: flat" });
+  makeBox({ parent: group, position: "0 0.55 -0.1", size: "0.82 0.34 0.78", color, material: neonMaterial(color) });
+  makeBox({ parent: group, position: "-0.38 0.32 -0.96", size: "0.22 0.1 0.05", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+  makeBox({ parent: group, position: "0.38 0.32 -0.96", size: "0.22 0.1 0.05", color: COLORS.yellow, material: neonMaterial(COLORS.yellow) });
+  makeBox({ parent: group, position: "-0.38 0.32 0.96", size: "0.22 0.1 0.05", color: COLORS.red, material: neonMaterial(COLORS.red) });
+  makeBox({ parent: group, position: "0.38 0.32 0.96", size: "0.22 0.1 0.05", color: COLORS.red, material: neonMaterial(COLORS.red) });
+
+  state.cars.push(car);
+  updateTrafficCarTransform(car);
+}
+
+function updateTraffic(dt) {
+  if (state.mode !== "city") {
+    return;
+  }
+
+  state.cars.forEach((car) => {
+    car.value += car.direction * car.speed * dt;
+    if (car.direction > 0 && car.value > car.path.end) {
+      car.value = car.path.start;
+    } else if (car.direction < 0 && car.value < car.path.end) {
+      car.value = car.path.start;
+    }
+    updateTrafficCarTransform(car);
+  });
+}
+
+function updateTrafficCarTransform(car) {
+  if (car.path.axis === "z") {
+    car.el.object3D.position.set(car.path.x, 0, car.value);
+    car.el.object3D.rotation.y = car.direction > 0 ? Math.PI : 0;
+  } else {
+    car.el.object3D.position.set(car.value, 0, car.path.z);
+    car.el.object3D.rotation.y = car.direction > 0 ? -Math.PI / 2 : Math.PI / 2;
+  }
 }
 
 function createRooftopAntenna(x, height, z, color) {
@@ -1003,6 +1258,7 @@ function createBaseEntrance(config) {
     rotation: `0 ${config.rotation || 0} 0`,
   });
   const accent = config.accent || config.color;
+  addSolidBox(config.x, config.z, 2.95, 1.25, "base-landmark");
 
   makeBox({ parent: group, position: "0 1.35 0", size: "2.55 2.7 0.42", color: "#0B0E18", material: "color: #0B0E18; roughness: 1; metalness: 0" });
   makeBox({ parent: group, position: "0 1.18 0.08", size: "1.42 1.75 0.16", color: config.color, material: neonMaterial(config.color) });
@@ -1106,6 +1362,10 @@ function enterRobotFactory() {
   state.baseCleared = false;
   state.enemies = [];
   state.patrols = [];
+  state.npcs = [];
+  state.cars = [];
+  state.solidBoxes = [];
+  state.solidCircles = [];
   state.enemyShots = [];
   state.bullets = [];
   state.portalZones = [];
@@ -1349,15 +1609,13 @@ function tryGrabGun(hand) {
   }
 
   state.gun.heldBy = hand;
-  hand.appendChild(state.gun.el);
+  state.gun.handName = getHandName(hand);
+  refs.scene.appendChild(state.gun.el);
   setGunVisible(true);
-  state.gun.el.setAttribute("position", "0 -0.08 -0.25");
-  state.gun.el.setAttribute("rotation", "-8 0 0");
   state.gun.el.setAttribute("scale", "1 1 1");
-  state.gun.el.object3D.position.set(0, -0.08, -0.25);
-  state.gun.el.object3D.rotation.set(THREE.MathUtils.degToRad(-8), 0, 0);
   state.gun.el.object3D.scale.set(1, 1, 1);
-  state.gun.el.object3D.updateMatrixWorld(true);
+  updateHeldGun();
+  console.log(`Gun grabbed ${state.gun.handName}`);
   setMessage("Gun grabbed", "Trigger fires neon bullets. Release grip to drop it.");
 }
 
@@ -1367,10 +1625,41 @@ function releaseGun(hand) {
   }
 
   state.gun.heldBy = null;
+  state.gun.handName = "";
   refs.scene.appendChild(state.gun.el);
   setGunVisible(true);
   placeGunInFrontOfPlayer(1.0);
+  console.log("Gun released");
   setMessage("Gun dropped", "Grip near the gun with either hand to pick it up again.");
+}
+
+function getHandName(hand) {
+  return hand === refs.leftController ? "left" : "right";
+}
+
+function updateHeldGun() {
+  if (!state.gun.el || !state.gun.heldBy) {
+    return;
+  }
+
+  const handPosition = new THREE.Vector3();
+  const handQuaternion = new THREE.Quaternion();
+  const localOffset = new THREE.Vector3(0, -0.08, -0.25);
+  const localRotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+    THREE.MathUtils.degToRad(-8),
+    0,
+    0
+  ));
+
+  state.gun.heldBy.object3D.getWorldPosition(handPosition);
+  state.gun.heldBy.object3D.getWorldQuaternion(handQuaternion);
+  localOffset.applyQuaternion(handQuaternion);
+
+  state.gun.el.object3D.position.copy(handPosition.add(localOffset));
+  state.gun.el.object3D.quaternion.copy(handQuaternion.multiply(localRotation));
+  state.gun.el.object3D.scale.set(1, 1, 1);
+  setGunVisible(true);
+  state.gun.el.object3D.updateMatrixWorld(true);
 }
 
 function placeGunInFrontOfPlayer(distance) {
@@ -1395,6 +1684,10 @@ function placeGunInFrontOfPlayer(distance) {
   state.gun.el.setAttribute("position", vecToAttr(position));
   state.gun.el.setAttribute("rotation", `0 ${yaw.toFixed(2)} 0`);
   state.gun.el.setAttribute("scale", "1 1 1");
+  state.gun.el.object3D.position.copy(position);
+  state.gun.el.object3D.rotation.set(0, THREE.MathUtils.degToRad(yaw), 0);
+  state.gun.el.object3D.scale.set(1, 1, 1);
+  state.gun.el.object3D.updateMatrixWorld(true);
 }
 
 function updateGunDrop() {
@@ -1710,7 +2003,7 @@ function returnToCity() {
 function updateHud() {
   const enemyLabel = state.mode === "base"
     ? `Enemies: ${state.enemies.length}`
-    : `City: ${BASE_LOCATIONS.length} bases, ${state.npcs.length} NPCs`;
+    : `City: ${BASE_LOCATIONS.length} bases, ${state.npcs.length} NPCs, ${state.cars.length} cars`;
   const objective = state.mode === "base"
     ? state.baseCleared
       ? "Objective: Choose reward, return to city"
@@ -2027,6 +2320,20 @@ function neonMaterial(color) {
   return `color: ${color}; emissive: ${color}; emissiveIntensity: 0.85; roughness: 1; metalness: 0`;
 }
 
+function addSolidBox(x, z, width, depth, label) {
+  state.solidBoxes.push({
+    x,
+    z,
+    halfX: width / 2,
+    halfZ: depth / 2,
+    label,
+  });
+}
+
+function addSolidCircle(x, z, radius, label) {
+  state.solidCircles.push({ x, z, radius, label });
+}
+
 function addTarget(el, data) {
   el.classList.add("clickable");
   el.dataset.targetType = data.type;
@@ -2093,6 +2400,16 @@ function shuffle(items, random) {
 
 function vecToAttr(vec) {
   return `${vec.x.toFixed(3)} ${vec.y.toFixed(3)} ${vec.z.toFixed(3)}`;
+}
+
+function distance2D(ax, az, bx, bz) {
+  const dx = ax - bx;
+  const dz = az - bz;
+  return Math.sqrt(dx * dx + dz * dz);
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
 }
 
 function quatToRotationAttr(quaternion) {
